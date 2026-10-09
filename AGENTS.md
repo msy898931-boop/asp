@@ -77,3 +77,21 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
 - Re-staging the bundle: `python3 scripts/bundle.py --out dist/ASTRA
   --backend-host build/aura_backend_host` then `--verify`. It prunes
   `__pycache__`/`.pyc` automatically.
+
+## Always-on server (Docker)
+
+For a 24/7 bot (no PC needed) the repo ships a headless image: backend host +
+MT5 bridge + Telegram bot, no desktop UI.
+
+```bash
+cp .env.example .env      # set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
+docker compose up -d --build
+docker compose logs -f    # expect: "ASTRA bot online ... subscribers=1"
+```
+
+`docker-compose.yml` sets `restart: unless-stopped` and publishes the API on
+loopback only. Subscribers persist in the `astra-state` volume. Deploy on any
+small VPS: install Docker, `git clone`, fill `.env`, `docker compose up -d`.
+
+Notes: the container must reach `api.telegram.org` (default egress is fine);
+the API port is loopback-published and never exposed publicly.

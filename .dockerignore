@@ -1,0 +1,15 @@
+# Never ship build output, our working bundle, or local env into the image.
+build/
+dist/
+out/
+cmake-build-*/
+**/__pycache__/
+*.pyc
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+.git/
+.gitignore
+.agent_tmp/
