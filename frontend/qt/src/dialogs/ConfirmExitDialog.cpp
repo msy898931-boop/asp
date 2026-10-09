@@ -1,4 +1,5 @@
 #include "ConfirmExitDialog.h"
+#include "theme/Theme.h"
 #include <QApplication>
 #include <QKeyEvent>
 
@@ -23,7 +24,7 @@ ConfirmExitDialog::ConfirmExitDialog(QWidget* parent)
     mIconLabel = new QLabel(this);
     mIconLabel->setText("\u26A0");  // ⚠ warning sign
     mIconLabel->setAlignment(Qt::AlignCenter);
-    mIconLabel->setStyleSheet(
+    astra::setStyle(mIconLabel, 
         "QLabel { "
         "color: #D9A14A; "
         "font-size: 32px; "
@@ -34,7 +35,7 @@ ConfirmExitDialog::ConfirmExitDialog(QWidget* parent)
     // Title
     mTitleLabel = new QLabel(this);
     mTitleLabel->setText("Exit ASTRA?");
-    mTitleLabel->setStyleSheet(
+    astra::setStyle(mTitleLabel, 
         "QLabel { "
         "color: #E8EEF5; "
         "font-size: 18px; "
@@ -47,7 +48,7 @@ ConfirmExitDialog::ConfirmExitDialog(QWidget* parent)
     // Body
     mBodyLabel = new QLabel(this);
     mBodyLabel->setText("Are you sure you want to exit the application?");
-    mBodyLabel->setStyleSheet(
+    astra::setStyle(mBodyLabel, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 14px; "
@@ -74,7 +75,7 @@ ConfirmExitDialog::ConfirmExitDialog(QWidget* parent)
     mExitBtn = new QPushButton(this);
     mExitBtn->setText("Exit");
     mExitBtn->setFixedSize(80, 36);
-    mExitBtn->setStyleSheet(
+    astra::setStyle(mExitBtn, 
         "QPushButton { "
         "background: #D95A5A; "
         "color: white; "

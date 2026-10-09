@@ -23,6 +23,7 @@
 #include "MainWindow.h"
 #include "api/ApiClient.h"
 #include "theme/ThemeManager.h"
+#include "theme/Theme.h"
 
 #include <QApplication>
 #include <QElapsedTimer>
@@ -232,14 +233,16 @@ int main(int argc, char* argv[]) {
     ok &= capture(win, "dashboard_dark.png", outDir);
     debugDashboard(win);
 
-    // ── dashboard, light (direct QSS apply) ───────────────────────────────
-    applyTheme(app, "theme-light.qss");
-    settle(600);
+    // ── dashboard, light (real theme toggle through the app) ──────────────
+    // Driving onThemeToggled (not a bare QSS apply) exercises the same path
+    // the user takes, including the per-widget re-translation.
+    QMetaObject::invokeMethod(&win, "onThemeToggled", Qt::DirectConnection);
+    settle(700);
     ok &= capture(win, "dashboard_light.png", outDir);
 
     // Back to dark.
-    applyTheme(app, "theme-dark.qss");
-    settle(600);
+    QMetaObject::invokeMethod(&win, "onThemeToggled", Qt::DirectConnection);
+    settle(700);
 
     // ── chart page ─────────────────────────────────────────────────────────
     nav(win, 1);

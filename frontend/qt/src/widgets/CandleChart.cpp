@@ -1,4 +1,5 @@
 #include "CandleChart.h"
+#include "theme/Theme.h"
 #include <QPainter>
 #include <QPen>
 #include <QBrush>
@@ -12,14 +13,14 @@
 namespace astra {
 
 // Color constants (from ASTRA visual identity)
-static const QColor COLORS_BULL = QColor("#4CAF7A");
-static const QColor COLORS_BEAR = QColor("#D95A5A");
-static const QColor COLORS_GRID = QColor("#162A44");
-static const QColor COLORS_ACCENT = QColor("#4A90D9");
-static const QColor COLORS_TEXT_SECONDARY = QColor("#8FA3BF");
-static const QColor COLORS_TEXT_PRIMARY = QColor("#E8EEF5");
-static const QColor COLORS_SURFACE = QColor("#0F1F35");
-static const QColor COLORS_SURFACE_2 = QColor("#162A44");
+static QColor COLORS_BULL() { return astra::uiColor("#4CAF7A"); }
+static QColor COLORS_BEAR() { return astra::uiColor("#D95A5A"); }
+static QColor COLORS_GRID() { return astra::uiColor("#162A44"); }
+static QColor COLORS_ACCENT() { return astra::uiColor("#4A90D9"); }
+static QColor COLORS_TEXT_SECONDARY() { return astra::uiColor("#8FA3BF"); }
+static QColor COLORS_TEXT_PRIMARY() { return astra::uiColor("#E8EEF5"); }
+static QColor COLORS_SURFACE() { return astra::uiColor("#0F1F35"); }
+static QColor COLORS_SURFACE_2() { return astra::uiColor("#162A44"); }
 
 CandleChart::CandleChart(QWidget* parent)
     : QWidget(parent)
@@ -114,10 +115,10 @@ void CandleChart::paintEvent(QPaintEvent* /*event*/) {
     p.setRenderHint(QPainter::Antialiasing, false);  // HD 3000: no antialiasing
 
     // Background
-    p.fillRect(rect(), QColor("#0A1628"));
+    p.fillRect(rect(), astra::uiColor("#0A1628"));
 
     if (mCandles.isEmpty()) {
-        p.setPen(QPen(COLORS_TEXT_SECONDARY, 1));
+        p.setPen(QPen(COLORS_TEXT_SECONDARY(), 1));
         p.setFont(QFont("Inter", 14));
         p.drawText(rect().adjusted(20, 0, -20, 0),
                    Qt::AlignCenter,
@@ -150,7 +151,7 @@ void CandleChart::drawChart(QPainter& p) {
 }
 
 void CandleChart::drawGrid(QPainter& p) {
-    p.setPen(QPen(COLORS_GRID, 1, Qt::DotLine));
+    p.setPen(QPen(COLORS_GRID(), 1, Qt::DotLine));
     p.setOpacity(0.3);
 
     // Horizontal grid lines — every ~5% of price range
@@ -194,7 +195,7 @@ void CandleChart::drawCandles(QPainter& p) {
             (1.0 - (c.low - mPriceMin) / mPriceRange) * (mChartHeight - 2 * mGap);
 
         bool isBull = c.close >= c.open;
-        QColor candleColor = isBull ? COLORS_BULL : COLORS_BEAR;
+        QColor candleColor = isBull ? COLORS_BULL() : COLORS_BEAR();
 
         // Wick
         p.setPen(QPen(candleColor, 1));
@@ -222,15 +223,15 @@ void CandleChart::drawPriceAxis(QPainter& p) {
     // Background
     p.fillRect(mChartLeft + mChartWidth + mGap / 2, mChartTop,
                mPriceAxisWidth, mChartHeight,
-               COLORS_SURFACE);
+               COLORS_SURFACE());
 
     // Divider line
-    p.setPen(QPen(COLORS_GRID, 1));
+    p.setPen(QPen(COLORS_GRID(), 1));
     p.drawLine(mChartLeft + mChartWidth + mGap / 2, mChartTop,
                mChartLeft + mChartWidth + mGap / 2, mChartTop + mChartHeight);
 
     // Labels — right-aligned
-    p.setPen(QPen(COLORS_TEXT_SECONDARY, 1));
+    p.setPen(QPen(COLORS_TEXT_SECONDARY(), 1));
     p.setFont(QFont("JetBrains Mono", 11));
 
     double range = mPriceMax - mPriceMin;
@@ -254,15 +255,15 @@ void CandleChart::drawTimeAxis(QPainter& p) {
     // Background
     p.fillRect(mChartLeft, mChartTop + mChartHeight + mGap / 2,
                mChartWidth, mTimeAxisHeight,
-               COLORS_SURFACE);
+               COLORS_SURFACE());
 
     // Divider line
-    p.setPen(QPen(COLORS_GRID, 1));
+    p.setPen(QPen(COLORS_GRID(), 1));
     p.drawLine(mChartLeft, mChartTop + mChartHeight + mGap / 2,
                mChartLeft + mChartWidth, mChartTop + mChartHeight + mGap / 2);
 
     // Labels — centered under candles
-    p.setPen(QPen(COLORS_TEXT_SECONDARY, 1));
+    p.setPen(QPen(COLORS_TEXT_SECONDARY(), 1));
     p.setFont(QFont("JetBrains Mono", 11));
 
     int visibleCandles = qMin(mVisibleCount, mCandles.size());
@@ -293,14 +294,14 @@ void CandleChart::drawLastPriceLine(QPainter& p) {
         (1.0 - (lastPrice - mPriceMin) / mPriceRange) * (mChartHeight - 2 * mGap);
 
     // Dashed line
-    QPen pen(COLORS_ACCENT, 1, Qt::DashLine);
+    QPen pen(COLORS_ACCENT(), 1, Qt::DashLine);
     p.setPen(pen);
     p.drawLine(mChartLeft + mGap, y, mChartLeft + mChartWidth - mGap, y);
 
     // Label on price axis
     p.fillRect(mChartLeft + mChartWidth + mGap / 2 + 2, y - 8,
                mPriceAxisWidth - 4, 16,
-               COLORS_ACCENT);
+               COLORS_ACCENT());
     p.setPen(QPen(Qt::white, 1));
     p.setFont(QFont("JetBrains Mono", 11));
     QString label = QString::number(lastPrice, 'f', 2);
@@ -316,13 +317,13 @@ void CandleChart::drawSLTPLines(QPainter& p) {
     if (mSL > 0 && mSL >= mPriceMin && mSL <= mPriceMax) {
         double y = mChartTop + mGap +
             (1.0 - (mSL - mPriceMin) / mPriceRange) * (mChartHeight - 2 * mGap);
-        QPen pen(COLORS_BEAR, 1, Qt::DashLine);
+        QPen pen(COLORS_BEAR(), 1, Qt::DashLine);
         p.setPen(pen);
         p.drawLine(mChartLeft + mGap, y, mChartLeft + mChartWidth - mGap, y);
         // Label
         p.fillRect(mChartLeft + mChartWidth + mGap / 2 + 2, y - 8,
                    mPriceAxisWidth - 4, 16,
-                   COLORS_BEAR);
+                   COLORS_BEAR());
         p.setPen(QPen(Qt::white, 1));
         p.drawText(QRectF(mChartLeft + mChartWidth + mGap / 2 + 4, y - 8,
                           mPriceAxisWidth - 8, 16),
@@ -334,13 +335,13 @@ void CandleChart::drawSLTPLines(QPainter& p) {
     if (mTP > 0 && mTP >= mPriceMin && mTP <= mPriceMax) {
         double y = mChartTop + mGap +
             (1.0 - (mTP - mPriceMin) / mPriceRange) * (mChartHeight - 2 * mGap);
-        QPen pen(COLORS_BULL, 1, Qt::DashLine);
+        QPen pen(COLORS_BULL(), 1, Qt::DashLine);
         p.setPen(pen);
         p.drawLine(mChartLeft + mGap, y, mChartLeft + mChartWidth - mGap, y);
         // Label
         p.fillRect(mChartLeft + mChartWidth + mGap / 2 + 2, y - 8,
                    mPriceAxisWidth - 4, 16,
-                   COLORS_BULL);
+                   COLORS_BULL());
         p.setPen(QPen(Qt::white, 1));
         p.drawText(QRectF(mChartLeft + mChartWidth + mGap / 2 + 4, y - 8,
                           mPriceAxisWidth - 8, 16),
@@ -353,7 +354,7 @@ void CandleChart::drawCrosshair(QPainter& p) {
     if (!mShowCrosshair) return;
 
     // Vertical line
-    p.setPen(QPen(COLORS_TEXT_SECONDARY, 1, Qt::DashLine));
+    p.setPen(QPen(COLORS_TEXT_SECONDARY(), 1, Qt::DashLine));
     p.setOpacity(0.5);
     p.drawLine(mCrosshairX, mChartTop + mGap,
                mCrosshairX, mChartTop + mChartHeight - mGap);
@@ -379,11 +380,11 @@ void CandleChart::drawOHCLBox(QPainter& p, const QPointF& pos, const CandleData&
     }
 
     // Background
-    p.fillRect(box, COLORS_SURFACE_2);
-    p.setPen(QPen(COLORS_GRID, 1));
+    p.fillRect(box, COLORS_SURFACE_2());
+    p.setPen(QPen(COLORS_GRID(), 1));
     p.drawRect(box);
 
-    p.setPen(QPen(COLORS_TEXT_PRIMARY, 1));
+    p.setPen(QPen(COLORS_TEXT_PRIMARY(), 1));
     p.setFont(QFont("JetBrains Mono", 12));
 
     int y = box.top() + 12;

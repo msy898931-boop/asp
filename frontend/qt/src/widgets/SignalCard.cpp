@@ -1,4 +1,5 @@
 #include "SignalCard.h"
+#include "theme/Theme.h"
 #include <QTimer>
 #include <QFont>
 
@@ -18,7 +19,7 @@ void SignalCard::setupLayout() {
     // Direction indicator — large ▲/▼/—
     mDirectionLabel = new QLabel(this);
     mDirectionLabel->setAlignment(Qt::AlignCenter);
-    mDirectionLabel->setStyleSheet("QLabel { font-size: 32px; font-weight: 600; }");
+    astra::setStyle(mDirectionLabel, "QLabel { font-size: 32px; font-weight: 600; }");
     layout->addWidget(mDirectionLabel);
 
     // Probability / Score
@@ -27,7 +28,7 @@ void SignalCard::setupLayout() {
 
     mLabelLabel = new QLabel(this);
     mLabelLabel->setText("SCORE");
-    mLabelLabel->setStyleSheet(
+    astra::setStyle(mLabelLabel, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -39,7 +40,7 @@ void SignalCard::setupLayout() {
 
     mValueLabel = new QLabel(this);
     mValueLabel->setText("—");
-    mValueLabel->setStyleSheet(
+    astra::setStyle(mValueLabel, 
         "QLabel { "
         "color: #E8EEF5; "
         "font-size: 32px; "
@@ -55,7 +56,7 @@ void SignalCard::setupLayout() {
     mBar = new QProgressBar(this);
     mBar->setMaximum(100);
     mBar->setFixedHeight(6);
-    mBar->setStyleSheet(
+    astra::setStyle(mBar, 
         "QProgressBar { "
         "background: #162A44; "
         "border: none; "
@@ -72,7 +73,7 @@ void SignalCard::setupLayout() {
     // Confidence interval — hidden in uncalibrated mode
     mConfidenceLabel = new QLabel(this);
     mConfidenceLabel->setText("[\u2014 \u2014]");
-    mConfidenceLabel->setStyleSheet(
+    astra::setStyle(mConfidenceLabel, 
         "QLabel { "
         "color: #5A6B80; "
         "font-size: 14px; "
@@ -85,7 +86,7 @@ void SignalCard::setupLayout() {
     // Horizon — hidden in uncalibrated mode
     mHorizonLabel = new QLabel(this);
     mHorizonLabel->setText("Horizon: \u2014");
-    mHorizonLabel->setStyleSheet(
+    astra::setStyle(mHorizonLabel, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -97,7 +98,7 @@ void SignalCard::setupLayout() {
     // Model version — hidden in uncalibrated mode
     mModelLabel = new QLabel(this);
     mModelLabel->setText("Model: \u2014");
-    mModelLabel->setStyleSheet(
+    astra::setStyle(mModelLabel, 
         "QLabel { "
         "color: #5A6B80; "
         "font-size: 12px; "
@@ -109,7 +110,7 @@ void SignalCard::setupLayout() {
     // Updated timestamp
     mUpdatedLabel = new QLabel(this);
     mUpdatedLabel->setText("Updated: just now");
-    mUpdatedLabel->setStyleSheet(
+    astra::setStyle(mUpdatedLabel, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -150,16 +151,16 @@ void SignalCard::updateFromSignal(const Signal& signal, const Meta& meta) {
 void SignalCard::updateDirection(const QString& direction) {
     if (direction == "UP" || direction == "LONG") {
         mDirectionLabel->setText("\u25B2 UP");
-        mDirectionLabel->setStyleSheet("QLabel { font-size: 32px; font-weight: 600; color: #4CAF7A; }");
+        astra::setStyle(mDirectionLabel, "QLabel { font-size: 32px; font-weight: 600; color: #4CAF7A; }");
     } else if (direction == "DOWN" || direction == "SHORT") {
         mDirectionLabel->setText("\u25BC DOWN");
-        mDirectionLabel->setStyleSheet("QLabel { font-size: 32px; font-weight: 600; color: #D95A5A; }");
+        astra::setStyle(mDirectionLabel, "QLabel { font-size: 32px; font-weight: 600; color: #D95A5A; }");
     } else if (direction == "FLAT") {
         mDirectionLabel->setText("\u2014 FLAT");
-        mDirectionLabel->setStyleSheet("QLabel { font-size: 32px; font-weight: 600; color: #5A6B80; }");
+        astra::setStyle(mDirectionLabel, "QLabel { font-size: 32px; font-weight: 600; color: #5A6B80; }");
     } else {
         mDirectionLabel->setText("\u2014 NONE");
-        mDirectionLabel->setStyleSheet("QLabel { font-size: 32px; font-weight: 600; color: #5A6B80; }");
+        astra::setStyle(mDirectionLabel, "QLabel { font-size: 32px; font-weight: 600; color: #5A6B80; }");
     }
 }
 
@@ -173,13 +174,13 @@ void SignalCard::updateScoreOrProbability(const Signal& signal, const Meta& meta
 
         // Bar color based on probability
         if (pct < 55) {
-            mBar->setStyleSheet("QProgressBar::chunk { background: #5A6B80; border-radius: 3px; }");
+            astra::setStyle(mBar, "QProgressBar::chunk { background: #5A6B80; border-radius: 3px; }");
         } else if (pct < 60) {
-            mBar->setStyleSheet("QProgressBar::chunk { background: #D9A14A; border-radius: 3px; }");
+            astra::setStyle(mBar, "QProgressBar::chunk { background: #D9A14A; border-radius: 3px; }");
         } else if (pct < 65) {
-            mBar->setStyleSheet("QProgressBar::chunk { background: #4A90D9; border-radius: 3px; }");
+            astra::setStyle(mBar, "QProgressBar::chunk { background: #4A90D9; border-radius: 3px; }");
         } else {
-            mBar->setStyleSheet("QProgressBar::chunk { background: #4CAF7A; border-radius: 3px; }");
+            astra::setStyle(mBar, "QProgressBar::chunk { background: #4CAF7A; border-radius: 3px; }");
         }
         mBar->setValue(pct);
         mBar->setVisible(true);
@@ -192,13 +193,13 @@ void SignalCard::updateScoreOrProbability(const Signal& signal, const Meta& meta
 
         // Bar color based on score
         if (pct < 55) {
-            mBar->setStyleSheet("QProgressBar::chunk { background: #5A6B80; border-radius: 3px; }");
+            astra::setStyle(mBar, "QProgressBar::chunk { background: #5A6B80; border-radius: 3px; }");
         } else if (pct < 60) {
-            mBar->setStyleSheet("QProgressBar::chunk { background: #D9A14A; border-radius: 3px; }");
+            astra::setStyle(mBar, "QProgressBar::chunk { background: #D9A14A; border-radius: 3px; }");
         } else if (pct < 65) {
-            mBar->setStyleSheet("QProgressBar::chunk { background: #4A90D9; border-radius: 3px; }");
+            astra::setStyle(mBar, "QProgressBar::chunk { background: #4A90D9; border-radius: 3px; }");
         } else {
-            mBar->setStyleSheet("QProgressBar::chunk { background: #4CAF7A; border-radius: 3px; }");
+            astra::setStyle(mBar, "QProgressBar::chunk { background: #4CAF7A; border-radius: 3px; }");
         }
         mBar->setValue(pct);
         mBar->setVisible(true);
@@ -206,7 +207,7 @@ void SignalCard::updateScoreOrProbability(const Signal& signal, const Meta& meta
 
     // Mute styling if degraded
     if (meta.degraded) {
-        mValueLabel->setStyleSheet(
+        astra::setStyle(mValueLabel, 
             "QLabel { "
             "color: #D9A14A; "
             "font-size: 32px; "
@@ -226,7 +227,7 @@ void SignalCard::updateConfidence(const Signal& signal) {
                 .arg(QString::number(lo, 'f', 2))
                 .arg(QString::number(hi, 'f', 2))
         );
-        mConfidenceLabel->setStyleSheet(
+        astra::setStyle(mConfidenceLabel, 
             "QLabel { "
             "color: #8FA3BF; "
             "font-size: 14px; "
@@ -250,7 +251,7 @@ void SignalCard::updateHorizon(const Signal& signal) {
 void SignalCard::updateModelVersion(const Signal& signal) {
     if (signal.modelVersion.has_value()) {
         mModelLabel->setText(QString("Model: %1").arg(signal.modelVersion.value()));
-        mModelLabel->setStyleSheet(
+        astra::setStyle(mModelLabel, 
             "QLabel { "
             "color: #5A6B80; "
             "font-size: 12px; "

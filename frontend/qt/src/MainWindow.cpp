@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "theme/Theme.h"
 #include "pages/DashboardPage.h"
 #include "pages/ChartPage.h"
 #include "pages/HistoryPage.h"
@@ -153,7 +154,7 @@ void MainWindow::setupSidebar() {
     mLogoLabel = new QLabel(logoArea);
     mLogoLabel->setText("ASTRA");
     mLogoLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    mLogoLabel->setStyleSheet(
+    astra::setStyle(mLogoLabel, 
         "QLabel { "
         "color: #E8EEF5; "
         "font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; "
@@ -167,7 +168,7 @@ void MainWindow::setupSidebar() {
     QLabel* subtitle = new QLabel(logoArea);
     subtitle->setText("XAUUSD Intelligence");
     subtitle->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    subtitle->setStyleSheet(
+    astra::setStyle(subtitle, 
         "QLabel { "
         "color: #5A6B80; "
         "font-size: 10px; "
@@ -179,7 +180,7 @@ void MainWindow::setupSidebar() {
     // Divider below lockup
     QFrame* divider = new QFrame(mSidebar);
     divider->setFixedHeight(1);
-    divider->setStyleSheet("QFrame { background: #162A44; }");
+    astra::setStyle(divider, "QFrame { background: #162A44; }");
 
     // ── Groups ──
     QWidget* navArea = new QWidget(mSidebar);
@@ -190,7 +191,7 @@ void MainWindow::setupSidebar() {
     for (const NavGroup& group : mNavGroups) {
         QLabel* groupLabel = new QLabel(navArea);
         groupLabel->setText(group.title.toUpper());
-        groupLabel->setStyleSheet(
+        astra::setStyle(groupLabel, 
             "QLabel { "
             "color: #5A6B80; "
             "font-size: 10px; "
@@ -250,7 +251,7 @@ void MainWindow::setupTopBar() {
     mPageTitle = new QLabel(mTopBar);
     mPageTitle->setObjectName("pageTitle");  // stable handle for tests
     mPageTitle->setText("Dashboard");
-    mPageTitle->setStyleSheet(
+    astra::setStyle(mPageTitle, 
         "QLabel { "
         "color: #E8EEF5; "
         "font-size: 18px; "
@@ -269,10 +270,10 @@ void MainWindow::setupTopBar() {
     healthLayout->setSpacing(6);
     mHealthDot = new QLabel(healthChip);
     mHealthDot->setFixedSize(8, 8);
-    mHealthDot->setStyleSheet("QLabel { background: #4CAF7A; border-radius: 4px; }");
+    astra::setStyle(mHealthDot, "QLabel { background: #4CAF7A; border-radius: 4px; }");
     mHealthLabel = new QLabel(healthChip);
     mHealthLabel->setText("SYSTEM HEALTHY");
-    mHealthLabel->setStyleSheet(
+    astra::setStyle(mHealthLabel, 
         "QLabel { color: #4CAF7A; font-size: 11px; font-weight: 500; letter-spacing: 0.05em; }"
     );
     healthLayout->addWidget(mHealthDot, 0, Qt::AlignVCenter);
@@ -282,7 +283,7 @@ void MainWindow::setupTopBar() {
     // 🔒 SHADOW ONLY
     QLabel* shadowChip = new QLabel(mTopBar);
     shadowChip->setText(QStringLiteral("\U0001F512 SHADOW ONLY"));
-    shadowChip->setStyleSheet(
+    astra::setStyle(shadowChip, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 11px; "
@@ -299,12 +300,12 @@ void MainWindow::setupTopBar() {
     // Renderer
     QLabel* rendererLabel = new QLabel(mTopBar);
     rendererLabel->setText("Renderer: Qt6/QPainter");
-    rendererLabel->setStyleSheet("QLabel { color: #5A6B80; font-size: 11px; }");
+    astra::setStyle(rendererLabel, "QLabel { color: #5A6B80; font-size: 11px; }");
     topLayout->addWidget(rendererLabel);
 
     // Clock — HH:MM:SS UTC (updates every second)
     mClockLabel = new QLabel(mTopBar);
-    mClockLabel->setStyleSheet(
+    astra::setStyle(mClockLabel, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -317,7 +318,7 @@ void MainWindow::setupTopBar() {
     mThemeBtn = new QPushButton(mTopBar);
     mThemeBtn->setFixedSize(32, 32);
     mThemeBtn->setToolTip("Toggle theme (Ctrl+T)");
-    mThemeBtn->setStyleSheet(
+    astra::setStyle(mThemeBtn, 
         "QPushButton { background: transparent; border: none; padding: 4px; }"
         "QPushButton:hover { background: #162A44; }"
     );
@@ -328,7 +329,7 @@ void MainWindow::setupTopBar() {
     mFullscreenBtn = new QPushButton(mTopBar);
     mFullscreenBtn->setFixedSize(32, 32);
     mFullscreenBtn->setToolTip("Toggle fullscreen (F11)");
-    mFullscreenBtn->setStyleSheet(
+    astra::setStyle(mFullscreenBtn, 
         "QPushButton { background: transparent; border: none; padding: 4px; }"
         "QPushButton:hover { background: #162A44; }"
     );
@@ -339,7 +340,7 @@ void MainWindow::setupTopBar() {
     mCloseBtn = new QPushButton(mTopBar);
     mCloseBtn->setFixedSize(32, 32);
     mCloseBtn->setToolTip("Close");
-    mCloseBtn->setStyleSheet(
+    astra::setStyle(mCloseBtn, 
         "QPushButton { background: transparent; border: none; padding: 4px; }"
         "QPushButton:hover { background: #D95A5A; color: white; }"
     );
@@ -353,7 +354,7 @@ void MainWindow::setupTopBar() {
     // Bottom border line — stretches with the bar
     QFrame* bottomLine = new QFrame(mTopBar);
     bottomLine->setFixedHeight(1);
-    bottomLine->setStyleSheet("QFrame { background: #162A44; }");
+    astra::setStyle(bottomLine, "QFrame { background: #162A44; }");
     topBarInner->addWidget(bottomLine);
 }
 
@@ -368,7 +369,7 @@ void MainWindow::setupBottomBar() {
 
     QFrame* topLine = new QFrame(mBottomBar);
     topLine->setFixedHeight(1);
-    topLine->setStyleSheet("QFrame { background: #162A44; }");
+    astra::setStyle(topLine, "QFrame { background: #162A44; }");
     bbInner->addWidget(topLine);
 
     QHBoxLayout* bottomLayout = new QHBoxLayout();
@@ -390,13 +391,13 @@ void MainWindow::setupBottomBar() {
     const QString baseStyle =
         "QLabel { color: #8FA3BF; font-size: 11px; letter-spacing: 0.03em; }";
     mBackendStatus->setText(QStringLiteral("\u25CF Runtime: \u2014"));
-    mBackendStatus->setStyleSheet(baseStyle);
+    astra::setStyle(mBackendStatus, baseStyle);
     mBridgeStatus->setText(QStringLiteral("\u25CF Streams: \u2014"));
-    mBridgeStatus->setStyleSheet(baseStyle);
+    astra::setStyle(mBridgeStatus, baseStyle);
     mFreshnessStatus->setText(QStringLiteral("\u25CF Persistence: \u2014"));
-    mFreshnessStatus->setStyleSheet(baseStyle);
+    astra::setStyle(mFreshnessStatus, baseStyle);
     recovery->setText(QStringLiteral("\u25CF Recovery: \u2014"));
-    recovery->setStyleSheet(baseStyle);
+    astra::setStyle(recovery, baseStyle);
 
     bottomLayout->addWidget(mBackendStatus);
     bottomLayout->addWidget(mBridgeStatus);
@@ -409,7 +410,7 @@ void MainWindow::setupBottomBar() {
     // Right: ● SHADOW ONLY | System Health
     QLabel* shadow = new QLabel(mBottomBar);
     shadow->setText(QStringLiteral("\u25CF SHADOW ONLY"));
-    shadow->setStyleSheet(
+    astra::setStyle(shadow, 
         "QLabel { color: #8FA3BF; font-size: 11px; letter-spacing: 0.03em; }"
     );
     bottomLayout->addWidget(shadow);
@@ -417,7 +418,7 @@ void MainWindow::setupBottomBar() {
     mDisclaimer = new QLabel(mBottomBar);
     mDisclaimer->setObjectName("systemHealthLabel");
     mDisclaimer->setText("System Health: \u2014");
-    mDisclaimer->setStyleSheet("QLabel { color: #5A6B80; font-size: 11px; }");
+    astra::setStyle(mDisclaimer, "QLabel { color: #5A6B80; font-size: 11px; }");
     bottomLayout->addWidget(mDisclaimer);
 
     updateBottomBarStatus();
@@ -628,10 +629,10 @@ void MainWindow::updateLivenessIndicator() {
     }
 
     mHealthLabel->setText(state);
-    mHealthLabel->setStyleSheet(
+    astra::setStyle(mHealthLabel, 
         QString("QLabel { color: %1; font-size: 11px; font-weight: 500; letter-spacing: 0.05em; }")
             .arg(color));
-    mHealthDot->setStyleSheet(
+    astra::setStyle(mHealthDot, 
         QString("QLabel { background: %1; border-radius: 4px; }").arg(color));
 }
 
@@ -649,26 +650,26 @@ void MainWindow::updateBottomBarStatus() {
 
     if (!mApiClient) {
         mBackendStatus->setText(QStringLiteral("\u25CF Runtime: ") + em);
-        mBackendStatus->setStyleSheet(styleFor(grey));
+        astra::setStyle(mBackendStatus, styleFor(grey));
         mBridgeStatus->setText(QStringLiteral("\u25CF Streams: ") + em);
-        mBridgeStatus->setStyleSheet(styleFor(grey));
+        astra::setStyle(mBridgeStatus, styleFor(grey));
         mDisclaimer->setText("System Health: " + em);
-        mDisclaimer->setStyleSheet(
+        astra::setStyle(mDisclaimer, 
             QString("QLabel { color: %1; font-size: 11px; }").arg(dim));
         return;
     }
 
     // Persistence / Recovery have no backend surface in the frozen contract
     mFreshnessStatus->setText(QStringLiteral("\u25CF Persistence: ") + em);
-    mFreshnessStatus->setStyleSheet(styleFor(grey));
+    astra::setStyle(mFreshnessStatus, styleFor(grey));
 
     if (!mApiClient->isOnline()) {
         mBackendStatus->setText(QStringLiteral("\u25CF Runtime: OFFLINE"));
-        mBackendStatus->setStyleSheet(styleFor(red));
+        astra::setStyle(mBackendStatus, styleFor(red));
         mBridgeStatus->setText(QStringLiteral("\u25CF Streams: OFFLINE"));
-        mBridgeStatus->setStyleSheet(styleFor(red));
+        astra::setStyle(mBridgeStatus, styleFor(red));
         mDisclaimer->setText("System Health: OFFLINE");
-        mDisclaimer->setStyleSheet(
+        astra::setStyle(mDisclaimer, 
             QString("QLabel { color: %1; font-size: 11px; }").arg(red));
         return;
     }
@@ -678,25 +679,25 @@ void MainWindow::updateBottomBarStatus() {
     // ● Runtime — backend aggregate status
     if (health.status == "ok") {
         mBackendStatus->setText(QStringLiteral("\u25CF Runtime: ONLINE"));
-        mBackendStatus->setStyleSheet(styleFor(green));
+        astra::setStyle(mBackendStatus, styleFor(green));
     } else if (health.status == "degraded") {
         mBackendStatus->setText(QStringLiteral("\u25CF Runtime: DEGRADED"));
-        mBackendStatus->setStyleSheet(styleFor(amber));
+        astra::setStyle(mBackendStatus, styleFor(amber));
     } else {
         mBackendStatus->setText(QStringLiteral("\u25CF Runtime: OFFLINE"));
-        mBackendStatus->setStyleSheet(styleFor(red));
+        astra::setStyle(mBackendStatus, styleFor(red));
     }
 
     // ● Streams — bridge status
     if (health.bridge == "ok") {
         mBridgeStatus->setText(QStringLiteral("\u25CF Streams: OK"));
-        mBridgeStatus->setStyleSheet(styleFor(green));
+        astra::setStyle(mBridgeStatus, styleFor(green));
     } else if (health.bridge == "stale") {
         mBridgeStatus->setText(QStringLiteral("\u25CF Streams: STALE"));
-        mBridgeStatus->setStyleSheet(styleFor(amber));
+        astra::setStyle(mBridgeStatus, styleFor(amber));
     } else {
         mBridgeStatus->setText(QStringLiteral("\u25CF Streams: OFFLINE"));
-        mBridgeStatus->setStyleSheet(styleFor(red));
+        astra::setStyle(mBridgeStatus, styleFor(red));
     }
 
     // Right side: System Health
@@ -713,7 +714,7 @@ void MainWindow::updateBottomBarStatus() {
         healthColor = red;
     }
     mDisclaimer->setText("System Health: " + healthState);
-    mDisclaimer->setStyleSheet(
+    astra::setStyle(mDisclaimer, 
         QString("QLabel { color: %1; font-size: 11px; }").arg(healthColor));
 }
 
@@ -769,7 +770,7 @@ void MainWindow::showFullscreenHint() {
 
     QLabel* hint = new QLabel(this);
     hint->setText("Press F11 to exit fullscreen");
-    hint->setStyleSheet(
+    astra::setStyle(hint, 
         "QLabel { "
         "background: rgba(15, 31, 53, 0.9); "
         "color: #8FA3BF; "

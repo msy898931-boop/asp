@@ -1,4 +1,5 @@
 #include "LevelsCard.h"
+#include "theme/Theme.h"
 #include <QFrame>
 #include <QHBoxLayout>
 
@@ -45,7 +46,7 @@ void LevelsCard::showAllUnavailable() {
 
     QLabel* msg = new QLabel(this);
     msg->setText("Levels unavailable \u2014 calibration pending");
-    msg->setStyleSheet(
+    astra::setStyle(msg, 
         "QLabel { "
         "color: #5A6B80; "
         "font-size: 14px; "
@@ -69,7 +70,7 @@ void LevelsCard::showLevels(const Levels& levels) {
         if (isDivider) {
             QFrame* div = new QFrame(this);
             div->setFixedHeight(1);
-            div->setStyleSheet("QFrame { background: rgba(138, 163, 191, 0.3); }");
+            astra::setStyle(div, "QFrame { background: rgba(138, 163, 191, 0.3); }");
             mBodyLayout->addWidget(div);
             return;
         }
@@ -79,11 +80,11 @@ void LevelsCard::showLevels(const Levels& levels) {
 
         QLabel* lbl = new QLabel(this);
         lbl->setText(label);
-        lbl->setStyleSheet("QLabel { color: #8FA3BF; font-size: 14px; }");
+        astra::setStyle(lbl, "QLabel { color: #8FA3BF; font-size: 14px; }");
 
         QLabel* val = new QLabel(this);
         val->setText(value);
-        val->setStyleSheet(
+        astra::setStyle(val, 
             QString("QLabel { color: %1; font-size: 14px; "
                     "font-family: 'JetBrains Mono', 'Consolas', monospace; }")
                 .arg(color));

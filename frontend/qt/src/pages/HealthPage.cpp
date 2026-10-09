@@ -1,4 +1,5 @@
 #include "HealthPage.h"
+#include "theme/Theme.h"
 #include <QFrame>
 #include <QGridLayout>
 #include <QLabel>
@@ -32,7 +33,7 @@ void HealthPage::setupLayout() {
 
     QLabel* sysTitle = new QLabel(mSystemCard);
     sysTitle->setText("SYSTEM STATUS");
-    sysTitle->setStyleSheet(
+    astra::setStyle(sysTitle, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -58,17 +59,17 @@ void HealthPage::setupLayout() {
 
         QLabel* lbl = new QLabel(mSystemCard);
         lbl->setText(labels[i]);
-        lbl->setStyleSheet("QLabel { color: #8FA3BF; font-size: 14px; }");
+        astra::setStyle(lbl, "QLabel { color: #8FA3BF; font-size: 14px; }");
         row->addWidget(lbl);
 
         QLabel* dot = new QLabel(mSystemCard);
         dot->setFixedSize(8, 8);
-        dot->setStyleSheet("QLabel { background: #4CAF7A; border-radius: 4px; }");
+        astra::setStyle(dot, "QLabel { background: #4CAF7A; border-radius: 4px; }");
         row->addWidget(dot, 0, Qt::AlignTop);
 
         QLabel* val = new QLabel(mSystemCard);
         val->setText("—");
-        val->setStyleSheet("QLabel { color: #E8EEF5; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(val, "QLabel { color: #E8EEF5; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
         row->addWidget(val);
 
         row->addStretch();
@@ -80,7 +81,7 @@ void HealthPage::setupLayout() {
         if (i < 5) {
             QFrame* div = new QFrame(mSystemCard);
             div->setFixedHeight(1);
-            div->setStyleSheet("QFrame { background: rgba(138, 163, 191, 0.3); }");
+            astra::setStyle(div, "QFrame { background: rgba(138, 163, 191, 0.3); }");
             sysLayout->addWidget(div);
         }
     }
@@ -97,7 +98,7 @@ void HealthPage::setupLayout() {
 
     QLabel* tfTitle = new QLabel(mTimeframesCard);
     tfTitle->setText("TIMEFRAMES");
-    tfTitle->setStyleSheet(
+    astra::setStyle(tfTitle, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -120,7 +121,7 @@ void HealthPage::setupLayout() {
         QFrame* item = new QFrame(mTimeframesCard);
         item->setFixedSize(100, 56);
         item->setProperty("astraCard", true);
-        item->setStyleSheet(
+        astra::setStyle(item, 
             "QFrame { "
             "background: #0F1F35; "
             "border: 1px solid #162A44; "
@@ -135,7 +136,7 @@ void HealthPage::setupLayout() {
 
         QLabel* tfLabel = new QLabel(item);
         tfLabel->setText(tfs[i]);
-        tfLabel->setStyleSheet(
+        astra::setStyle(tfLabel, 
             "QLabel { "
             "color: #E8EEF5; "
             "font-size: 14px; "
@@ -148,7 +149,7 @@ void HealthPage::setupLayout() {
 
         QLabel* statusLabel = new QLabel(item);
         statusLabel->setText("\u25CF OK");
-        statusLabel->setStyleSheet(
+        astra::setStyle(statusLabel, 
             "QLabel { "
             "color: #4CAF7A; "
             "font-size: 12px; "
@@ -180,7 +181,7 @@ void HealthPage::updateFromHealth(const HealthResponse& resp) {
                     QLabel* statusLabel = qobject_cast<QLabel*>(layout->itemAt(1)->widget());
                     if (statusLabel) {
                         statusLabel->setText("\u25CF OK");
-                        statusLabel->setStyleSheet(
+                        astra::setStyle(statusLabel, 
                             "QLabel { color: #4CAF7A; font-size: 12px; }"
                         );
                     }
@@ -194,31 +195,31 @@ void HealthPage::updateSystemStatus(const HealthResponse& resp) {
     // Backend status
     if (resp.data.status == "offline") {
         mStatusLabels[0]->setText("OFFLINE");
-        mStatusLabels[0]->setStyleSheet("QLabel { color: #D95A5A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-        mStatusDots[0]->setStyleSheet("QLabel { background: #D95A5A; border-radius: 4px; }");
+        astra::setStyle(mStatusLabels[0], "QLabel { color: #D95A5A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(mStatusDots[0], "QLabel { background: #D95A5A; border-radius: 4px; }");
     } else if (resp.data.status == "degraded") {
         mStatusLabels[0]->setText("DEGRADED");
-        mStatusLabels[0]->setStyleSheet("QLabel { color: #D9A14A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-        mStatusDots[0]->setStyleSheet("QLabel { background: #D9A14A; border-radius: 4px; }");
+        astra::setStyle(mStatusLabels[0], "QLabel { color: #D9A14A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(mStatusDots[0], "QLabel { background: #D9A14A; border-radius: 4px; }");
     } else {
         mStatusLabels[0]->setText("ONLINE");
-        mStatusLabels[0]->setStyleSheet("QLabel { color: #4CAF7A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-        mStatusDots[0]->setStyleSheet("QLabel { background: #4CAF7A; border-radius: 4px; }");
+        astra::setStyle(mStatusLabels[0], "QLabel { color: #4CAF7A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(mStatusDots[0], "QLabel { background: #4CAF7A; border-radius: 4px; }");
     }
 
     // Bridge status
     if (resp.data.bridge == "offline") {
         mStatusLabels[1]->setText("OFFLINE");
-        mStatusLabels[1]->setStyleSheet("QLabel { color: #D95A5A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-        mStatusDots[1]->setStyleSheet("QLabel { background: #D95A5A; border-radius: 4px; }");
+        astra::setStyle(mStatusLabels[1], "QLabel { color: #D95A5A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(mStatusDots[1], "QLabel { background: #D95A5A; border-radius: 4px; }");
     } else if (resp.data.bridge == "stale" || resp.data.bridge == "degraded") {
         mStatusLabels[1]->setText("STALE");
-        mStatusLabels[1]->setStyleSheet("QLabel { color: #D9A14A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-        mStatusDots[1]->setStyleSheet("QLabel { background: #D9A14A; border-radius: 4px; }");
+        astra::setStyle(mStatusLabels[1], "QLabel { color: #D9A14A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(mStatusDots[1], "QLabel { background: #D9A14A; border-radius: 4px; }");
     } else {
         mStatusLabels[1]->setText("OK");
-        mStatusLabels[1]->setStyleSheet("QLabel { color: #4CAF7A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-        mStatusDots[1]->setStyleSheet("QLabel { background: #4CAF7A; border-radius: 4px; }");
+        astra::setStyle(mStatusLabels[1], "QLabel { color: #4CAF7A; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(mStatusDots[1], "QLabel { background: #4CAF7A; border-radius: 4px; }");
     }
 
     // Data freshness
@@ -228,30 +229,30 @@ void HealthPage::updateSystemStatus(const HealthResponse& resp) {
         int hours = mins / 60;
         mins %= 60;
         mStatusLabels[4]->setText(QString("%1h %2m").arg(hours).arg(mins));
-        mStatusLabels[4]->setStyleSheet("QLabel { color: #E8EEF5; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-        mStatusDots[4]->setStyleSheet("QLabel { background: #4CAF7A; border-radius: 4px; }");
+        astra::setStyle(mStatusLabels[4], "QLabel { color: #E8EEF5; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(mStatusDots[4], "QLabel { background: #4CAF7A; border-radius: 4px; }");
     } else {
         mStatusLabels[4]->setText("—");
-        mStatusLabels[4]->setStyleSheet("QLabel { color: #5A6B80; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-        mStatusDots[4]->setStyleSheet("QLabel { background: #5A6B80; border-radius: 4px; }");
+        astra::setStyle(mStatusLabels[4], "QLabel { color: #5A6B80; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+        astra::setStyle(mStatusDots[4], "QLabel { background: #5A6B80; border-radius: 4px; }");
     }
 
     // Freshness (row 2) — /health/v1 exposes no data-freshness field.
     // Unknown renders as em-dash; never fabricate a number.
     mStatusLabels[2]->setText("\u2014");
-    mStatusLabels[2]->setStyleSheet("QLabel { color: #5A6B80; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-    mStatusDots[2]->setStyleSheet("QLabel { background: #5A6B80; border-radius: 4px; }");
+    astra::setStyle(mStatusLabels[2], "QLabel { color: #5A6B80; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+    astra::setStyle(mStatusDots[2], "QLabel { background: #5A6B80; border-radius: 4px; }");
 
     // API Version (row 3)
     mStatusLabels[3]->setText(resp.data.version);
-    mStatusLabels[3]->setStyleSheet("QLabel { color: #E8EEF5; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-    mStatusDots[3]->setStyleSheet("QLabel { background: #4CAF7A; border-radius: 4px; }");
+    astra::setStyle(mStatusLabels[3], "QLabel { color: #E8EEF5; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+    astra::setStyle(mStatusDots[3], "QLabel { background: #4CAF7A; border-radius: 4px; }");
 
     // Coverage Tier (row 5) — coverage_tier lives on the analysis meta object,
     // not on /health/v1. Render as unavailable; never fabricate it.
     mStatusLabels[5]->setText("\u2014");
-    mStatusLabels[5]->setStyleSheet("QLabel { color: #5A6B80; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
-    mStatusDots[5]->setStyleSheet("QLabel { background: #5A6B80; border-radius: 4px; }");
+    astra::setStyle(mStatusLabels[5], "QLabel { color: #5A6B80; font-size: 14px; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+    astra::setStyle(mStatusDots[5], "QLabel { background: #5A6B80; border-radius: 4px; }");
 }
 
 }  // namespace astra

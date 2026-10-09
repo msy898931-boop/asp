@@ -1,4 +1,5 @@
 #include "MtfMeter.h"
+#include "theme/Theme.h"
 
 namespace astra {
 
@@ -9,12 +10,12 @@ MtfMeter::MtfMeter(QWidget* parent)
 
     mBar = new QLabel(this);
     mBar->setFixedHeight(6);
-    mBar->setStyleSheet("QLabel { background: #162A44; border-radius: 3px; }");
+    astra::setStyle(mBar, "QLabel { background: #162A44; border-radius: 3px; }");
     mBar->setFixedWidth(0);
 
     mValueLabel = new QLabel(this);
     mValueLabel->setText("N/A");
-    mValueLabel->setStyleSheet(
+    astra::setStyle(mValueLabel, 
         "QLabel { "
         "color: #5A6B80; "
         "font-size: 14px; "
@@ -51,8 +52,8 @@ void MtfMeter::setAgreement(double value) {
         color = "#4CAF7A";  // bull
     }
 
-    mBar->setStyleSheet(QString("QLabel { background: %1; border-radius: 3px; }").arg(color));
-    mValueLabel->setStyleSheet(
+    astra::setStyle(mBar, QString("QLabel { background: %1; border-radius: 3px; }").arg(color));
+    astra::setStyle(mValueLabel, 
         QString("QLabel { "
                 "color: %1; "
                 "font-size: 14px; "

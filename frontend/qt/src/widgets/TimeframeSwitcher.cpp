@@ -1,4 +1,5 @@
 #include "TimeframeSwitcher.h"
+#include "theme/Theme.h"
 
 namespace astra {
 
@@ -20,7 +21,7 @@ void TimeframeSwitcher::setupButtons() {
         QPushButton* btn = new QPushButton(this);
         btn->setText(TIMEFRAMES[i]);
         btn->setFixedSize(44, 32);
-        btn->setStyleSheet(
+        astra::setStyle(btn, 
             "QPushButton { "
             "background: transparent; "
             "border: 1px solid #162A44; "
@@ -68,7 +69,7 @@ void TimeframeSwitcher::updateActiveButton() {
     for (int i = 0; i < mButtons.size(); ++i) {
         QPushButton* btn = mButtons[i];
         if (TIMEFRAMES[i] == mCurrentTf) {
-            btn->setStyleSheet(
+            astra::setStyle(btn, 
                 "QPushButton { "
                 "background: #4A90D9; "
                 "border: 1px solid #4A90D9; "
@@ -83,7 +84,7 @@ void TimeframeSwitcher::updateActiveButton() {
                 "}"
             );
         } else {
-            btn->setStyleSheet(
+            astra::setStyle(btn, 
                 "QPushButton { "
                 "background: transparent; "
                 "border: 1px solid #162A44; "

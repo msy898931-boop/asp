@@ -1,4 +1,5 @@
 #include "SettingsPage.h"
+#include "theme/Theme.h"
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QTimer>
@@ -26,7 +27,7 @@ void SettingsPage::setupLayout() {
     // ── GENERAL ──
     QGroupBox* generalGroup = new QGroupBox(this);
     generalGroup->setTitle("GENERAL");
-    generalGroup->setStyleSheet(
+    astra::setStyle(generalGroup, 
         "QGroupBox { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -46,7 +47,7 @@ void SettingsPage::setupLayout() {
 
     mApiUrlEdit = new QLineEdit(generalGroup);
     mApiUrlEdit->setText("http://127.0.0.1:8790/api/v1/");
-    mApiUrlEdit->setStyleSheet(
+    astra::setStyle(mApiUrlEdit, 
         "QLineEdit { "
         "background: #0F1F35; "
         "border: 1px solid #162A44; "
@@ -66,7 +67,7 @@ void SettingsPage::setupLayout() {
     mRefreshCombo->addItem("10s");
     mRefreshCombo->addItem("15s");
     mRefreshCombo->addItem("30s");
-    mRefreshCombo->setStyleSheet(
+    astra::setStyle(mRefreshCombo, 
         "QComboBox { "
         "background: #0F1F35; "
         "border: 1px solid #162A44; "
@@ -82,7 +83,7 @@ void SettingsPage::setupLayout() {
 
     mFullscreenCheck = new QCheckBox(generalGroup);
     mFullscreenCheck->setText("Start in Fullscreen");
-    mFullscreenCheck->setStyleSheet(
+    astra::setStyle(mFullscreenCheck, 
         "QCheckBox { color: #E8EEF5; spacing: 8px; }"
         "QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #162A44; border-radius: 3px; background: #0F1F35; }"
         "QCheckBox::indicator:checked { background: #4A90D9; border-color: #4A90D9; }"
@@ -92,7 +93,7 @@ void SettingsPage::setupLayout() {
     mCrosshairCheck = new QCheckBox(generalGroup);
     mCrosshairCheck->setText("Show Crosshair");
     mCrosshairCheck->setChecked(true);
-    mCrosshairCheck->setStyleSheet(
+    astra::setStyle(mCrosshairCheck, 
         "QCheckBox { color: #E8EEF5; spacing: 8px; }"
         "QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #162A44; border-radius: 3px; background: #0F1F35; }"
         "QCheckBox::indicator:checked { background: #4A90D9; border-color: #4A90D9; }"
@@ -102,7 +103,7 @@ void SettingsPage::setupLayout() {
     mSlTpCheck = new QCheckBox(generalGroup);
     mSlTpCheck->setText("Show SL/TP Overlay");
     mSlTpCheck->setChecked(true);
-    mSlTpCheck->setStyleSheet(
+    astra::setStyle(mSlTpCheck, 
         "QCheckBox { color: #E8EEF5; spacing: 8px; }"
         "QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #162A44; border-radius: 3px; background: #0F1F35; }"
         "QCheckBox::indicator:checked { background: #4A90D9; border-color: #4A90D9; }"
@@ -114,7 +115,7 @@ void SettingsPage::setupLayout() {
     // ── APPEARANCE ──
     QGroupBox* appearanceGroup = new QGroupBox(this);
     appearanceGroup->setTitle("APPEARANCE");
-    appearanceGroup->setStyleSheet(
+    astra::setStyle(appearanceGroup, 
         "QGroupBox { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -137,7 +138,7 @@ void SettingsPage::setupLayout() {
 
     mThemeDarkRadio = new QLabel(appearanceGroup);
     mThemeDarkRadio->setText("\u25A1 Dark");
-    mThemeDarkRadio->setStyleSheet(
+    astra::setStyle(mThemeDarkRadio, 
         "QLabel { color: #E8EEF5; font-size: 14px; }"
         "QLabel:hover { color: #4A90D9; }"
     );
@@ -146,7 +147,7 @@ void SettingsPage::setupLayout() {
     mThemeLightRadio = new QLabel(appearanceGroup);
     mThemeLightRadio = new QLabel(appearanceGroup);
     mThemeLightRadio->setText("\u25A1 Light");
-    mThemeLightRadio->setStyleSheet(
+    astra::setStyle(mThemeLightRadio, 
         "QLabel { color: #8FA3BF; font-size: 14px; }"
     );
     themeRow->addWidget(mThemeLightRadio);
@@ -158,7 +159,7 @@ void SettingsPage::setupLayout() {
     mFontSizeCombo->addItem("Small");
     mFontSizeCombo->addItem("Normal");
     mFontSizeCombo->addItem("Large");
-    mFontSizeCombo->setStyleSheet(
+    astra::setStyle(mFontSizeCombo, 
         "QComboBox { "
         "background: #0F1F35; "
         "border: 1px solid #162A44; "
@@ -177,7 +178,7 @@ void SettingsPage::setupLayout() {
     // ── KEYBOARD SHORTCUTS (read-only) ──
     QGroupBox* shortcutsGroup = new QGroupBox(this);
     shortcutsGroup->setTitle("KEYBOARD SHORTCUTS");
-    shortcutsGroup->setStyleSheet(
+    astra::setStyle(shortcutsGroup, 
         "QGroupBox { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -213,7 +214,7 @@ void SettingsPage::setupLayout() {
     for (int i = 0; i < 11; ++i) {
         QLabel* keyLbl = new QLabel(shortcutsGroup);
         keyLbl->setText(shortcuts[i].key);
-        keyLbl->setStyleSheet(
+        astra::setStyle(keyLbl, 
             "QLabel { "
             "color: #4A90D9; "
             "font-size: 13px; "
@@ -224,7 +225,7 @@ void SettingsPage::setupLayout() {
 
         QLabel* descLbl = new QLabel(shortcutsGroup);
         descLbl->setText(shortcuts[i].desc);
-        descLbl->setStyleSheet(
+        astra::setStyle(descLbl, 
             "QLabel { color: #8FA3BF; font-size: 13px; }"
         );
 
@@ -238,7 +239,7 @@ void SettingsPage::setupLayout() {
     // ── ABOUT ──
     QGroupBox* aboutGroup = new QGroupBox(this);
     aboutGroup->setTitle("ABOUT");
-    aboutGroup->setStyleSheet(
+    astra::setStyle(aboutGroup, 
         "QGroupBox { "
         "color: #8FA3BF; "
         "font-size: 12px; "
@@ -258,17 +259,17 @@ void SettingsPage::setupLayout() {
 
     QLabel* about1 = new QLabel(aboutGroup);
     about1->setText("ASTRA Desktop v1.0");
-    about1->setStyleSheet("QLabel { color: #E8EEF5; font-size: 14px; font-weight: 500; }");
+    astra::setStyle(about1, "QLabel { color: #E8EEF5; font-size: 14px; font-weight: 500; }");
     aboutLayout->addWidget(about1);
 
     QLabel* about2 = new QLabel(aboutGroup);
     about2->setText("Backend API v1");
-    about2->setStyleSheet("QLabel { color: #8FA3BF; font-size: 14px; }");
+    astra::setStyle(about2, "QLabel { color: #8FA3BF; font-size: 14px; }");
     aboutLayout->addWidget(about2);
 
     QLabel* about3 = new QLabel(aboutGroup);
     about3->setText("Decision support only. Not financial advice.");
-    about3->setStyleSheet("QLabel { color: #5A6B80; font-size: 12px; }");
+    astra::setStyle(about3, "QLabel { color: #5A6B80; font-size: 12px; }");
     aboutLayout->addWidget(about3);
 
     mainLayout->addWidget(aboutGroup);
@@ -277,7 +278,7 @@ void SettingsPage::setupLayout() {
     mSaveBtn = new QPushButton(this);
     mSaveBtn->setText("Save");
     mSaveBtn->setProperty("primary", true);
-    mSaveBtn->setStyleSheet(
+    astra::setStyle(mSaveBtn, 
         "QPushButton { "
         "background: #4A90D9; "
         "color: white; "
@@ -299,7 +300,7 @@ void SettingsPage::setupLayout() {
     mToastFrame->setProperty("astraCard", true);
     mToastFrame->setFrameStyle(QFrame::NoFrame);
     mToastFrame->setFixedHeight(40);
-    mToastFrame->setStyleSheet(
+    astra::setStyle(mToastFrame, 
         "QFrame { "
         "background: #0F1F35; "
         "border: 1px solid #4CAF7A; "
@@ -308,7 +309,7 @@ void SettingsPage::setupLayout() {
     );
     mToastLabel = new QLabel(mToastFrame);
     mToastLabel->setText("");
-    mToastLabel->setStyleSheet(
+    astra::setStyle(mToastLabel, 
         "QLabel { color: #4CAF7A; font-size: 14px; }"
     );
     mToastLabel->setAlignment(Qt::AlignCenter);
@@ -328,10 +329,10 @@ void SettingsPage::loadSettings() {
     mSlTpCheck->setChecked(mSettings.value("showSlTp", true).toBool());
     int themeIdx = mSettings.value("theme", 0).toInt();
     // 0 = dark, 1 = light
-    mThemeDarkRadio->setStyleSheet(themeIdx == 0
+    astra::setStyle(mThemeDarkRadio, themeIdx == 0
         ? "QLabel { color: #4A90D9; font-size: 14px; }"
         : "QLabel { color: #8FA3BF; font-size: 14px; }");
-    mThemeLightRadio->setStyleSheet(themeIdx == 1
+    astra::setStyle(mThemeLightRadio, themeIdx == 1
         ? "QLabel { color: #4A90D9; font-size: 14px; }"
         : "QLabel { color: #8FA3BF; font-size: 14px; }");
     int fontIdx = mSettings.value("fontSize", 1).toInt();

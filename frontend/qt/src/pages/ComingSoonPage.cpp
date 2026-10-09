@@ -1,4 +1,5 @@
 #include "ComingSoonPage.h"
+#include "theme/Theme.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 
@@ -22,7 +23,7 @@ ComingSoonPage::ComingSoonPage(QWidget* parent)
     mTitle = new QLabel(this);
     mTitle->setObjectName("comingSoonTitle");
     mTitle->setAlignment(Qt::AlignHCenter);
-    mTitle->setStyleSheet(
+    astra::setStyle(mTitle, 
         "QLabel { "
         "color: #E8EEF5; "
         "font-size: 22px; "
@@ -35,7 +36,7 @@ ComingSoonPage::ComingSoonPage(QWidget* parent)
     QLabel* badge = new QLabel(this);
     badge->setText("COMING SOON");
     badge->setAlignment(Qt::AlignHCenter);
-    badge->setStyleSheet(
+    astra::setStyle(badge, 
         "QLabel { "
         "color: #4A90D9; "
         "font-size: 11px; "
@@ -54,7 +55,7 @@ ComingSoonPage::ComingSoonPage(QWidget* parent)
     mBody->setObjectName("comingSoonBody");
     mBody->setText("Enabled when the backend module ships.");
     mBody->setAlignment(Qt::AlignHCenter);
-    mBody->setStyleSheet(
+    astra::setStyle(mBody, 
         "QLabel { "
         "color: #8FA3BF; "
         "font-size: 14px; "

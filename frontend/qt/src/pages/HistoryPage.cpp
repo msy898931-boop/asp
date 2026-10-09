@@ -1,4 +1,5 @@
 #include "HistoryPage.h"
+#include "theme/Theme.h"
 #include <QHeaderView>
 #include <QDateTime>
 #include <QFont>
@@ -27,7 +28,7 @@ void HistoryPage::setupLayout() {
 
     QLabel* titleLabel = new QLabel(this);
     titleLabel->setText("HISTORY");
-    titleLabel->setStyleSheet(
+    astra::setStyle(titleLabel, 
         "QLabel { "
         "color: #E8EEF5; "
         "font-size: 16px; "
@@ -42,7 +43,7 @@ void HistoryPage::setupLayout() {
     mFilterCombo->addItem("Last 50");
     mFilterCombo->addItem("Last 20");
     mFilterCombo->addItem("Last 10");
-    mFilterCombo->setStyleSheet(
+    astra::setStyle(mFilterCombo, 
         "QComboBox { "
         "background: #0F1F35; "
         "border: 1px solid #162A44; "
@@ -58,7 +59,7 @@ void HistoryPage::setupLayout() {
 
     mRefreshBtn = new QPushButton(this);
     mRefreshBtn->setText("Refresh");
-    mRefreshBtn->setStyleSheet(
+    astra::setStyle(mRefreshBtn, 
         "QPushButton { "
         "background: transparent; "
         "border: 1px solid #162A44; "
@@ -90,7 +91,7 @@ void HistoryPage::setupLayout() {
     mTable->setColumnWidth(4, 120);
     mTable->verticalHeader()->setDefaultSectionSize(36);
     mTable->setAlternatingRowColors(true);
-    mTable->horizontalHeader()->setStyleSheet(
+    astra::setStyle(mTable->horizontalHeader(), 
         "QHeaderView::section { "
         "background: #162A44; "
         "color: #8FA3BF; "
@@ -103,7 +104,7 @@ void HistoryPage::setupLayout() {
         "letter-spacing: 0.05em; "
         "}"
     );
-    mTable->setStyleSheet(
+    astra::setStyle(mTable, 
         "QTableWidget { "
         "background: #0F1F35; "
         "border: 1px solid #162A44; "
@@ -147,11 +148,11 @@ void HistoryPage::setupLayout() {
     sr1->setContentsMargins(20, 16, 20, 16);
     QLabel* sr1Label = new QLabel(mSummaryCard1);
     sr1Label->setText("Win Rate");
-    sr1Label->setStyleSheet("QLabel { color: #8FA3BF; font-size: 12px; font-weight: 500; letter-spacing: 0.05em; }");
+    astra::setStyle(sr1Label, "QLabel { color: #8FA3BF; font-size: 12px; font-weight: 500; letter-spacing: 0.05em; }");
     sr1->addWidget(sr1Label);
     QLabel* sr1Value = new QLabel(mSummaryCard1);
     sr1Value->setText("—");
-    sr1Value->setStyleSheet("QLabel { color: #E8EEF5; font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+    astra::setStyle(sr1Value, "QLabel { color: #E8EEF5; font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
     sr1->addWidget(sr1Value);
     summaryRow->addWidget(mSummaryCard1);
 
@@ -163,11 +164,11 @@ void HistoryPage::setupLayout() {
     sr2->setContentsMargins(20, 16, 20, 16);
     QLabel* sr2Label = new QLabel(mSummaryCard2);
     sr2Label->setText("Total R");
-    sr2Label->setStyleSheet("QLabel { color: #8FA3BF; font-size: 12px; font-weight: 500; letter-spacing: 0.05em; }");
+    astra::setStyle(sr2Label, "QLabel { color: #8FA3BF; font-size: 12px; font-weight: 500; letter-spacing: 0.05em; }");
     sr2->addWidget(sr2Label);
     QLabel* sr2Value = new QLabel(mSummaryCard2);
     sr2Value->setText("—");
-    sr2Value->setStyleSheet("QLabel { color: #E8EEF5; font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+    astra::setStyle(sr2Value, "QLabel { color: #E8EEF5; font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
     sr2->addWidget(sr2Value);
     summaryRow->addWidget(mSummaryCard2);
 
@@ -179,11 +180,11 @@ void HistoryPage::setupLayout() {
     sr3->setContentsMargins(20, 16, 20, 16);
     QLabel* sr3Label = new QLabel(mSummaryCard3);
     sr3Label->setText("PF");
-    sr3Label->setStyleSheet("QLabel { color: #8FA3BF; font-size: 12px; font-weight: 500; letter-spacing: 0.05em; }");
+    astra::setStyle(sr3Label, "QLabel { color: #8FA3BF; font-size: 12px; font-weight: 500; letter-spacing: 0.05em; }");
     sr3->addWidget(sr3Label);
     QLabel* sr3Value = new QLabel(mSummaryCard3);
     sr3Value->setText("—");
-    sr3Value->setStyleSheet("QLabel { color: #E8EEF5; font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
+    astra::setStyle(sr3Value, "QLabel { color: #E8EEF5; font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', 'Consolas', monospace; }");
     sr3->addWidget(sr3Value);
     summaryRow->addWidget(mSummaryCard3);
 
@@ -227,7 +228,7 @@ void HistoryPage::populateTable(const QVector<HistoryEntry>& entries) {
 
         // Time
         QTableWidgetItem* timeItem = new QTableWidgetItem(e.timestamp);
-        timeItem->setForeground(QColor("#8FA3BF"));
+        timeItem->setForeground(astra::uiColor("#8FA3BF"));
         timeItem->setFont(QFont("JetBrains Mono", 13));
         mTable->setItem(i, 0, timeItem);
 
@@ -237,13 +238,13 @@ void HistoryPage::populateTable(const QVector<HistoryEntry>& entries) {
         QColor dirColor;
         if (e.direction == "UP" || e.direction == "LONG") {
             arrow = "\u25B2";
-            dirColor = QColor("#4CAF7A");
+            dirColor = astra::uiColor("#4CAF7A");
         } else if (e.direction == "DOWN" || e.direction == "SHORT") {
             arrow = "\u25BC";
-            dirColor = QColor("#D95A5A");
+            dirColor = astra::uiColor("#D95A5A");
         } else {
             arrow = "\u2014";
-            dirColor = QColor("#5A6B80");
+            dirColor = astra::uiColor("#5A6B80");
         }
         dirItem->setText(arrow);
         dirItem->setForeground(dirColor);
@@ -257,13 +258,13 @@ void HistoryPage::populateTable(const QVector<HistoryEntry>& entries) {
         } else {
             probItem->setText("Score");
         }
-        probItem->setForeground(QColor("#8FA3BF"));
+        probItem->setForeground(astra::uiColor("#8FA3BF"));
         probItem->setFont(QFont("JetBrains Mono", 13));
         mTable->setItem(i, 2, probItem);
 
         // Tier
         QTableWidgetItem* tierItem = new QTableWidgetItem(e.coverageTier.toUpper());
-        tierItem->setForeground(QColor("#5A6B80"));
+        tierItem->setForeground(astra::uiColor("#5A6B80"));
         tierItem->setFont(QFont("JetBrains Mono", 13));
         mTable->setItem(i, 3, tierItem);
 
@@ -271,13 +272,13 @@ void HistoryPage::populateTable(const QVector<HistoryEntry>& entries) {
         QTableWidgetItem* outcomeItem = new QTableWidgetItem();
         if (e.outcome == "win") {
             outcomeItem->setText("\u2713 +" + QString::number(e.rMultiple, 'f', 1) + "R");
-            outcomeItem->setForeground(QColor("#4CAF7A"));
+            outcomeItem->setForeground(astra::uiColor("#4CAF7A"));
         } else if (e.outcome == "loss") {
             outcomeItem->setText("\u2717 " + QString::number(e.rMultiple, 'f', 1) + "R");
-            outcomeItem->setForeground(QColor("#D95A5A"));
+            outcomeItem->setForeground(astra::uiColor("#D95A5A"));
         } else {
             outcomeItem->setText("\u2014 pending");
-            outcomeItem->setForeground(QColor("#5A6B80"));
+            outcomeItem->setForeground(astra::uiColor("#5A6B80"));
         }
         outcomeItem->setFont(QFont("JetBrains Mono", 13));
         mTable->setItem(i, 4, outcomeItem);
@@ -333,15 +334,15 @@ void HistoryPage::updateSummary(const QVector<HistoryEntry>& entries) {
         // No realised outcomes in SHADOW mode — every summary stays "—".
         if (winRateVal) {
             winRateVal->setText(em);
-            winRateVal->setStyleSheet(QString("QLabel { color: #5A6B80; %1 }").arg(mono));
+            astra::setStyle(winRateVal, QString("QLabel { color: #5A6B80; %1 }").arg(mono));
         }
         if (totalRVal) {
             totalRVal->setText(em);
-            totalRVal->setStyleSheet(QString("QLabel { color: #5A6B80; %1 }").arg(mono));
+            astra::setStyle(totalRVal, QString("QLabel { color: #5A6B80; %1 }").arg(mono));
         }
         if (pfVal) {
             pfVal->setText(em);
-            pfVal->setStyleSheet(QString("QLabel { color: #5A6B80; %1 }").arg(mono));
+            astra::setStyle(pfVal, QString("QLabel { color: #5A6B80; %1 }").arg(mono));
         }
         return;
     }
@@ -352,7 +353,7 @@ void HistoryPage::updateSummary(const QVector<HistoryEntry>& entries) {
 
     if (totalRVal) {
         totalRVal->setText(QString("%+1.%1R").arg(totalR, 0, 'f', 1));
-        totalRVal->setStyleSheet(totalR < 0
+        astra::setStyle(totalRVal, totalR < 0
             ? QString("QLabel { color: #D95A5A; %1 }").arg(mono)
             : QString("QLabel { color: #4CAF7A; %1 }").arg(mono));
     }

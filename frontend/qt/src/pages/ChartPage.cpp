@@ -1,4 +1,5 @@
 #include "ChartPage.h"
+#include "theme/Theme.h"
 #include <QComboBox>
 #include <QPushButton>
 #include <QTimer>
@@ -34,7 +35,7 @@ void ChartPage::setupLayout() {
     // Title
     mChartTitle = new QLabel(mTopRow);
     mChartTitle->setText("CHART");
-    mChartTitle->setStyleSheet(
+    astra::setStyle(mChartTitle, 
         "QLabel { "
         "color: #E8EEF5; "
         "font-size: 16px; "

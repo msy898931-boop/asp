@@ -1,4 +1,5 @@
 #include "RegimeChip.h"
+#include "theme/Theme.h"
 
 namespace astra {
 
@@ -7,7 +8,7 @@ RegimeChip::RegimeChip(QWidget* parent)
 {
     setFixedHeight(24);
     mLabel = new QLabel(this);
-    mLabel->setStyleSheet(
+    astra::setStyle(mLabel, 
         "QLabel { "
         "color: #4A90D9; "
         "font-size: 12px; "
@@ -63,7 +64,7 @@ void RegimeChip::updateStyle() {
         textColor = "#5A6B80";
     }
 
-    setStyleSheet(
+    astra::setStyle(this, 
         QString("QWidget { "
                 "background: %1; "
                 "border-radius: 12px; "

@@ -1,4 +1,5 @@
 #include "DashboardPage.h"
+#include "theme/Theme.h"
 #include "api/ApiClient.h"
 #include <QApplication>
 #include <QScrollArea>
@@ -72,7 +73,7 @@ protected:
         QFont sf = font();
         sf.setPixelSize(11);
         p.setFont(sf);
-        p.setPen(QColor(kText3));
+        p.setPen(astra::uiColor(kText3));
         p.drawText(rect().adjusted(12, 16, -12, 0), Qt::AlignCenter,
                    QStringLiteral("Chart data pending \u2014 /api/v1/candles is not "
                                   "part of the frozen API contract"));
@@ -105,7 +106,7 @@ QFrame* DashboardPage::makeCard(QWidget* parent, const QString& title) {
 
     QLabel* caption = new QLabel(card);
     caption->setText(title);
-    caption->setStyleSheet(
+    astra::setStyle(caption, 
         QString("QLabel { color: %1; font-size: 10px; font-weight: 500; "
                 "letter-spacing: 0.08em; }").arg(kText2));
     lay->addWidget(caption);
@@ -115,7 +116,7 @@ QFrame* DashboardPage::makeCard(QWidget* parent, const QString& title) {
 QLabel* DashboardPage::makeCardValue(QWidget* parent) {
     QLabel* value = new QLabel(parent);
     value->setText(kEm);
-    value->setStyleSheet(
+    astra::setStyle(value, 
         QString("QLabel { color: %1; font-size: 20px; font-weight: 600; "
                 "font-family: 'JetBrains Mono', 'Consolas', monospace; }").arg(kText3));
     value->setWordWrap(true);
@@ -125,7 +126,7 @@ QLabel* DashboardPage::makeCardValue(QWidget* parent) {
 QLabel* DashboardPage::makeCardSub(QWidget* parent) {
     QLabel* sub = new QLabel(parent);
     sub->setText(kEm);
-    sub->setStyleSheet(
+    astra::setStyle(sub, 
         QString("QLabel { color: %1; font-size: 11px; }").arg(kText3));
     sub->setWordWrap(true);
     return sub;
@@ -133,7 +134,7 @@ QLabel* DashboardPage::makeCardSub(QWidget* parent) {
 
 void DashboardPage::setCardValue(QLabel* label, const QString& text, const QString& color) {
     label->setText(text);
-    label->setStyleSheet(
+    astra::setStyle(label, 
         QString("QLabel { color: %1; font-size: 20px; font-weight: 600; "
                 "font-family: 'JetBrains Mono', 'Consolas', monospace; }").arg(color));
 }
@@ -150,11 +151,11 @@ void DashboardPage::setupLayout() {
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable(true);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scroll->setStyleSheet("QScrollArea { background: transparent; }");
+    astra::setStyle(scroll, "QScrollArea { background: transparent; }");
     outer->addWidget(scroll);
 
     QWidget* page = new QWidget(scroll);
-    page->setStyleSheet(QString("QWidget { background: %1; }").arg(kBg));
+    astra::setStyle(page, QString("QWidget { background: %1; }").arg(kBg));
     scroll->setWidget(page);
 
     QVBoxLayout* mainLayout = new QVBoxLayout(page);
@@ -224,7 +225,7 @@ void DashboardPage::setupLayout() {
     chartHeader->setSpacing(8);
     QLabel* chartTitle = new QLabel(chartCard);
     chartTitle->setText("XAUUSD");
-    chartTitle->setStyleSheet(
+    astra::setStyle(chartTitle, 
         QString("QLabel { color: %1; font-size: 15px; font-weight: 600; }").arg(kText));
     chartHeader->addWidget(chartTitle);
 
@@ -246,12 +247,12 @@ void DashboardPage::setupLayout() {
             QString("QPushButton { font-size: 11px; padding: 2px 9px; border-radius: 6px; "
                     "border: 1px solid %1; color: %2; background: %1; min-width: 0; }")
                 .arg(kSurface2, kText);
-        tab->setStyleSheet(baseStyle);
+        astra::setStyle(tab, baseStyle);
         tfGroup->addButton(tab, i);
         chartHeader->addWidget(tab);
         if (i == 2) tab->setChecked(true);  // M15 default (matches ChartPage)
         connect(tab, &QPushButton::toggled, this, [tab, baseStyle, activeStyle](bool on) {
-            tab->setStyleSheet(on ? activeStyle : baseStyle);
+            astra::setStyle(tab, on ? activeStyle : baseStyle);
         });
     }
     chartHeader->addStretch();
@@ -270,7 +271,7 @@ void DashboardPage::setupLayout() {
 
     QLabel* histCaption = new QLabel(histCard);
     histCaption->setText("SIGNALS \u2014 /analysis/history?limit=20");
-    histCaption->setStyleSheet(
+    astra::setStyle(histCaption, 
         QString("QLabel { color: %1; font-size: 10px; font-weight: 500; "
                 "letter-spacing: 0.08em; }").arg(kText2));
     histLay->addWidget(histCaption);
@@ -289,7 +290,7 @@ void DashboardPage::setupLayout() {
     mSignalsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     mSignalsTable->setShowGrid(false);
     mSignalsTable->setFocusPolicy(Qt::NoFocus);
-    mSignalsTable->setStyleSheet(
+    astra::setStyle(mSignalsTable, 
         QString("QTableWidget { background: %1; border: 1px solid %2; "
                 "border-radius: 8px; font-size: 12px; color: %3; }"
                 "QTableWidget::item { border-bottom: 1px solid %2; }"
@@ -301,7 +302,7 @@ void DashboardPage::setupLayout() {
     mSignalsEmpty = new QLabel(mSignalsStack);
     mSignalsEmpty->setText("No signals yet \u2014 waiting for\n/api/v1/analysis/history");
     mSignalsEmpty->setAlignment(Qt::AlignCenter);
-    mSignalsEmpty->setStyleSheet(
+    astra::setStyle(mSignalsEmpty, 
         QString("QLabel { color: %1; font-size: 12px; }").arg(kText3));
 
     mSignalsStack->addWidget(mSignalsEmpty);  // 0 = empty state
@@ -326,7 +327,7 @@ void DashboardPage::setupLayout() {
 
     QLabel* matrixCaption = new QLabel(matrixCard);
     matrixCaption->setText("TIMEFRAME MATRIX \u2014 unknown fields shown as \u2014");
-    matrixCaption->setStyleSheet(
+    astra::setStyle(matrixCaption, 
         QString("QLabel { color: %1; font-size: 10px; font-weight: 500; "
                 "letter-spacing: 0.08em; }").arg(kText2));
     matrixLay->addWidget(matrixCaption);
@@ -341,7 +342,7 @@ void DashboardPage::setupLayout() {
     const char* rowTfs[] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN1"};
     for (int r = 0; r < 9; ++r) {
         QTableWidgetItem* tfItem = new QTableWidgetItem(QString::fromLatin1(rowTfs[r]));
-        tfItem->setForeground(QColor(kText));
+        tfItem->setForeground(astra::uiColor(kText));
         QFont mono("JetBrains Mono", 12); mono.setWeight(QFont::DemiBold);
         tfItem->setFont(mono);
         mMatrix->setItem(r, 0, tfItem);
@@ -349,7 +350,7 @@ void DashboardPage::setupLayout() {
         // (/analysis/latest, /analysis/history, /context/latest, /health).
         for (int c = 1; c < 7; ++c) {
             QTableWidgetItem* item = new QTableWidgetItem(kEm);
-            item->setForeground(QColor(kText3));
+            item->setForeground(astra::uiColor(kText3));
             QFont m2("JetBrains Mono", 12);
             item->setFont(m2);
             mMatrix->setItem(r, c, item);
@@ -372,7 +373,7 @@ void DashboardPage::setupLayout() {
     mMatrix->setEditTriggers(QAbstractItemView::NoEditTriggers);
     mMatrix->setShowGrid(false);
     mMatrix->setFocusPolicy(Qt::NoFocus);
-    mMatrix->setStyleSheet(
+    astra::setStyle(mMatrix, 
         QString("QTableWidget { background: %1; border: 1px solid %2; "
                 "border-radius: 8px; font-size: 12px; }"
                 "QTableWidget::item { border-bottom: 1px solid %2; }"
@@ -431,7 +432,7 @@ void DashboardPage::setupLayout() {
 
     QLabel* riskCaption = new QLabel(riskPanel);
     riskCaption->setText("RISK PANEL");
-    riskCaption->setStyleSheet(
+    astra::setStyle(riskCaption, 
         QString("QLabel { color: %1; font-size: 10px; font-weight: 500; "
                 "letter-spacing: 0.08em; }").arg(kText2));
     riskLay->addWidget(riskCaption);
@@ -440,7 +441,7 @@ void DashboardPage::setupLayout() {
     QLabel* riskBody = new QLabel(riskPanel);
     riskBody->setText("Enabled when the risk module ships.");
     riskBody->setAlignment(Qt::AlignCenter);
-    riskBody->setStyleSheet(
+    astra::setStyle(riskBody, 
         QString("QLabel { color: %1; font-size: 13px; }").arg(kText3));
     riskLay->addWidget(riskBody);
     riskLay->addStretch();
@@ -456,7 +457,7 @@ void DashboardPage::setupLayout() {
     for (int i = 0; i < 6; ++i) {
         QFrame* card = makeCard(page, QString::fromLatin1(quickLabels[i]).toUpper());
         QLabel* value = makeCardValue(card);
-        value->setStyleSheet(
+        astra::setStyle(value, 
             QString("QLabel { color: %1; font-size: 18px; font-weight: 600; "
                     "font-family: 'JetBrains Mono', 'Consolas', monospace; }").arg(kText3));
         card->layout()->addWidget(value);
@@ -478,7 +479,7 @@ void DashboardPage::setupLayout() {
         if (!enabled) {
             b->setToolTip("Enabled when the backend supports this action.");
         }
-        b->setStyleSheet(
+        astra::setStyle(b, 
             QString("QPushButton { font-size: 12px; font-weight: 500; padding: 6px 14px; "
                     "border-radius: 8px; border: 1px solid %1; color: %2; "
                     "background: transparent; min-width: 0; }"
@@ -599,33 +600,33 @@ void DashboardPage::updateFromHistory(const QVector<AnalysisData>& items) {
         // Time — null timestamp renders as em dash
         QTableWidgetItem* timeItem = new QTableWidgetItem(
             d.timestamp.has_value() ? d.timestamp.value() : QString(kEm));
-        timeItem->setForeground(QColor(kText2));
+        timeItem->setForeground(astra::uiColor(kText2));
         mSignalsTable->setItem(i, 0, timeItem);
 
         // Direction
         QTableWidgetItem* dirItem;
         if (d.signal.direction == "UP") {
             dirItem = new QTableWidgetItem(QStringLiteral("\u25B2 UP"));
-            dirItem->setForeground(QColor(kGreen));
+            dirItem->setForeground(astra::uiColor(kGreen));
         } else if (d.signal.direction == "DOWN") {
             dirItem = new QTableWidgetItem(QStringLiteral("\u25BC DOWN"));
-            dirItem->setForeground(QColor(kRed));
+            dirItem->setForeground(astra::uiColor(kRed));
         } else {
             dirItem = new QTableWidgetItem(kEm);
-            dirItem->setForeground(QColor(kText3));
+            dirItem->setForeground(astra::uiColor(kText3));
         }
         mSignalsTable->setItem(i, 1, dirItem);
 
         // Score — raw score, never labelled "probability"
         QTableWidgetItem* scoreItem = new QTableWidgetItem(
             QString::number(d.signal.score, 'f', 3));
-        scoreItem->setForeground(QColor(kText));
+        scoreItem->setForeground(astra::uiColor(kText));
         mSignalsTable->setItem(i, 2, scoreItem);
 
         // Coverage tier
         QTableWidgetItem* tierItem = new QTableWidgetItem(
             d.meta.coverageTier.isEmpty() ? QString(kEm) : d.meta.coverageTier);
-        tierItem->setForeground(QColor(kText3));
+        tierItem->setForeground(astra::uiColor(kText3));
         mSignalsTable->setItem(i, 3, tierItem);
     }
     mSignalsStack->setCurrentIndex(1);  // table

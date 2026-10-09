@@ -1,4 +1,5 @@
 #include "NavButton.h"
+#include "theme/Theme.h"
 #include "SvgIcon.h"
 #include <QPainter>
 #include <QPaintEvent>
@@ -41,18 +42,18 @@ void NavButton::setActive(bool active) {
 void NavButton::refreshIconColor() {
     if (!mIcon) return;
     if (mComingSoon && !mActive && !mHover) {
-        mIcon->setColor(QColor(kTextTertiary));
+        mIcon->setColor(astra::uiColor(kTextTertiary));
     } else if (mActive || mHover) {
-        mIcon->setColor(QColor(kTextPrimary));
+        mIcon->setColor(astra::uiColor(kTextPrimary));
     } else {
-        mIcon->setColor(QColor(kTextSecondary));
+        mIcon->setColor(astra::uiColor(kTextSecondary));
     }
 }
 
 QColor NavButton::textColor() const {
-    if (mComingSoon && !mActive && !mHover) return QColor(kTextTertiary);
-    if (mActive || mHover) return QColor(kTextPrimary);
-    return QColor(kTextSecondary);
+    if (mComingSoon && !mActive && !mHover) return astra::uiColor(kTextTertiary);
+    if (mActive || mHover) return astra::uiColor(kTextPrimary);
+    return astra::uiColor(kTextSecondary);
 }
 
 void NavButton::paintEvent(QPaintEvent* /*event*/) {
@@ -60,8 +61,8 @@ void NavButton::paintEvent(QPaintEvent* /*event*/) {
     p.setRenderHint(QPainter::Antialiasing, true);
 
     // Background: active (surface-2) or hover
-    QColor bg = mActive ? QColor(kBgActive)
-                        : (mHover ? QColor(kBgHover) : QColor(0, 0, 0, 0));
+    QColor bg = mActive ? astra::uiColor(kBgActive)
+                        : (mHover ? astra::uiColor(kBgHover) : QColor(0, 0, 0, 0));
     if (bg.alpha() > 0) {
         p.setPen(Qt::NoPen);
         p.setBrush(bg);
@@ -71,7 +72,7 @@ void NavButton::paintEvent(QPaintEvent* /*event*/) {
     // Active: 3px accent-blue left border
     if (mActive) {
         p.setPen(Qt::NoPen);
-        p.setBrush(QColor(kAccent));
+        p.setBrush(astra::uiColor(kAccent));
         p.drawRoundedRect(QRect(0, 3, 3, height() - 6), 1.5, 1.5);
     }
 
