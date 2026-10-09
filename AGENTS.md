@@ -111,3 +111,12 @@ ASTRA_REPLAY_CSV=/app/research/data/xauusd_m1/xauusd_m1_real.csv
 `bridge/mt5_python/replay_client.py` implements it; the bridge reports
 `broker = "REPLAY (synthetic)"`, so the source is never mistaken for a live
 broker. Default remains `mt5`. This is a development/demo feed, not market data.
+
+### Mobile app (PWA)
+
+`mobile/` is an installable phone app (no store, no build step): an
+instrument-panel shell that reads the same loopback API through its own origin.
+`mobile/serve_mobile.py` serves the shell and reverse-proxies `/api/v1/*` and
+`/bridge/*` to 127.0.0.1 (GET only, upstream fixed to loopback). Run it on a
+public port; icons are generated with `mobile/icons/make_icons.py` (stdlib only).
+Install on the phone via the browser's "Add to Home screen".
