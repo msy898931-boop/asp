@@ -55,6 +55,21 @@ def _copy_bridge(manifest: Dict, out_dir: str) -> List[str]:
     return copied
 
 
+def _copy_telegram_bot(manifest: Dict, out_dir: str) -> List[str]:
+    src_dir = os.path.join(REPO_ROOT, "bridge", "telegram_bot")
+    rel_dir = manifest["app_root_relative"]["telegram_bot_dir"]
+    dst_dir = os.path.join(out_dir, rel_dir)
+    os.makedirs(dst_dir, exist_ok=True)
+    copied: List[str] = []
+    for name in manifest.get("telegram_bot_files", []):
+        src = os.path.join(src_dir, name)
+        if not os.path.isfile(src):
+            raise FileNotFoundError(f"telegram bot file missing in source tree: {src}")
+        shutil.copy2(src, os.path.join(dst_dir, name))
+        copied.append(name)
+    return copied
+
+
 def _make_dirs(manifest: Dict, out_dir: str) -> List[str]:
     rel = manifest["app_root_relative"]
     made = []
@@ -69,6 +84,7 @@ def stage(out_dir: str, backend_host: str | None = None) -> Dict:
     manifest = load_manifest()
     os.makedirs(out_dir, exist_ok=True)
     copied = _copy_bridge(manifest, out_dir)
+    bot_copied = _copy_telegram_bot(manifest, out_dir)
     made = _make_dirs(manifest, out_dir)
 
     host_name = manifest.get("product", "ASTRA")
@@ -86,12 +102,29 @@ def stage(out_dir: str, backend_host: str | None = None) -> Dict:
         "product": host_name,
         "bridge_dir": manifest["app_root_relative"]["bridge_dir"],
         "bridge_files": copied,
+        "telegram_bot_dir": manifest["app_root_relative"]["telegram_bot_dir"],
+        "telegram_bot_files": bot_copied,
         "dirs_created": made,
         "backend_host": backend_copied,
     }
     with open(os.path.join(out_dir, "bundle_report.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2)
+    _prune_forbidden(out_dir)
     return report
+
+
+def _prune_forbidden(out_dir: str) -> None:
+    """Remove __pycache__/venv/.pyc artifacts that a prior run may have left."""
+    for root, dirs, files in os.walk(out_dir, topdown=False):
+        for d in list(dirs):
+            if d in ("__pycache__", ".venv", "venv"):
+                shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+        for f in files:
+            if f.endswith(".pyc"):
+                try:
+                    os.remove(os.path.join(root, f))
+                except OSError:
+                    pass
 
 
 def verify(out_dir: str) -> tuple[bool, List[str]]:
@@ -104,6 +137,11 @@ def verify(out_dir: str) -> tuple[bool, List[str]]:
     for name in manifest["bridge_files"]:
         if not os.path.isfile(os.path.join(bridge_dir, name)):
             problems.append(f"missing bridge file: {rel['bridge_dir']}/{name}")
+
+    bot_dir = os.path.join(out_dir, rel["telegram_bot_dir"])
+    for name in manifest.get("telegram_bot_files", []):
+        if not os.path.isfile(os.path.join(bot_dir, name)):
+            problems.append(f"missing telegram bot file: {rel['telegram_bot_dir']}/{name}")
 
     for key in ("python_runtime_dir", "config_dir", "data_dir", "log_dir"):
         if not os.path.isdir(os.path.join(out_dir, rel[key])):

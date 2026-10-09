@@ -10,6 +10,7 @@
 #include "governance/ApprovalGate.h"
 #include "governance/IncidentManager.h"
 #include "platform/windows/PathResolver.h"
+#include "platform/windows/ProcessSupervisor.h"
 #include "runtime/AuraRuntime.h"
 #include "telegram/TelegramGateway.h"
 
@@ -17,6 +18,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -160,6 +162,35 @@ int main(int argc, char** argv) {
     const aura::ApiResponse systemState = facade.handle("GET", "/api/v1/system/state");
     std::cout << "  api system/state: " << systemState.body << "\n";
 
+    // Telegram bot sidecar: launched only when a bot token is present. It reads
+    // the loopback API started above and is supervised exactly like the MT5
+    // bridge. Absence of a token is not an error — the backend runs without it.
+    std::unique_ptr<aura::ProcessSupervisor> telegramBot;
+    {
+        const char* token = std::getenv("TELEGRAM_BOT_TOKEN");
+        const std::string botScript =
+            startup.paths.resourceDir + "/bridge/telegram_bot/astra_bot.py";
+        if (token != nullptr && *token != '\0' && !startup.bundle.pythonExecutable.empty()) {
+            aura::ProcessLaunchSpec botSpec;
+            botSpec.executable = startup.bundle.pythonExecutable;
+            botSpec.args = {botScript,
+                            "--api", "http://127.0.0.1:" +
+                                         std::to_string(apiServer.port()) + "/api/v1"};
+            botSpec.workingDir = startup.paths.resourceDir + "/bridge/telegram_bot";
+            botSpec.environment["PYTHONUNBUFFERED"] = "1";
+            telegramBot = std::make_unique<aura::ProcessSupervisor>(botSpec);
+            std::string botError;
+            if (telegramBot->start(botError)) {
+                std::cout << "  telegram bot: started (pid " << telegramBot->pid() << ")\n";
+            } else {
+                std::cerr << "  telegram bot: not started: " << botError << "\n";
+                telegramBot.reset();
+            }
+        } else {
+            std::cout << "  telegram bot: disabled (no TELEGRAM_BOT_TOKEN)\n";
+        }
+    }
+
     do {
         aura::RuntimeCycleReport cycle = runtime.tick(aura::Timestamp::now());
         std::cout << "cycle: ingested=" << cycle.timeframesIngested
@@ -174,6 +205,10 @@ int main(int argc, char** argv) {
     } while (!g_stopRequested);
 
     std::cout << "AURA backend host shutting down\n";
+    if (telegramBot) {
+        std::string botError;
+        telegramBot->stop(3000, botError);
+    }
     apiServer.stop();
     runtime.stop();
     return started ? 0 : 1;

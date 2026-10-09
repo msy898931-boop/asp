@@ -6,6 +6,7 @@
   "app_root_relative": {
     "bridge_dir": "resources/bridge/mt5_python",
     "bridge_script": "resources/bridge/mt5_python/bridge_service.py",
+    "telegram_bot_dir": "resources/bridge/telegram_bot",
     "python_runtime_dir": "resources/python",
     "resource_dir": "resources",
     "config_dir": "config",
@@ -19,6 +20,12 @@
     "read_candles.py",
     "schemas.py",
     "requirements.txt",
+    "README.md"
+  ],
+  "telegram_bot_files": [
+    "astra_bot.py",
+    "astra_api.py",
+    "run_bot.sh",
     "README.md"
   ],
   "runtime": {
