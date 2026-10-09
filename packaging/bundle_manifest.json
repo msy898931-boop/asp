@@ -18,6 +18,7 @@
     "mt5_client.py",
     "mt5_csv_feed.py",
     "replay_client.py",
+    "live_client.py",
     "read_candles.py",
     "schemas.py",
     "requirements.txt",

@@ -21,9 +21,28 @@ the application; end users never run Python or CMD manually.
 |---|---|
 | `schemas.py` | Wire vocabulary, versioned envelope, structured error codes |
 | `mt5_client.py` | All MetaTrader5 contact; reports unavailability instead of faking data |
+| `replay_client.py` | Optional synthetic source backed by the committed CSV corpus |
+| `live_client.py` | Optional live source backed by Yahoo Finance (keyless) |
 | `read_candles.py` | Nine canonical timeframe streams, closed-bar only |
 | `bridge_service.py` | Loopback JSON HTTP service AURA starts and supervises |
 | `requirements.txt` | Runtime dependencies (MetaTrader5, numpy) |
+
+## Data sources
+
+`--data-source` (or `ASTRA_DATA_SOURCE`) selects where candles come from:
+
+| Value | Source | Use |
+|---|---|---|
+| `mt5` (default) | A live MetaTrader 5 terminal | The product path |
+| `replay` | The committed M1 CSV corpus, synthetic | Tests / demos with no terminal |
+| `live` | Yahoo Finance `GC=F` (COMEX gold), keyless | An always-on host with no Windows terminal |
+
+The `live` source serves real gold prices over the same closed-bar contract as a
+terminal, so the engine cannot tell the difference in shape. It labels itself
+honestly: health carries `synthetic: false` and `data_source: "live"`, and the
+broker string is `Yahoo Finance (GC=F)`. Set `ASTRA_LIVE_TICKER` to quote a
+different series. Because it is a public quote feed, not a broker, it is not a
+trading path — it exists to keep the pipeline fed with real prices 24/7.
 
 ## Running
 
@@ -31,6 +50,8 @@ Development only (packaged runtime starts this automatically):
 
 ```text
 python bridge_service.py --host 127.0.0.1 --port 8791 --symbol XAUUSD
+python bridge_service.py --data-source live            # Yahoo Finance
+python bridge_service.py --data-source replay          # committed CSV corpus
 ```
 
 ## Endpoints
@@ -65,7 +86,11 @@ per `(symbol, tf, limit)` so rapid UI interactions do not hammer MT5.
 - **Closed-bar causality.** Candle retrieval skips the forming bar
   (`start_pos=1`); the current bar is never a decision bar.
 - **No fabrication.** If MT5 is unavailable the bridge returns a structured
-  error (`MT5_TERMINAL_UNAVAILABLE`) and never invents candles.
+  error (`MT5_TERMINAL_UNAVAILABLE`) and never invents candles. The `replay` and
+  `live` sources are explicit opt-ins, each labelled with its own provenance.
+- **Plausibility-bounded history.** The `live` source trims history to the
+  engine's 400-day bar-plausibility window, so deep daily/weekly/monthly series
+  are never handed over as bars the validator would reject.
 - **Structured errors.** `MT5_TERMINAL_UNAVAILABLE`, `MT5_SYMBOL_UNRESOLVED`,
   `MARKET_DATA_MISSING`, `MARKET_DATA_INVALID`, `MARKET_DATA_STALE`,
   `INSUFFICIENT_HISTORY`, `BRIDGE_PROTOCOL_MISMATCH`, `BRIDGE_SCHEMA_MISMATCH`,

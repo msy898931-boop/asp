@@ -37,6 +37,8 @@ from urllib.parse import parse_qs, urlparse
 
 from mt5_client import Mt5Client
 from replay_client import ReplayMt5Client, csv_path_from_env, symbol_from_env
+from live_client import (LiveMt5Client, SOURCE_LABEL,
+                         ticker_from_env, symbol_from_env as live_symbol_from_env)
 from schemas import (
     ErrorInfo,
     PROTOCOL_VERSION,
@@ -536,6 +538,11 @@ def create_server(host: str = LOOPBACK_HOST, port: int = DEFAULT_PORT,
         symbol = symbol_from_env() if symbol == "XAUUSD" else symbol
         client = ReplayMt5Client(csv_path, symbol=symbol)
         print(f"[OK] data source: REPLAY (synthetic) from {csv_path}", flush=True)
+    elif data_source == "live":
+        ticker = ticker_from_env()
+        symbol = live_symbol_from_env() if symbol == "XAUUSD" else symbol
+        client = LiveMt5Client(ticker=ticker, symbol=symbol)
+        print(f"[OK] data source: LIVE ({SOURCE_LABEL} {ticker})", flush=True)
     state = BridgeState(symbol, client=client)
     state.bootstrap()
     return BridgeServer((host, port), state)
@@ -547,8 +554,8 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--symbol", default="XAUUSD")
     parser.add_argument("--data-source", default=os.environ.get("ASTRA_DATA_SOURCE", "mt5"),
-                        choices=["mt5", "replay"],
-                        help="mt5 (default) or replay (synthetic corpus)")
+                        choices=["mt5", "replay", "live"],
+                        help="mt5 (default), replay (synthetic corpus), or live (Yahoo Finance)")
     args = parser.parse_args(argv)
 
     try:
