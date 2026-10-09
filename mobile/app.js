@@ -15,6 +15,44 @@ const num = (v, d = 2) =>
 const yn = (v) => (v ? "yes" : "no");
 
 let activeTf = "M15";
+let alertsOn = false;
+let lastSignalKey = null;
+
+/* ── theme ──────────────────────────────────────────────────────────── */
+
+const THEME_KEY = "astra-theme";
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", theme === "light" ? "#F4F0E6" : "#0B0E13");
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private mode */ }
+}
+
+function initTheme() {
+  let theme = null;
+  try { theme = localStorage.getItem(THEME_KEY); } catch (e) { /* ignore */ }
+  if (!theme) {
+    theme = window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  applyTheme(theme);
+}
+
+/* ── toast ──────────────────────────────────────────────────────────── */
+
+let toastTimer = null;
+function toast(message) {
+  const el = $("toast");
+  el.textContent = message;
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add("show"));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    el.classList.remove("show");
+    setTimeout(() => { el.hidden = true; }, 350);
+  }, 4200);
+}
 
 async function getJson(url) {
   const res = await fetch(url, { cache: "no-store" });
@@ -149,7 +187,9 @@ function renderSignal(analysis) {
 function renderChart(payload) {
   const bars = payload.bars || payload.candles || [];
   const svg = $("chart");
+  const axis = $("axis");
   svg.innerHTML = "";
+  axis.innerHTML = "";
   if (!bars.length) {
     $("chart-meta").textContent = "no closed bars available";
     return;
@@ -163,44 +203,94 @@ function renderChart(payload) {
   const step = (W - 2 * pad) / bars.length;
   const bodyW = Math.max(1.5, step * 0.6);
 
-  // Baseline grid.
-  [0.25, 0.5, 0.75].forEach((f) => {
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", pad); line.setAttribute("x2", W - pad);
-    line.setAttribute("y1", pad + (H - 2 * pad) * f);
-    line.setAttribute("y2", pad + (H - 2 * pad) * f);
-    line.setAttribute("stroke", "#232B36");
-    line.setAttribute("stroke-width", "1");
-    svg.appendChild(line);
+  const ns = "http://www.w3.org/2000/svg";
+  const add = (tag, attrs) => {
+    const el = document.createElementNS(ns, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    svg.appendChild(el);
+    return el;
+  };
+
+  // Gridlines + price labels at even fractions of the visible range.
+  [0, 0.25, 0.5, 0.75, 1].forEach((f) => {
+    const gy = pad + (H - 2 * pad) * f;
+    if (f > 0 && f < 1) {
+      add("line", { x1: pad, x2: W - pad, y1: gy, y2: gy,
+                    stroke: "var(--edge)", "stroke-width": 1 });
+    }
+    const label = document.createElement("span");
+    label.textContent = (hi - span * f).toFixed(2);
+    label.style.top = `${(gy / H) * 100}%`;
+    axis.appendChild(label);
   });
 
   bars.forEach((b, i) => {
     const up = b.close >= b.open;
     const x = pad + i * step + step / 2;
-    const color = up ? "#4FB477" : "#D1584F";
-
-    const wick = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    wick.setAttribute("x1", x); wick.setAttribute("x2", x);
-    wick.setAttribute("y1", y(b.high)); wick.setAttribute("y2", y(b.low));
-    wick.setAttribute("stroke", color);
-    wick.setAttribute("stroke-width", "1");
-    svg.appendChild(wick);
-
+    const color = up ? "var(--up)" : "var(--down)";
+    add("line", { x1: x, x2: x, y1: y(b.high), y2: y(b.low),
+                  stroke: color, "stroke-width": 1 });
     const top = Math.min(y(b.open), y(b.close));
     const h = Math.max(1, Math.abs(y(b.open) - y(b.close)));
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", x - bodyW / 2);
-    rect.setAttribute("y", top);
-    rect.setAttribute("width", bodyW);
-    rect.setAttribute("height", h);
-    rect.setAttribute("fill", color);
-    svg.appendChild(rect);
+    add("rect", { x: x - bodyW / 2, y: top, width: bodyW, height: h, fill: color });
   });
 
+  // Current (newest close) price line, tied to its own axis label.
   const newest = bars[bars.length - 1];
+  const cy = y(newest.close);
+  add("line", { x1: pad, x2: W - pad, y1: cy, y2: cy, class: "price-line" });
+  const last = document.createElement("span");
+  last.textContent = num(newest.close);
+  last.style.top = `${(cy / H) * 100}%`;
+  last.style.color = "var(--gold)";
+  last.style.fontWeight = "600";
+  axis.appendChild(last);
+
   $("chart-meta").textContent =
     `${payload.timeframe || activeTf} · ${bars.length} closed bars · `
-    + `last ${num(newest.close)} · ${payload.freshness || "?"}`;
+    + `range ${num(lo)}–${num(hi)} · ${payload.freshness || "?"}`;
+}
+
+/* ── alerts ─────────────────────────────────────────────────────────── */
+
+function signalKey(analysis) {
+  const s = analysis.signal || {};
+  return `${s.direction || "NONE"}|${analysis.timestamp || ""}`;
+}
+
+function maybeAlert(analysis) {
+  const key = signalKey(analysis);
+  const changed = lastSignalKey !== null && key !== lastSignalKey;
+  lastSignalKey = key;
+  if (!changed || !alertsOn) return;
+
+  const s = analysis.signal || {};
+  const dir = s.direction || "NONE";
+  const text = `ASTRA: signal changed to ${dir}`
+    + (s.score != null ? ` (score ${Number(s.score).toFixed(1)})` : "");
+  toast(text);
+
+  if ("Notification" in window && Notification.permission === "granted") {
+    try { new Notification("ASTRA signal", { body: text, tag: "astra-signal" }); }
+    catch (e) { /* notification constructor can throw on some browsers */ }
+  }
+  if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
+}
+
+async function toggleAlerts() {
+  const btn = $("alerts");
+  if (alertsOn) {
+    alertsOn = false;
+    btn.setAttribute("aria-pressed", "false");
+    toast("Signal alerts off");
+    return;
+  }
+  alertsOn = true;
+  btn.setAttribute("aria-pressed", "true");
+  toast("Signal alerts on — you'll be told when the signal changes");
+  if ("Notification" in window && Notification.permission === "default") {
+    try { await Notification.requestPermission(); } catch (e) { /* ignore */ }
+  }
 }
 
 /* ── orchestration ──────────────────────────────────────────────────── */
@@ -215,6 +305,7 @@ async function refresh() {
     ]);
     const aggregate = renderStatus({ health, system, bridge: br });
     renderSignal(analysis);
+    maybeAlert(analysis);
     banner(aggregate === "ONLINE" ? "online"
       : aggregate === "OFFLINE" ? "offline" : "degraded",
       `${aggregate.toLowerCase()} · ${br.broker || "no source"}`);
@@ -273,9 +364,16 @@ function bindTabs() {
 }
 
 function init() {
+  initTheme();
   buildTimeframes();
   bindTabs();
   $("refresh").addEventListener("click", refresh);
+  $("alerts").addEventListener("click", toggleAlerts);
+  $("theme").addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "light"
+      ? "dark" : "light";
+    applyTheme(next);
+  });
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refresh();
   });

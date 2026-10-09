@@ -25,10 +25,20 @@
       <p class="sub">XAUUSD &middot; shadow mode</p>
     </div>
   </div>
-  <button id="refresh" class="refresh" type="button" aria-label="Refresh">
-    <span aria-hidden="true">&#8635;</span>
-  </button>
+  <div class="controls">
+    <button id="alerts" class="icon-btn" type="button" aria-label="Signal alerts" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3l-1.5 3h15L18 12V9a6 6 0 0 0-6-6Zm0 16a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 19Z"/></svg>
+    </button>
+    <button id="theme" class="icon-btn" type="button" aria-label="Toggle theme">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 2v14a7 7 0 0 1 0-14Z"/></svg>
+    </button>
+    <button id="refresh" class="icon-btn" type="button" aria-label="Refresh">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
+    </button>
+  </div>
 </header>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <div id="banner" class="banner" role="status" aria-live="polite">
   <span class="dot"></span><span id="banner-text">connecting</span>
@@ -85,8 +95,11 @@
   <!-- CHART -->
   <section class="panel" id="view-chart" hidden>
     <div class="chart-tf" id="tf-row" role="tablist" aria-label="Timeframe"></div>
-    <svg id="chart" class="chart" viewBox="0 0 320 160" preserveAspectRatio="none"
-         role="img" aria-label="Closed-bar chart"></svg>
+    <div class="chart-wrap">
+      <svg id="chart" class="chart" viewBox="0 0 320 160" preserveAspectRatio="none"
+           role="img" aria-label="Closed-bar chart"></svg>
+      <div class="axis" id="axis" aria-hidden="true"></div>
+    </div>
     <p class="stamp"><span id="chart-meta">--</span></p>
   </section>
 
@@ -112,7 +125,12 @@
   <button class="tab" data-view="bridge" type="button">Bridge</button>
 </nav>
 
-<footer class="foot">Decision support only. Not financial advice.</footer>
+  <footer class="foot">
+    <a id="get-apk" class="apk-link" href="/astra.apk" download="astra.apk">
+      Download the Android app (.apk)
+    </a>
+    <span>Decision support only. Not financial advice.</span>
+  </footer>
 
 <script src="app.js"></script>
 </body>

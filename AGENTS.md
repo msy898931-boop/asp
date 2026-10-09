@@ -120,3 +120,10 @@ instrument-panel shell that reads the same loopback API through its own origin.
 `/bridge/*` to 127.0.0.1 (GET only, upstream fixed to loopback). Run it on a
 public port; icons are generated with `mobile/icons/make_icons.py` (stdlib only).
 Install on the phone via the browser's "Add to Home screen".
+
+### Android APK
+
+`android/` wraps the same web app in a WebView shell to produce a real,
+installable `.apk` (see `android/README.md`). The build is Gradle-free: a JDK
+and Android SDK build-tools suffice. The server URL is baked at build time and
+can be changed on the device from the app's error screen.

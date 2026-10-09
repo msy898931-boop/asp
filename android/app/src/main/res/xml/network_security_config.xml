@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The server is typically reached over plain HTTP on a private LAN address
+     (http://192.168.x.x:12001/), and the address is user-configurable, so
+     cleartext is permitted. Nothing here is a public-facing service. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

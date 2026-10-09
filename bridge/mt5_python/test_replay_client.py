@@ -75,6 +75,18 @@ class ReplayClientTests(unittest.TestCase):
         self.assertTrue(spec.ok)
         self.assertEqual(spec.data["name"], "XAUUSD")
 
+    def test_freshness_is_measured_from_corpus_end(self) -> None:
+        """A fixed corpus must not age into STALE as wall-clock time passes.
+
+        Freshness is judged against the corpus's own newest bar, so a complete
+        historical corpus reads FRESH indefinitely instead of decaying to STALE
+        a few minutes after the backend starts.
+        """
+        res = self.client.read_candles("XAUUSD", "M1", 10, closed_only=True)
+        self.assertTrue(res.ok, res.message)
+        self.assertEqual(res.data["freshness"], "FRESH")
+        self.assertLessEqual(res.data["age_seconds"], 60)
+
     def test_empty_corpus_fails_honestly(self) -> None:
         empty = os.path.join(_REPO, "research", "data", "xauusd_m1", "__no_such__.csv")
         client = ReplayMt5Client(empty, symbol="XAUUSD")

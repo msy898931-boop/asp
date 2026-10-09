@@ -120,6 +120,20 @@ class ReplayMt5Client:
 
     # -- market data --------------------------------------------------------
 
+    def _corpus_now(self) -> int:
+        """The replay timeline's "now": its newest M1 bar.
+
+        A fixed corpus does not advance, so judging freshness against the wall
+        clock would mark a perfectly complete corpus STALE after a few minutes.
+        For a synthetic feed, internal completeness is the meaningful check, so
+        age is measured from the corpus's own end.
+        """
+        if self._feed is None:
+            return int(time.time())
+        bars = self._feed.copy_rates_from_pos(
+            self._symbol, mt5_csv_feed.TIMEFRAME_M1, 0, 1)
+        return int(bars[-1]["time"]) if bars else int(time.time())
+
     def read_candles(self, symbol: str, timeframe: str, count: int,
                      closed_only: bool = True) -> ClientResult:
         if timeframe not in TIMEFRAMES:
@@ -140,7 +154,7 @@ class ReplayMt5Client:
                                 message=f"no replay candles for {symbol} {timeframe}")
 
         candles = [dict(b) for b in bars]
-        now = int(time.time())
+        now = self._corpus_now()
         interval = _TF_SECONDS.get(timeframe, 0)
         newest_closed = candles[-1]["time"]
         age_seconds = now - newest_closed

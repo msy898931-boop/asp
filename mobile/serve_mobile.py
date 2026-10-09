@@ -46,6 +46,7 @@ class Handler(BaseHTTPRequestHandler):
     # Injected by main().
     api_base = "http://127.0.0.1:8790/api/v1"
     bridge_base = "http://127.0.0.1:8791"
+    apk_path = ""
 
     def log_message(self, fmt, *args):  # quieter logs
         sys.stderr.write("[mobile] %s\n" % (fmt % args))
@@ -54,7 +55,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path.startswith("/api/v1/"):
+        if path == "/astra.apk":
+            self._apk()
+        elif path.startswith("/api/v1/"):
             self._proxy(self.api_base + path[len("/api/v1"):], self.path)
         elif path.startswith("/bridge/"):
             self._proxy(self.bridge_base + path[len("/bridge"):], self.path)
@@ -77,6 +80,24 @@ class Handler(BaseHTTPRequestHandler):
             body = fh.read()
         ctype = _CONTENT_TYPES.get(ext, "application/octet-stream")
         self._send(200, body, ctype)
+
+    # -- APK download -------------------------------------------------------
+
+    def _apk(self) -> None:
+        if not self.apk_path or not os.path.isfile(self.apk_path):
+            self._send(404, b"apk not built", "text/plain; charset=utf-8")
+            return
+        with open(self.apk_path, "rb") as fh:
+            body = fh.read()
+        self.send_response(200)
+        self.send_header("Content-Type",
+                         "application/vnd.android.package-archive")
+        self.send_header("Content-Disposition",
+                         'attachment; filename="astra.apk"')
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     # -- reverse proxy ------------------------------------------------------
 
@@ -119,10 +140,14 @@ def main(argv=None) -> int:
     parser.add_argument("--port", type=int, default=12000)
     parser.add_argument("--api-port", type=int, default=8790)
     parser.add_argument("--bridge-port", type=int, default=8791)
+    parser.add_argument("--apk", default=os.path.join(
+        os.path.dirname(HERE), "android", "dist", "astra.apk"),
+        help="APK to offer at /astra.apk (optional)")
     args = parser.parse_args(argv)
 
     Handler.api_base = f"http://127.0.0.1:{args.api_port}/api/v1"
     Handler.bridge_base = f"http://127.0.0.1:{args.bridge_port}"
+    Handler.apk_path = os.path.abspath(args.apk)
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
