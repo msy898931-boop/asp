@@ -42,6 +42,17 @@ COPY --from=build /src/build/aura_backend_host /app/aura_backend_host
 COPY bridge/mt5_python  /app/resources/bridge/mt5_python
 COPY bridge/telegram_bot /app/resources/bridge/telegram_bot
 
+# Committed canonical XAUUSD M1 corpus, served as a synthetic data source so the
+# pipeline runs without a Windows terminal. It is NOT a live broker feed.
+COPY research/data/xauusd_m1/xauusd_m1_real.csv \
+     /app/research/data/xauusd_m1/xauusd_m1_real.csv
+
+# Default this deployment to the replay source (overridable). Switch to a live
+# terminal by setting ASTRA_DATA_SOURCE=mt5 and running on a Windows host.
+ENV ASTRA_DATA_SOURCE=replay \
+    ASTRA_REPLAY_CSV=/app/research/data/xauusd_m1/xauusd_m1_real.csv \
+    ASTRA_REPLAY_SYMBOL=XAUUSD
+
 # Expose the system interpreter as a "bundled" runtime so BundleLocator finds
 # it without the development-only --dev-system-python flag.
 RUN mkdir -p /app/resources/python /app/config /app/data /app/logs \

@@ -156,6 +156,9 @@ def format_status(snap: Dict[str, Any]) -> str:
         symbol = bridge.get("resolved_symbol") or "(none)"
         lines.append(f"MT5 bridge: {bridge.get('bridge_process_state', 'UNKNOWN')} "
                      f"(mt5 ready: {_yn(bridge.get('mt5_ready'))}, symbol: {symbol})")
+        broker = bridge.get("broker") or ""
+        if broker:
+            lines.append(f"Source: {broker}")
     lines.append("Shadow mode. Not a trading signal.")
     return "\n".join(lines)
 
@@ -190,13 +193,17 @@ def format_signal(data: Dict[str, Any]) -> str:
 
 
 def format_bridge(data: Dict[str, Any]) -> str:
-    return "\n".join([
+    broker = data.get("broker") or ""
+    lines = [
         "[ASTRA] MT5 bridge",
         f"Process: {data.get('bridge_process_state', 'UNKNOWN')}",
         f"MT5 ready: {_yn(data.get('mt5_ready'))}",
         f"Symbol: {data.get('resolved_symbol') or '(none)'}",
-        f"Last error: {data.get('last_error') or '(none)'}",
-    ])
+    ]
+    if broker:
+        lines.append(f"Source: {broker}")
+    lines.append(f"Last error: {data.get('last_error') or '(none)'}")
+    return "\n".join(lines)
 
 
 # ────────────────────────────── alert engine ────────────────────────────────

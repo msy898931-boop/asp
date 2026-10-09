@@ -95,3 +95,19 @@ small VPS: install Docker, `git clone`, fill `.env`, `docker compose up -d`.
 
 Notes: the container must reach `api.telegram.org` (default egress is fine);
 the API port is loopback-published and never exposed publicly.
+
+### Synthetic data source
+
+Without a Windows terminal the bridge reports MT5 as unavailable and the system
+stays DEGRADED (honest, by design). To exercise the whole pipeline anyway, the
+bridge accepts a **replay** source that serves the committed XAUUSD M1 corpus
+through the same closed-bar contract:
+
+```bash
+ASTRA_DATA_SOURCE=replay \
+ASTRA_REPLAY_CSV=/app/research/data/xauusd_m1/xauusd_m1_real.csv
+```
+
+`bridge/mt5_python/replay_client.py` implements it; the bridge reports
+`broker = "REPLAY (synthetic)"`, so the source is never mistaken for a live
+broker. Default remains `mt5`. This is a development/demo feed, not market data.

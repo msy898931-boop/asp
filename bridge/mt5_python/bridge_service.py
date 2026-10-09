@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import threading
 import time
@@ -35,6 +36,7 @@ from typing import Any, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from mt5_client import Mt5Client
+from replay_client import ReplayMt5Client, csv_path_from_env, symbol_from_env
 from schemas import (
     ErrorInfo,
     PROTOCOL_VERSION,
@@ -77,8 +79,8 @@ _CACHE_TTL_SECONDS = 5.0
 class BridgeState:
     """Shared, long-lived service state."""
 
-    def __init__(self, symbol: str = "XAUUSD") -> None:
-        self.client = Mt5Client()
+    def __init__(self, symbol: str = "XAUUSD", client: Optional[Any] = None) -> None:
+        self.client = client if client is not None else Mt5Client()
         self.preferred_symbol = symbol
         self.started_at = int(time.time())
         self.last_successful_request: Optional[int] = None
@@ -520,10 +522,21 @@ class BridgeServer(ThreadingHTTPServer):
 
 
 def create_server(host: str = LOOPBACK_HOST, port: int = DEFAULT_PORT,
-                  symbol: str = "XAUUSD") -> BridgeServer:
+                  symbol: str = "XAUUSD", data_source: str = "mt5",
+                  replay_csv: str = "") -> BridgeServer:
     if host != LOOPBACK_HOST:
         raise ValueError("bridge must bind to loopback only (127.0.0.1)")
-    state = BridgeState(symbol)
+    client: Any = None
+    if data_source == "replay":
+        csv_path = replay_csv or csv_path_from_env()
+        if not csv_path or not os.path.isfile(csv_path):
+            raise ValueError(
+                f"replay data source needs a readable corpus CSV "
+                f"(ASTRA_REPLAY_CSV): {csv_path or '(unset)'}")
+        symbol = symbol_from_env() if symbol == "XAUUSD" else symbol
+        client = ReplayMt5Client(csv_path, symbol=symbol)
+        print(f"[OK] data source: REPLAY (synthetic) from {csv_path}", flush=True)
+    state = BridgeState(symbol, client=client)
     state.bootstrap()
     return BridgeServer((host, port), state)
 
@@ -533,10 +546,14 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--host", default=LOOPBACK_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--symbol", default="XAUUSD")
+    parser.add_argument("--data-source", default=os.environ.get("ASTRA_DATA_SOURCE", "mt5"),
+                        choices=["mt5", "replay"],
+                        help="mt5 (default) or replay (synthetic corpus)")
     args = parser.parse_args(argv)
 
     try:
-        server = create_server(args.host, args.port, args.symbol)
+        server = create_server(args.host, args.port, args.symbol,
+                               data_source=args.data_source)
     except ValueError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 2
