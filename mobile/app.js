@@ -314,6 +314,7 @@ async function refresh() {
   } finally {
     btn.classList.remove("busy");
   }
+  loadTicker();
 }
 
 async function loadChart() {
@@ -322,6 +323,31 @@ async function loadChart() {
     renderChart(payload);
   } catch (err) {
     $("chart-meta").textContent = "chart unavailable: " + err.message;
+  }
+}
+
+// A prominent live price in the header. Uses the last two closed bars of the
+// active timeframe: the newest close is the price, the change is against the
+// prior close. Read-only market data, same loopback bridge as the chart.
+async function loadTicker() {
+  try {
+    const payload = await bridge(`v1/candles?tf=${activeTf}&limit=2`);
+    const bars = payload.bars || payload.candles || [];
+    if (!bars.length) { $("ticker").hidden = true; return; }
+    const last = bars[bars.length - 1];
+    const prev = bars[bars.length - 2] || last;
+    const change = last.close - prev.close;
+    const pct = prev.close ? (change / prev.close) * 100 : 0;
+
+    $("price").textContent = num(last.close);
+    const chg = $("price-chg");
+    chg.textContent = `${change >= 0 ? "+" : ""}${num(change)}  `
+      + `${change >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+    chg.className = "ticker-chg " + (change > 0 ? "up" : change < 0 ? "down" : "");
+    $("price-basis").textContent = `${activeTf} · gold-api.com`;
+    $("ticker").hidden = false;
+  } catch (err) {
+    $("ticker").hidden = true;
   }
 }
 
@@ -344,6 +370,7 @@ function buildTimeframes() {
       [...row.children].forEach((c) =>
         c.setAttribute("aria-selected", c === b ? "true" : "false"));
       loadChart();
+      loadTicker();
     });
     row.appendChild(b);
   });
