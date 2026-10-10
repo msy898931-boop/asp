@@ -189,3 +189,20 @@ before, so the old `.exe` was UI-only):
 Telegram bot: verified end-to-end against the live feed — `/status`, `/health`,
 `/analysis`, `/bridge` all answer correctly (ONLINE/SHADOW/READY, symbol XAUUSD,
 source gold-api.com + Kraken PAXGUSD).
+
+### Mobile app (PWA + Android)
+
+`mobile/` is the phone app; `android/` is a WebView shell around it (no Gradle).
+Two things to remember:
+
+* The APK asks for the server address on **first launch** (no baked-in default
+  that only works on the build machine) and can be re-pointed from the error
+  screen. `serve_mobile.py` answers `/astra.apk` with a 302 to the rolling
+  `android` release when no local build is staged.
+* The repo is **private**, so GitHub release download URLs 404 for anyone
+  unauthenticated. The reliable in-product distribution is the mobile server
+  staging the APK locally (`--apk`), or handing the file to the operator
+  directly. The rolling `android` release is a convenience, not a public CDN.
+
+The app header shows a live price ticker (newest closed close + change vs the
+prior close) from the same loopback bridge candles as the chart.
