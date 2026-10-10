@@ -22,7 +22,7 @@ the application; end users never run Python or CMD manually.
 | `schemas.py` | Wire vocabulary, versioned envelope, structured error codes |
 | `mt5_client.py` | All MetaTrader5 contact; reports unavailability instead of faking data |
 | `replay_client.py` | Optional synthetic source backed by the committed CSV corpus |
-| `live_client.py` | Optional live source backed by Yahoo Finance (keyless) |
+| `live_client.py` | Optional live source backed by gold-api.com + Kraken (keyless) |
 | `read_candles.py` | Nine canonical timeframe streams, closed-bar only |
 | `bridge_service.py` | Loopback JSON HTTP service AURA starts and supervises |
 | `requirements.txt` | Runtime dependencies (MetaTrader5, numpy) |
@@ -35,14 +35,19 @@ the application; end users never run Python or CMD manually.
 |---|---|---|
 | `mt5` (default) | A live MetaTrader 5 terminal | The product path |
 | `replay` | The committed M1 CSV corpus, synthetic | Tests / demos with no terminal |
-| `live` | Yahoo Finance `GC=F` (COMEX gold), keyless | An always-on host with no Windows terminal |
+| `live` | gold-api.com spot + Kraken `PAXGUSD` candles, keyless | An always-on host with no Windows terminal |
 
 The `live` source serves real gold prices over the same closed-bar contract as a
-terminal, so the engine cannot tell the difference in shape. It labels itself
-honestly: health carries `synthetic: false` and `data_source: "live"`, and the
-broker string is `Yahoo Finance (GC=F)`. Set `ASTRA_LIVE_TICKER` to quote a
-different series. Because it is a public quote feed, not a broker, it is not a
-trading path — it exists to keep the pipeline fed with real prices 24/7.
+terminal, so the engine cannot tell the difference in shape. The tick read comes
+from gold-api.com's spot endpoint (`/price/XAU`, free, no rate limit); the OHLC
+candles come from Kraken's public `PAXGUSD` market — PAXG is a gold-backed token
+that tracks one troy ounce, so it is a close, always-open proxy for spot XAUUSD
+with every timeframe available. It labels itself honestly: health carries
+`synthetic: false` and `data_source: "live"`, and the broker string is
+`gold-api.com + Kraken (PAXGUSD)`. Set `ASTRA_LIVE_CANDLE_PAIR` to quote a
+different Kraken pair, or `ASTRA_LIVE_SPOT_SYMBOL` for a different gold-api
+symbol. Because it is a public quote feed, not a broker, it is not a trading
+path — it exists to keep the pipeline fed with real prices 24/7.
 
 ## Running
 
@@ -50,7 +55,7 @@ Development only (packaged runtime starts this automatically):
 
 ```text
 python bridge_service.py --host 127.0.0.1 --port 8791 --symbol XAUUSD
-python bridge_service.py --data-source live            # Yahoo Finance
+python bridge_service.py --data-source live            # gold-api.com + Kraken
 python bridge_service.py --data-source replay          # committed CSV corpus
 ```
 

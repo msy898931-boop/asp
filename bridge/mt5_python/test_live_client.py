@@ -1,4 +1,4 @@
-"""Tests for the live (Yahoo Finance) bridge data source.
+"""Tests for the live (gold-api.com + Kraken) bridge data source.
 
 Network-backed tests are skipped when the upstream is unreachable so the suite
 stays green offline; they exercise the real fetch path, not a stand-in.
@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from live_client import LiveMt5Client, _aggregate, _YF  # noqa: E402
+from live_client import LiveMt5Client, _TF_MINUTES  # noqa: E402
 from schemas import TIMEFRAMES  # noqa: E402
 
 _MAX_AGE_SECONDS = 399 * 24 * 60 * 60
@@ -25,70 +25,36 @@ _MAX_AGE_SECONDS = 399 * 24 * 60 * 60
 
 def _upstream_reachable() -> bool:
     try:
-        LiveMt5Client(ticker="GC=F").initialize()
+        LiveMt5Client(candle_pair="PAXGUSD").initialize()
         return True
     except Exception:
         return False
 
 
-class AggregateTests(unittest.TestCase):
-    """Pure bucketing used to build H4 from 1h bars - no network needed."""
-
-    def test_buckets_merge_ohlc_and_sum_volume(self) -> None:
-        base = 1_700_000_000 - (1_700_000_000 % 14400)
-        bars = [
-            {"time": base + 0, "open": 10.0, "high": 12.0, "low": 9.0, "close": 11.0,
-             "tick_volume": 5, "spread": 0, "real_volume": 0},
-            {"time": base + 3600, "open": 11.0, "high": 15.0, "low": 10.5, "close": 14.0,
-             "tick_volume": 7, "spread": 0, "real_volume": 0},
-            {"time": base + 7200, "open": 14.0, "high": 14.5, "low": 8.0, "close": 9.5,
-             "tick_volume": 3, "spread": 0, "real_volume": 0},
-        ]
-        out = _aggregate(bars, 14400)
-        self.assertEqual(len(out), 1)
-        bar = out[0]
-        self.assertEqual(bar["time"], base)
-        self.assertEqual(bar["open"], 10.0)
-        self.assertEqual(bar["high"], 15.0)
-        self.assertEqual(bar["low"], 8.0)
-        self.assertEqual(bar["close"], 9.5)
-        self.assertEqual(bar["tick_volume"], 15)
-
-    def test_separate_buckets_stay_separate(self) -> None:
-        base = 1_700_000_000 - (1_700_000_000 % 14400)
-        bars = [
-            {"time": base, "open": 1, "high": 1, "low": 1, "close": 1, "tick_volume": 0,
-             "spread": 0, "real_volume": 0},
-            {"time": base + 14400, "open": 2, "high": 2, "low": 2, "close": 2,
-             "tick_volume": 0, "spread": 0, "real_volume": 0},
-        ]
-        self.assertEqual(len(_aggregate(bars, 14400)), 2)
-
-
 class LiveClientConfigTests(unittest.TestCase):
     def test_maps_every_canonical_timeframe(self) -> None:
         for tf in TIMEFRAMES:
-            self.assertIn(tf, _YF, f"{tf} has no upstream interval mapping")
+            self.assertIn(tf, _TF_MINUTES, f"{tf} has no upstream interval mapping")
 
-    def test_reports_live_and_ticker(self) -> None:
-        client = LiveMt5Client(ticker="GC=F")
+    def test_reports_live_and_pair(self) -> None:
+        client = LiveMt5Client(candle_pair="PAXGUSD")
         health = client.health()
         self.assertFalse(health["synthetic"])
         self.assertEqual(health["data_source"], "live")
-        self.assertEqual(health["ticker"], "GC=F")
-        self.assertIn("GC=F", client.broker)
+        self.assertEqual(health["candle_pair"], "PAXGUSD")
+        self.assertIn("PAXGUSD", client.broker)
 
     def test_unknown_timeframe_is_rejected(self) -> None:
-        client = LiveMt5Client(ticker="GC=F")
+        client = LiveMt5Client(candle_pair="PAXGUSD")
         result = client.read_candles("XAUUSD", "M7", 10)
         self.assertFalse(result.ok)
         self.assertEqual(result.error_code, "MARKET_DATA_INVALID")
 
 
-@unittest.skipUnless(_upstream_reachable(), "Yahoo Finance upstream unreachable")
+@unittest.skipUnless(_upstream_reachable(), "live upstream unreachable")
 class LiveClientNetworkTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = LiveMt5Client(ticker="GC=F", symbol="XAUUSD")
+        self.client = LiveMt5Client(candle_pair="PAXGUSD", symbol="XAUUSD")
         self.assertTrue(self.client.initialize().ok)
 
     def test_every_timeframe_returns_decision_grade_history(self) -> None:
