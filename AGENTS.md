@@ -58,10 +58,17 @@ transitions (first reading is primed silently).
 ## Windows .exe
 
 `.github/workflows/build-windows.yml` builds `frontend/qt` on `windows-latest`
-(Qt 6.8.3 + MSVC), runs `windeployqt`, and uploads an `ASTRA-windows` artifact.
+(Qt 6.8.3 + MSVC), runs `windeployqt`, and publishes a rolling `desktop`
+release on `main` (mirrors the Android APK's rolling release; artifacts alone
+expire after 30 days). Two assets:
+
+- `ASTRA-windows.zip` — the Qt UI alone (~24 MB).
+- `ASTRA-full.zip` — UI + backend host + embedded Python, runs standalone
+  (~64 MB): unzip and launch `astra_desktop.exe`.
+
+Permanent link: `https://github.com/msy898931-boop/asp/releases/download/desktop/ASTRA-full.zip`.
 It triggers on pushes that touch `frontend/qt/**`, or manually
-(`workflow_dispatch`). It builds the **frontend only** — the backend/MT5 bridge
-are separate and not bundled by this workflow.
+(`workflow_dispatch`).
 
 ```bash
 gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
