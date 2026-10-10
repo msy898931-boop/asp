@@ -25,6 +25,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# Where /astra.apk points when no local build is staged: the rolling release
+# the Android workflow republishes on every mobile/android change.
+APK_FALLBACK_URL = (
+    "https://github.com/msy898931-boop/asp/releases/download/android/astra.apk"
+)
+
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -85,7 +91,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def _apk(self) -> None:
         if not self.apk_path or not os.path.isfile(self.apk_path):
-            self._send(404, b"apk not built", "text/plain; charset=utf-8")
+            # No local copy staged. Point at the rolling release rather than
+            # 404, so a link to /astra.apk always downloads something.
+            self.send_response(302)
+            self.send_header("Location", APK_FALLBACK_URL)
+            self.end_headers()
             return
         with open(self.apk_path, "rb") as fh:
             body = fh.read()

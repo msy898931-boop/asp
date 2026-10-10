@@ -89,7 +89,18 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(root);
 
-        web.loadUrl(serverUrl());
+        // First launch has no server address yet, so a baked-in default would
+        // just fail on someone else's phone. Ask for the address once, up
+        // front, instead of making the user wait for an error and retry.
+        if (hasSavedUrl()) {
+            web.loadUrl(serverUrl());
+        } else {
+            showSetup();
+        }
+    }
+
+    private boolean hasSavedUrl() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE).contains(KEY_URL);
     }
 
     private String serverUrl() {
@@ -99,7 +110,7 @@ public class MainActivity extends Activity {
 
     private TextView buildErrorView() {
         TextView t = new TextView(this);
-        t.setText("Can't reach the ASTRA server.\n\nTap to change the address.");
+        t.setText("ASTRA\n\nEnter your server address to begin.\n\nTap here.");
         t.setTextColor(Color.parseColor("#ECE6D8"));
         t.setBackgroundColor(Color.parseColor("#0B0E13"));
         t.setGravity(android.view.Gravity.CENTER);
@@ -111,7 +122,15 @@ public class MainActivity extends Activity {
 
     private void showError() {
         web.setVisibility(View.GONE);
+        error.setText("Can't reach the ASTRA server.\n\nTap to change the address.");
         error.setVisibility(View.VISIBLE);
+    }
+
+    private void showSetup() {
+        web.setVisibility(View.GONE);
+        error.setText("ASTRA\n\nEnter your server address to begin.\n\nTap here.");
+        error.setVisibility(View.VISIBLE);
+        promptForUrl();
     }
 
     private void promptForUrl() {

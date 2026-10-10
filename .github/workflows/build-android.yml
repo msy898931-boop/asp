@@ -71,3 +71,22 @@ jobs:
           path: android/dist/astra.apk
           retention-days: 30
           if-no-files-found: error
+
+      # Publish to a rolling `android` release so the web app's footer link
+      # resolves to a permanent download instead of a local file the server
+      # may not have. Whoever installs it sets their own server address on
+      # first launch, so this one APK works against any deployment.
+      - name: Publish APK to the rolling release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android
+          name: ASTRA Mobile (Android)
+          body: |
+            The installable phone app. On first launch it asks for your ASTRA
+            server address (e.g. `http://your-host:12001/`); you can change it
+            later from the error screen. Read-only, shadow mode, no credentials.
+
+            _Published by an AI agent (OpenHands) on behalf of @msy898931-boop._
+          files: android/dist/astra.apk
+          make_latest: false
