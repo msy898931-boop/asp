@@ -1,0 +1,45 @@
+name: Deploy (Fly.io)
+
+# Deploys the always-on ASTRA service to Fly.io. Run it from the Actions tab,
+# or let it redeploy on every push to main. Everything the running service
+# needs — the phone app and the Telegram bot — ships in one container.
+#
+# One-time setup (see DEPLOY.md):
+#   1. Create the app:      fly launch --no-deploy   (or `fly apps create <name>`)
+#   2. Store the bot creds: fly secrets set TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=...
+#   3. Add a repo secret:   FLY_API_TOKEN=<a token from `fly tokens create org`>
+#
+# The Telegram token + chat id are set as Fly secrets, not GitHub secrets, so
+# they live only on the host.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "fly.toml"
+      - "src/**"
+      - "bridge/**"
+      - "mobile/**"
+      - "scripts/docker_entrypoint.sh"
+
+concurrency:
+  group: deploy-fly
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy
+        # --ha=false and a single machine are deliberate: two pollers on the
+        # same bot token make Telegram answer 409 Conflict.
+        run: flyctl deploy --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
