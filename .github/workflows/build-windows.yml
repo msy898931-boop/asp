@@ -14,6 +14,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write   # publish the desktop bundles to the rolling release
 
     steps:
       - name: Checkout
@@ -99,4 +101,26 @@ jobs:
           path: build/ASTRA-full.zip
           retention-days: 30
           if-no-files-found: error
+
+      # Artifacts expire after 30 days; publish a permanent, linkable copy so
+      # the desktop app can be downloaded any time from the repo's Releases.
+      - name: Publish to the rolling desktop release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop
+          name: ASTRA Desktop (Windows)
+          body: |
+            The Windows desktop app. `ASTRA-windows.zip` is the Qt UI alone;
+            `ASTRA-full.zip` adds the backend host and the embedded Python
+            runtime, so it runs standalone — unzip and launch `astra_desktop.exe`.
+
+            Read-only, shadow mode: it never places trades and holds no
+            credentials.
+
+            _Published by an AI agent (OpenHands) on behalf of @msy898931-boop._
+          files: |
+            frontend/qt/build/ASTRA-windows.zip
+            build/ASTRA-full.zip
+          make_latest: false
 
