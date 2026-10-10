@@ -1,0 +1,30 @@
+# Render Blueprint: one always-on web service running the ASTRA container.
+#
+# Render injects $PORT and requires the app to bind 0.0.0.0:$PORT — the
+# container entrypoint already does (phone app + reverse proxy to the backend).
+#
+# Deploy: push this file and, in the Render dashboard, create a Blueprint from
+# the repo (or "New > Web Service" pointing at this Dockerfile), then set the
+# two secrets. A persistent disk keeps the bot's subscriber list across deploys.
+
+services:
+  - type: web
+    name: astra
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ASTRA_DATA_SOURCE
+        value: live
+      - key: ASTRA_LIVE_CANDLE_PAIR
+        value: PAXGUSD
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false          # set in the dashboard; never stored in git
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+    disk:
+      name: astra-state
+      mountPath: /root/.astra
+      sizeGB: 1

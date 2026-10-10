@@ -1,0 +1,44 @@
+# Fly.io deployment: one always-on machine running the ASTRA service.
+#
+# The machine runs the Dockerfile: it serves the phone app (PWA) on 8080 and,
+# in the same process tree, the backend host + MT5 bridge + Telegram bot.
+#
+# Deploy:
+#   fly launch --no-deploy      # or edit `app` below to a name you own
+#   fly secrets set TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=...
+#   fly deploy
+#
+# Always-on is deliberate: the Telegram bot long-polls, so the machine must not
+# sleep. min_machines_running = 1 with auto_stop_machines = false keeps it up.
+
+app = "astra-msy"
+primary_region = "fra"
+
+[build]
+
+[env]
+  ASTRA_DATA_SOURCE = "live"
+  ASTRA_LIVE_CANDLE_PAIR = "PAXGUSD"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "40s"
+    method = "GET"
+    path = "/api/v1/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[mounts]
+  source = "astra_state"
+  destination = "/root/.astra"

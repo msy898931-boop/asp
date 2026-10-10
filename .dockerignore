@@ -3,6 +3,8 @@ build/
 dist/
 out/
 cmake-build-*/
+# Android artifacts: the APK is distributed separately; a keystore is a secret.
+android/
 **/__pycache__/
 *.pyc
 *.o

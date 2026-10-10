@@ -13,8 +13,9 @@ services:
       ASTRA_DATA_SOURCE: "live"
       ASTRA_LIVE_CANDLE_PAIR: "PAXGUSD"
     ports:
-      # Loopback-only: the API is never exposed to the public internet.
-      - "127.0.0.1:8790:8790"
+      # Public: the phone app (PWA) plus the reverse proxy to the loopback API.
+      # The API and bridge themselves are never bound to a public interface.
+      - "8790:8080"
     volumes:
       # Durable subscriber list (survives container rebuilds).
       - astra-state:/root/.astra

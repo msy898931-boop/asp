@@ -1,14 +1,14 @@
 # Dockerfile — ASTRA "always-on" server (backend host + Telegram bot).
 #
-# Two stages: build the C++ backend, then ship a slim runtime that runs the
-# backend host with the Telegram bot as its supervised sidecar. The desktop UI
-# is intentionally NOT part of this image — this is the headless service that
-# keeps the bot answering and pushing alerts 24/7.
+# Two stages: build the C++ backend, then ship a slim runtime that starts the
+# backend host — with the Telegram bot as its supervised sidecar — and serves
+# the phone app (PWA) on the public port, reverse-proxying to the loopback API.
+# The desktop UI is intentionally NOT part of this image.
 #
 # Build:
 #   docker build -t astra-server .
-# Run:
-#   docker run -d --restart unless-stopped --env-file .env -p 127.0.0.1:8790:8790 astra-server
+# Run (local, both phone app and bot on :8790):
+#   docker run -d --restart unless-stopped --env-file .env -p 8790:8080 astra-server
 
 # ───────────────────────────── build stage ──────────────────────────────────
 FROM debian:bookworm-slim AS build
@@ -56,14 +56,29 @@ ENV ASTRA_DATA_SOURCE=live \
     ASTRA_REPLAY_CSV=/app/research/data/xauusd_m1/xauusd_m1_real.csv \
     ASTRA_REPLAY_SYMBOL=XAUUSD
 
+# The phone app (PWA) is served by the same process, on the same public port,
+# reverse-proxying /api/v1 and /bridge to the loopback backend. This makes the
+# image deployable as ONE always-on service on a container host: the phone app
+# and the Telegram bot share a single port.
+COPY mobile  /app/mobile
+COPY scripts/docker_entrypoint.sh /app/docker_entrypoint.sh
+RUN chmod +x /app/docker_entrypoint.sh
+
 # Expose the system interpreter as a "bundled" runtime so BundleLocator finds
 # it without the development-only --dev-system-python flag.
 RUN mkdir -p /app/resources/python /app/config /app/data /app/logs \
  && ln -sf /usr/bin/python3 /app/resources/python/python3
 
-# 8790 = frontend-facing loopback API (the bot reads it).
-EXPOSE 8790
+# Default the public port to 8080 (the backend keeps 8790 on loopback, so the
+# two never collide). Container hosts set $PORT themselves.
+ENV PORT=8080 \
+    API_PORT=8790 \
+    BRIDGE_PORT=8791
 
-# tini reaps the bridge + bot children the host spawns.
-ENTRYPOINT ["/usr/bin/tini", "--", "/app/aura_backend_host"]
-CMD ["--api-port", "8790", "--interval-ms", "5000"]
+# $PORT = phone app + reverse proxy; the loopback API/bridge stay private.
+EXPOSE 8080
+
+# tini reaps the bridge + bot children the host spawns. The entrypoint starts
+# the backend host, then serves the phone app on $PORT.
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker_entrypoint.sh"]
+
