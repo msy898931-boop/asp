@@ -220,3 +220,29 @@ Two things to remember:
 
 The app header shows a live price ticker (newest closed close + change vs the
 prior close) from the same loopback bridge candles as the chart.
+
+## Model edge — what is and is not signal
+
+The decision model is **honestly measured and carries no demonstrated edge**:
+OOS (2025) Brier 0.2497, skill +0.0012 — a coin flip — with excellent
+calibration (ECE 0.0012). See `docs/FINAL_REPORT.md` §3 (RULE E).
+
+Two cheap hypotheses for the missing edge have been tested and **refuted**
+(both reproduce the published baseline exactly first):
+
+- **Calendar time is not signal.** `scripts/feature_lab.py` adds time-of-day /
+  session / day-of-week features beside a random control. The time arm scored
+  +0.0011 — indistinguishable from the random arm, and it worsened ECE.
+- **Model capacity is not signal.** `scripts/nonlinearity_lab.py` runs a
+  gradient-boosted tree on the identical split. It scored +0.0009 — no better
+  than the linear logistic, and calibrated worse.
+
+Both scripts reuse the real pipeline (`load_corpus`, frozen labels, year split,
+IRLS logistic, Platt calibration), so their numbers are directly comparable to
+the published run. Run them before proposing any new feature: if an idea beats
+the random-control arm, it is worth a C++ engine change + full corpus
+regeneration; otherwise it is not.
+
+The remaining lever is **new information** the corpus does not contain — order
+flow, real volume, or cross-asset context (DXY, real yields). No amount of
+remodelling the 185 OHLC shape features will produce an edge.
