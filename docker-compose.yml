@@ -7,9 +7,11 @@ services:
     env_file: .env
     environment:
       PYTHONUNBUFFERED: "1"
-      # Synthetic data source so the pipeline runs with no MT5 terminal. Set to
-      # "mt5" (and run on Windows) to use a live terminal instead.
-      ASTRA_DATA_SOURCE: "replay"
+      # Live market data over the network (Yahoo Finance, no key, no terminal),
+      # so the always-on host serves real prices. Set to "replay" for an
+      # offline demo, or "mt5" on a Windows host with a live terminal.
+      ASTRA_DATA_SOURCE: "live"
+      ASTRA_LIVE_TICKER: "GC=F"
     ports:
       # Loopback-only: the API is never exposed to the public internet.
       - "127.0.0.1:8790:8790"

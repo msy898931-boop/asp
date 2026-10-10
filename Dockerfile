@@ -47,9 +47,12 @@ COPY bridge/telegram_bot /app/resources/bridge/telegram_bot
 COPY research/data/xauusd_m1/xauusd_m1_real.csv \
      /app/research/data/xauusd_m1/xauusd_m1_real.csv
 
-# Default this deployment to the replay source (overridable). Switch to a live
-# terminal by setting ASTRA_DATA_SOURCE=mt5 and running on a Windows host.
-ENV ASTRA_DATA_SOURCE=replay \
+# Default this deployment to the live source (overridable). It serves real gold
+# prices from Yahoo Finance over the network, with no key and no Windows
+# terminal. Set ASTRA_DATA_SOURCE=replay for an offline synthetic demo, or
+# =mt5 on a Windows host with a live terminal.
+ENV ASTRA_DATA_SOURCE=live \
+    ASTRA_LIVE_TICKER=GC=F \
     ASTRA_REPLAY_CSV=/app/research/data/xauusd_m1/xauusd_m1_real.csv \
     ASTRA_REPLAY_SYMBOL=XAUUSD
 

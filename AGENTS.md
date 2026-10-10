@@ -93,8 +93,12 @@ docker compose logs -f    # expect: "ASTRA bot online ... subscribers=1"
 loopback only. Subscribers persist in the `astra-state` volume. Deploy on any
 small VPS: install Docker, `git clone`, fill `.env`, `docker compose up -d`.
 
-Notes: the container must reach `api.telegram.org` (default egress is fine);
-the API port is loopback-published and never exposed publicly.
+The image defaults to the **live** Yahoo Finance source (`ASTRA_DATA_SOURCE=live`),
+so the always-on host serves real gold prices with no Windows terminal and no
+API key. Set `ASTRA_DATA_SOURCE=replay` for an offline synthetic demo.
+
+Notes: the container must reach `api.telegram.org` (default egress is fine) and
+Yahoo Finance; the API port is loopback-published and never exposed publicly.
 
 ### Synthetic data source
 
