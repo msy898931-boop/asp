@@ -37,10 +37,15 @@ keep that file. It is git-ignored on purpose — a keystore is a secret.
 
 ## Install on the phone
 
-1. Get `astra.apk` onto the phone (the web app links it at `/astra.apk`, or copy
-   it over USB).
+1. Get `astra.apk` onto the phone. Download it from the mobile server at
+   `/astra.apk`, from the repo's rolling **android** release, or copy it over
+   USB. (The repository is private, so a GitHub release link only works when
+   you are signed in — the mobile-server copy is the simplest path.)
 2. Open it. Android asks to allow installs from this source — allow it.
 3. Install, then open **ASTRA** from the home screen.
+4. On first launch the app asks for your server address (for example
+   `http://your-host:12001/`). Enter it once; the app remembers it. You can
+   change it later from the error screen.
 
 Requirements: Android 5.0+ (API 21). The Moto G7 (Android 9) is well within
 range.

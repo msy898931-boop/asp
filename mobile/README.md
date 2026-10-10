@@ -6,6 +6,8 @@ home screen; after that it opens full-screen like any other app.
 
 ## What it shows
 
+- **Live price** — a ticker under the header: the newest closed close and its
+  change against the prior close, for the selected timeframe.
 - **Status** — a gauge for system health, plus mode, startup stage, symbol and
   the market-data source (clearly labelled when it is the synthetic replay feed).
 - **Signal** — direction, regime, entry / stop / target / R:R, score and context.
