@@ -125,7 +125,35 @@ h1 {
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
-/* ── status banner ──────────────────────────────────────────────────── */
+/* ── live price ticker ──────────────────────────────────────────────── */
+.ticker {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 0 18px 6px;
+  padding: 10px 14px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: var(--ink-2);
+}
+.ticker-price {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--gold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ticker-chg { font-size: 13px; color: var(--flat); font-variant-numeric: tabular-nums; }
+.ticker-chg.up { color: var(--up); }
+.ticker-chg.down { color: var(--down); }
+.ticker-basis {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
 .banner {
   display: flex; align-items: center; gap: 8px;
   margin: 0 18px 4px;
