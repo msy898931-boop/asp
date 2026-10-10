@@ -89,7 +89,7 @@ jobs:
           $root = "frontend/qt/build/bin/Release"
           python scripts/bundle.py --out "$root" --backend-host "build/Release/aura_backend_host.exe"
           python scripts/embed_python.py --dest "$root/resources/python"
-          Compress-Archive -Path "$root\*" -DestinationPath "build/ASTRA-full.zip" -Force
+          Compress-Archive -Path "$root\*" -DestinationPath "build\ASTRA-full.zip" -Force
           Get-Item "build/ASTRA-full.zip" | Select-Object Name, Length
 
       - name: Upload full bundle

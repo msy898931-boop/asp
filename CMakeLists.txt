@@ -16,7 +16,15 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-add_compile_options(-Wall -Wextra)
+# Warnings differ per toolchain: -Wall/-Wextra are GCC/Clang spellings that
+# MSVC's cl rejects outright (D8021), so the backend host never built on
+# Windows and the .exe shipped UI-only. Map to each compiler's equivalent.
+if(MSVC)
+  add_compile_options(/W4)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS NOMINMAX WIN32_LEAN_AND_MEAN)
+else()
+  add_compile_options(-Wall -Wextra)
+endif()
 
 find_package(Threads REQUIRED)
 
