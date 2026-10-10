@@ -1,0 +1,66 @@
+name: Build Android APK
+
+# Builds the installable phone app (android/) with no Gradle and no Android
+# Studio: a JDK 17 plus the SDK build-tools are enough (see android/build.sh).
+# The keystore is cached so successive builds share a signature and an installed
+# app can be updated in place instead of uninstalled first.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'android/**'
+      - 'mobile/**'
+      - '.github/workflows/build-android.yml'
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: 'ASTRA server URL baked into the app (changeable on-device)'
+        required: false
+        default: 'http://127.0.0.1:12001/'
+      app_name:
+        description: 'Launcher name'
+        required: false
+        default: 'ASTRA'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install build-tools and platform
+        run: sdkmanager "build-tools;34.0.0" "platforms;android-34"
+
+      # A stable keystore means an update installs over the previous build. The
+      # first run generates it; later runs restore it from the cache.
+      - name: Restore signing keystore
+        uses: actions/cache@v4
+        with:
+          path: android/astra.keystore
+          key: astra-keystore-v1
+
+      - name: Build APK
+        env:
+          SERVER_URL: ${{ github.event.inputs.server_url || 'http://127.0.0.1:12001/' }}
+          APP_NAME: ${{ github.event.inputs.app_name || 'ASTRA' }}
+        run: android/build.sh --url "$SERVER_URL" --name "$APP_NAME"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: astra-apk
+          path: android/dist/astra.apk
+          retention-days: 30
+          if-no-files-found: error
