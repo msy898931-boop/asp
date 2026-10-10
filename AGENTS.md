@@ -255,6 +255,14 @@ Two cheap hypotheses for the missing edge have been tested and **refuted**
   The model simply predicts 2025 gold's upward drift; the longer the horizon,
   the more drift dominates. This is why a rising skill curve must be checked
   against the base rate before it is believed.
+- **There is no ranking signal at all.** `scripts/discrimination_lab.py` reports
+  threshold-free AUC (the drift-proof measure) with a permutation test. AUC is
+  ~0.50 at every horizon — 0.5032 (15m, p=0.41), 0.4992 (1h, p=0.79), 0.5033
+  (2h, p=0.42) — so the probabilities rank up- and down-moves no better than a
+  coin. At 4h AUC dips to 0.4885 (p=0.013): a faint *reversal* tilt, but it is
+  on the wrong side of 0.5, does not survive multiple-comparison correction
+  across four horizons and six labs, and its Brier is still worse than the base
+  rate. Treat it as exploratory, not an edge.
 
 Both scripts reuse the real pipeline (`load_corpus`, frozen labels, year split,
 IRLS logistic, Platt calibration), so their numbers are directly comparable to
@@ -262,11 +270,11 @@ the published run. Run them before proposing any new feature: if an idea beats
 the random-control arm, it is worth a C++ engine change + full corpus
 regeneration; otherwise it is not.
 
-Experiments so far: five scripts — `feature_lab.py` (calendar time),
+Experiments so far: seven scripts — `feature_lab.py` (calendar time),
 `nonlinearity_lab.py` (tree capacity), `volume_flow_lab.py` (order flow),
 `crossasset_lab.py` (DXY + real yield), `horizon_lab.py` + `horizon_diagnostic.py`
-(forecast horizon). Every one refutes its hypothesis. Do not re-run them
-expecting a different answer.
+(forecast horizon), `discrimination_lab.py` (AUC + permutation). Every one
+refutes its hypothesis. Do not re-run them expecting a different answer.
 
 The decisive lesson is the horizon diagnostic: a model can show *rising* Brier
 skill purely from market drift, with **zero** accuracy edge over the base rate.

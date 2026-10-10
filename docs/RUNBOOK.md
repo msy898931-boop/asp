@@ -132,16 +132,27 @@ control.
 | `crossasset_lab.py` | DXY + real yield are signal | +0.0006 — **no** |
 | `horizon_lab.py` | the horizon is wrong | skill rises, *looks* promising |
 | `horizon_diagnostic.py` | is that skill real? | **edge +0.0000 — drift, not edge** |
+| `discrimination_lab.py` | is there *any* ranking signal? | **AUC ≈ 0.50, p ≥ 0.41 — no** |
 
 **Conclusion.** The 185 OHLC-shape features carry no exploitable forward
 direction for XAUUSD at any tested horizon. The one field that beats the naive
 0.5 Brier reference — longer horizons — does so purely because gold drifted up
 in 2025: the model's accuracy never exceeds the majority class (edge +0.0000),
-and it scores *worse* than simply predicting the base rate. This is the
+and it scores *worse* than simply predicting the base rate. The threshold-free
+check agrees: AUC is ~0.50 at every horizon, so the probabilities rank up- and
+down-moves no better than a coin (the lone 4h dip to 0.4885 is a wrong-signed,
+multiple-comparison-fragile reversal tilt). This is the
 `horizon_diagnostic.py` lesson: **always score against the base-rate forecast,
-not only the 0.5 reference.** The system is honest and calibrated; it is not, on
-this data, predictive. A real edge needs information the corpus does not contain
-(order-book/tape imbalance) or a stationary target the drift cannot game.
+not only the 0.5 reference**, and confirm with a threshold-free measure. The
+system is honest and calibrated; it is not, on this data, predictive. A real
+edge needs information the corpus does not contain (order-book/tape imbalance)
+or a stationary target the drift cannot game.
+
+Reproduce and verify the published baseline at any time:
+
+```sh
+python3 scripts/verify_baseline.py   # exits non-zero if docs/FINAL_REPORT.md drifted
+```
 
 ## 10. Secrets
 
