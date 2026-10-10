@@ -93,12 +93,13 @@ docker compose logs -f    # expect: "ASTRA bot online ... subscribers=1"
 loopback only. Subscribers persist in the `astra-state` volume. Deploy on any
 small VPS: install Docker, `git clone`, fill `.env`, `docker compose up -d`.
 
-The image defaults to the **live** Yahoo Finance source (`ASTRA_DATA_SOURCE=live`),
-so the always-on host serves real gold prices with no Windows terminal and no
-API key. Set `ASTRA_DATA_SOURCE=replay` for an offline synthetic demo.
+The image defaults to the **live** source (`ASTRA_DATA_SOURCE=live`), so the
+always-on host serves real gold prices with no Windows terminal and no API key.
+Set `ASTRA_DATA_SOURCE=replay` for an offline synthetic demo.
 
-Notes: the container must reach `api.telegram.org` (default egress is fine) and
-Yahoo Finance; the API port is loopback-published and never exposed publicly.
+Notes: the container must reach `api.telegram.org` (default egress is fine),
+`api.gold-api.com`, and `api.kraken.com`; the API port is loopback-published and
+never exposed publicly.
 
 ### Synthetic data source
 
@@ -122,22 +123,24 @@ a current price.
 ### Live data source (no terminal needed)
 
 For an always-on host with no Windows terminal, the bridge accepts a **live**
-source backed by Yahoo Finance `GC=F` (COMEX gold). It is keyless, serves real
-prices over the same closed-bar contract as a terminal, and labels itself
-honestly (`synthetic: false`, `data_source: live`, `broker = "Yahoo Finance
-(GC=F)"`):
+source backed by gold-api.com (spot) + Kraken (candles). It is keyless, serves
+real gold prices over the same closed-bar contract as a terminal, and labels
+itself honestly (`synthetic: false`, `data_source: live`, `broker = "gold-api.com
++ Kraken (PAXGUSD)"`):
 
 ```bash
 ASTRA_DATA_SOURCE=live
-ASTRA_LIVE_TICKER=GC=F        # optional; any Yahoo symbol
+ASTRA_LIVE_CANDLE_PAIR=PAXGUSD   # optional; any Kraken pair
+ASTRA_LIVE_SPOT_SYMBOL=XAU       # optional; any gold-api symbol
 ```
 
-`bridge/mt5_python/live_client.py` implements it. History is trimmed to the
-engine's 400-day bar-plausibility window so daily/weekly/monthly series are not
-rejected as `IMPLAUSIBLE_TIME`. Gold trades Sun 22:00 – Fri 21:00 UTC with a
-daily 21:00–22:00 break, so intraday timeframes (M1/M5/M15) legitimately read
-STALE during that hour; the engine then withholds a decision rather than acting
-on a stale bar. This is a public quote feed, not a broker — not a trading path.
+`bridge/mt5_python/live_client.py` implements it. The tick read comes from
+gold-api.com's free, unthrottled `/price/XAU`; the OHLC candles come from
+Kraken's public `PAXGUSD` market, a gold-backed token that tracks one troy ounce
+and trades 24/7, so every timeframe is available without a market-hours gap.
+History is trimmed to the engine's 400-day bar-plausibility window so
+daily/weekly/monthly series are not rejected as `IMPLAUSIBLE_TIME`. This is a
+public quote feed, not a broker — not a trading path.
 
 ### Mobile app (PWA)
 

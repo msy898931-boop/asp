@@ -60,6 +60,21 @@ bool wantsDevFallback(int argc, char** argv) {
     return false;
 }
 
+// Market-data source the bridge should serve. Explicit flag wins over the
+// environment so a launcher (or a compose file) can set ASTRA_DATA_SOURCE
+// while an operator can still override it on the command line.
+std::string parseDataSource(int argc, char** argv) {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::string(argv[i]) == "--data-source") {
+            return std::string(argv[i + 1]);
+        }
+    }
+    if (const char* env = std::getenv("ASTRA_DATA_SOURCE")) {
+        if (*env) return std::string(env);
+    }
+    return "mt5";
+}
+
 bool wantsOneShot(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--once") return true;
@@ -99,6 +114,7 @@ int main(int argc, char** argv) {
 
     aura::StartupOptions options;
     options.allowSystemPythonFallback = wantsDevFallback(argc, argv);
+    options.dataSource = parseDataSource(argc, argv);
     aura::AuraRuntime runtime(options);
 
     std::string startupError;

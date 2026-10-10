@@ -40,7 +40,8 @@ bool StartupCoordinator::run(StartupReport& report) {
         spec.args = {report.bundle.bridgeScript,
                      "--host", "127.0.0.1",
                      "--port", "8791",
-                     "--symbol", options_.preferredSymbol};
+                     "--symbol", options_.preferredSymbol,
+                     "--data-source", options_.dataSource};
         spec.workingDir = report.paths.bridgeDir;
         spec.environment["PYTHONUNBUFFERED"] = "1";
         supervisor_ = std::make_unique<ProcessSupervisor>(spec);
