@@ -283,3 +283,40 @@ Always score against the base-rate forecast, not just the 0.5 reference.
 The remaining lever is **new information** the corpus does not contain — real
 order-book/tape imbalance, or a stationary target the drift cannot game. No
 transformation of the OHLC feed, and no horizon, will produce an edge.
+
+## Product surface (mobile app / APK / desktop)
+
+The phone app is `mobile/` (a PWA served by `scripts/start_stack.sh`) and the
+installable Android app is a WebView shell around it (`android/`). Two rules
+keep them honest and in sync:
+
+- **The app states its own limits.** The analytics panel is titled "Market
+  state" and carries a permanent badge reading *Edge: none measured (OOS 2025,
+  AUC ≈ 0.50)*, matching the research finding above. Confidence is shown only
+  when the backend produced a *calibrated* probability; otherwise it reads
+  `n/a` rather than inventing a number from an uncalibrated score. Do not
+  reintroduce predictive language ("signal", "buy/sell") — that would assert an
+  edge the corpus does not support.
+- **Bilingual by design (EN/AR, RTL).** All user-facing strings live in the
+  `STRINGS` table in `mobile/app.js` and are applied via `data-i18n` attributes.
+  The layout flips with `dir="rtl"`; numeric readouts stay LTR. Add a string in
+  both languages or not at all.
+
+The app is read-only: one origin (`serve_mobile.py`) reverse-proxies `/api/v1`
+to the backend and `/bridge` to the bridge. It never places trades.
+
+### APK build
+
+`android/build.sh` needs only a JDK and SDK build-tools (no Gradle). Build with
+build-tools **35** on a modern JDK — build-tools 34's `d8` throws an NPE on
+JDK 21:
+
+```sh
+JAVA_HOME=/path/to/jdk ANDROID_HOME=/path/to/sdk BT_VER=35.0.0 \
+  android/build.sh --url https://your-host/ --name ASTRA
+```
+
+The server URL is baked in but changeable on-device from the error screen. The
+CI workflow `build-android.yml` builds it on every `mobile/**` or `android/**`
+push, signed with a cached keystore, and publishes it to the rolling `android`
+release — which is what the web footer's `/astra.apk` link redirects to.

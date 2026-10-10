@@ -1,6 +1,10 @@
 /* ASTRA mobile client.
    Reads the backend's loopback API through the app's own origin (the launcher
-   reverse-proxies /api/v1 and /bridge to the backend). No secrets live here. */
+   reverse-proxies /api/v1 and /bridge to the backend). No secrets live here.
+
+   Bilingual (EN/AR, RTL-aware). Honest by design: the "market state" panel is
+   descriptive, and the analytics carry a live edge badge so the app never
+   implies a predictive ability it does not have. */
 
 "use strict";
 
@@ -9,18 +13,122 @@ const BRIDGE = "bridge/";
 const REFRESH_MS = 15000;
 const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
 
+/* ── i18n ───────────────────────────────────────────────────────────── */
+
+const STRINGS = {
+  en: {
+    title_sub: "XAUUSD · shadow mode",
+    tab_status: "Status", tab_signal: "State", tab_chart: "Chart",
+    tab_conn: "Data", tab_bridge: "Bridge",
+    ver: "decision support · not financial advice",
+    connecting: "connecting",
+    alerts_off: "Signal alerts off",
+    alerts_on: "Alerts on — you'll be told when the state changes",
+    lang_toggle: "العربية",
+    theme: "Theme", refresh: "Refresh", alerts: "Alerts",
+    health: "System health", waiting: "waiting for data",
+    mode: "Mode", startup: "Startup", decision: "Decision data",
+    symbol: "Symbol", source: "Source", lasterr: "Last error",
+    yes: "yes", no: "no",
+    market_state: "Market state",
+    descriptive: "Descriptive read of the last closed bars. Not a prediction.",
+    regime: "Regime", direction: "Direction", score: "Score",
+    confidence: "Confidence",
+    entry: "Reference", stop: "Stop", target: "Target", rr: "R:R",
+    no_decision: "no decision recorded yet",
+    context_txt: "H4 bias {h4} · M15 trigger {m15} · volatility {vol}",
+    edge_none: "Edge: none measured",
+    edge_none_sub: "OOS 2025 · AUC ≈ 0.50",
+    data_quality: "Data quality",
+    dq_freshness: "Freshness", dq_lastbar: "Last closed bar",
+    dq_bars: "Closed bars", dq_range: "Range", dq_quality: "Quality",
+    conn_title: "Connection & health",
+    conn_hint: "The app reaches the backend over one origin; these are the live links.",
+    conn_ep: "Endpoint", conn_state: "State", conn_lat: "Latency",
+    bridge_title: "Bridge",
+    bridge_note: "The bridge is the loopback market-data link. It never executes trades and is bound to 127.0.0.1 only.",
+    process: "Process", mt5_ready: "MT5 ready", broker: "Broker",
+    server: "Server", transport: "Transport",
+    chart_meta: "{tf} · {n} closed bars · range {lo}–{hi} · {fresh}",
+    chart_none: "no closed bars available",
+    chart_unavail: "chart unavailable: {err}",
+    levels_title: "Price alerts",
+    levels_note: "You are told when the price crosses a level you set.",
+    add: "Add", added: "Added level",
+    crossed_above: "crossed above", crossed_below: "crossed below",
+    apk: "Download the Android app (.apk)",
+    overview: "Overview", data: "Data",
+  },
+  ar: {
+    title_sub: "الذهب · وضع الظل",
+    tab_status: "الحالة", tab_signal: "السوق", tab_chart: "الشارت",
+    tab_conn: "البيانات", tab_bridge: "الجسر",
+    ver: "دعم قرار · ليس نصيحة مالية",
+    connecting: "جارٍ الاتصال",
+    alerts_off: "تنبيهات الإشارة متوقفة",
+    alerts_on: "التنبيهات مفعّلة — سنخبرك عند تغيّر حالة السوق",
+    lang_toggle: "English",
+    theme: "المظهر", refresh: "تحديث", alerts: "تنبيهات",
+    health: "صحة النظام", waiting: "في انتظار البيانات",
+    mode: "الوضع", startup: "الإقلاع", decision: "بيانات القرار",
+    symbol: "الرمز", source: "المصدر", lasterr: "آخر خطأ",
+    yes: "نعم", no: "لا",
+    market_state: "حالة السوق",
+    descriptive: "قراءة وصفية لآخر الشموع المغلقة. ليست تنبؤًا.",
+    regime: "النظام", direction: "الاتجاه", score: "التقييم",
+    confidence: "الثقة",
+    entry: "المرجع", stop: "الإيقاف", target: "الهدف", rr: "المخاطرة/العائد",
+    no_decision: "لا يوجد قرار مسجّل بعد",
+    context_txt: "ميول H4 {h4} · محفّز M15 {m15} · التقلب {vol}",
+    edge_none: "الحافة: لا شيء مُقاس",
+    edge_none_sub: "خارج العيّنة 2025 · AUC ≈ 0.50",
+    data_quality: "جودة البيانات",
+    dq_freshness: "الحداثة", dq_lastbar: "آخر شمعة مغلقة",
+    dq_bars: "الشموع المغلقة", dq_range: "المدى", dq_quality: "الجودة",
+    conn_title: "الاتصال والصحة",
+    conn_hint: "الواجهة تصل للباك عبر أصل واحد؛ هذه الروابط الحيّة.",
+    conn_ep: "الوجهة", conn_state: "الحالة", conn_lat: "زمن الاستجابة",
+    bridge_title: "الجسر",
+    bridge_note: "الجسر هو رابط بيانات السوق على loopback. لا ينفّذ صفقات أبدًا ومربوط بـ 127.0.0.1 فقط.",
+    process: "العملية", mt5_ready: "MT5 جاهز", broker: "الوسيط",
+    server: "السيرفر", transport: "النقل",
+    chart_meta: "{tf} · {n} شمعة مغلقة · المدى {lo}–{hi} · {fresh}",
+    chart_none: "لا توجد شموع مغلقة",
+    chart_unavail: "الشارت غير متاح: {err}",
+    levels_title: "تنبيهات السعر",
+    levels_note: "سنخبرك عند اختراق السعر لمستوى تحدّده أنت.",
+    add: "إضافة", added: "أُضيف المستوى",
+    crossed_above: "اخترق صعودًا", crossed_below: "اخترق هبوطًا",
+    apk: "حمّل تطبيق أندرويد (.apk)",
+    overview: "نظرة عامة", data: "البيانات",
+  },
+};
+
+let lang = "en";
+const T = (key) => (STRINGS[lang] && STRINGS[lang][key]) || STRINGS.en[key] || key;
+function fmt(str, vars) {
+  return str.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : "--"));
+}
+
+/* ── helpers ────────────────────────────────────────────────────────── */
+
 const $ = (id) => document.getElementById(id);
 const num = (v, d = 2) =>
   v === null || v === undefined || v === "" ? "--" : Number(v).toFixed(d);
-const yn = (v) => (v ? "yes" : "no");
+const yn = (v) => (v ? T("yes") : T("no"));
 
 let activeTf = "M15";
 let alertsOn = false;
 let lastSignalKey = null;
+let lastPrice = null;
+let priceLevels = []; // { value, crossed }
+const LEVELS_KEY = "astra-levels";
+const connStats = {}; // path -> { ok, ms }
 
 /* ── theme ──────────────────────────────────────────────────────────── */
 
 const THEME_KEY = "astra-theme";
+const LANG_KEY = "astra-lang";
 
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -39,6 +147,28 @@ function initTheme() {
   applyTheme(theme);
 }
 
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = T(el.getAttribute("data-i18n"));
+  });
+  document.querySelectorAll("[data-i18n-aria]").forEach((el) => {
+    el.setAttribute("aria-label", T(el.getAttribute("data-i18n-aria")));
+  });
+  try { localStorage.setItem(LANG_KEY, lang); } catch (e) { /* ignore */ }
+}
+
+function initLang() {
+  let saved = null;
+  try { saved = localStorage.getItem(LANG_KEY); } catch (e) { /* ignore */ }
+  if (!saved) {
+    saved = (navigator.language || "en").toLowerCase().startsWith("ar") ? "ar" : "en";
+  }
+  lang = saved;
+  applyLang();
+}
+
 /* ── toast ──────────────────────────────────────────────────────────── */
 
 let toastTimer = null;
@@ -55,9 +185,16 @@ function toast(message) {
 }
 
 async function getJson(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const t0 = performance.now();
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    connStats[url] = { ok: res.ok, ms: Math.round(performance.now() - t0) };
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  } catch (err) {
+    if (!connStats[url]) connStats[url] = { ok: false, ms: Math.round(performance.now() - t0) };
+    throw err;
+  }
 }
 
 // Backend API envelope: { data: {...} }
@@ -70,6 +207,11 @@ async function api(path) {
 async function bridge(path) {
   const body = await getJson(BRIDGE + path);
   return body && typeof body.payload === "object" ? body.payload : {};
+}
+
+// Full bridge envelope, for callers that also need top-level fields (quality).
+async function bridgeEnvelope(path) {
+  return getJson(BRIDGE + path);
 }
 
 /* ── status ─────────────────────────────────────────────────────────── */
@@ -104,8 +246,7 @@ function renderStatus(snap) {
   const aggregate = health.aggregate || "UNKNOWN";
   $("health-value").textContent = aggregate;
   $("health-sub").textContent = health.decision_grade_data
-    ? "decision-grade data"
-    : "no decision-grade data";
+    ? T("decision") : T("waiting");
   setGauge(aggregate);
 
   const mode = system.mode || "--";
@@ -121,16 +262,6 @@ function renderStatus(snap) {
   $("r-error").textContent = br.last_error || "(none)";
   $("r-error").className = br.last_error ? "bad" : "ok";
 
-  // Bridge panel (same snapshot, no extra request).
-  $("b-process").textContent = br.bridge_process_state || "--";
-  $("b-process").className = br.bridge_process_state === "ONLINE" ? "ok" : "warn";
-  $("b-ready").textContent = yn(br.mt5_ready);
-  $("b-ready").className = br.mt5_ready ? "ok" : "warn";
-  $("b-symbol").textContent = br.resolved_symbol || "(none)";
-  $("b-broker").textContent = br.broker || "(none)";
-  $("b-server").textContent = br.server || "(none)";
-  $("b-transport").textContent = br.transport || "(none)";
-
   const reasons = Array.isArray(health.degraded_reasons)
     ? health.degraded_reasons : [];
   const list = $("reasons");
@@ -144,7 +275,23 @@ function renderStatus(snap) {
   return aggregate;
 }
 
-/* ── signal ─────────────────────────────────────────────────────────── */
+function renderBridge(br) {
+  $("b-process").textContent = br.bridge_process_state || "--";
+  $("b-process").className = br.bridge_process_state === "ONLINE" ? "ok" : "warn";
+  $("b-ready").textContent = yn(br.mt5_ready);
+  $("b-ready").className = br.mt5_ready ? "ok" : "warn";
+  $("b-symbol").textContent = br.resolved_symbol || "(none)";
+  $("b-broker").textContent = br.broker || "(none)";
+  $("b-server").textContent = br.server || "(none)";
+  $("b-transport").textContent = br.transport || "(none)";
+}
+
+/* ── market state ───────────────────────────────────────────────────── */
+
+const DIR_LABEL = {
+  en: { UP: "UP", DOWN: "DOWN", NONE: "FLAT" },
+  ar: { UP: "صعود", DOWN: "هبوط", NONE: "محايد" },
+};
 
 function renderSignal(analysis) {
   const signal = analysis.signal || {};
@@ -153,7 +300,7 @@ function renderSignal(analysis) {
 
   const dir = signal.direction || "NONE";
   const el = $("sig-direction");
-  el.textContent = dir;
+  el.textContent = (DIR_LABEL[lang] || DIR_LABEL.en)[dir] || dir;
   el.className = "direction " +
     (dir === "UP" ? "up" : dir === "DOWN" ? "down" : "flat");
   $("sig-regime").textContent = context.regime || "UNKNOWN";
@@ -164,25 +311,84 @@ function renderSignal(analysis) {
   $("l-rr").textContent = num(levels.reward_risk);
 
   const score = signal.score;
-  const conf = signal.confidence_lo != null && signal.confidence_hi != null
-    ? null : undefined;
   const scorePct = score == null ? 0 : Math.max(0, Math.min(100, score));
   $("b-score").style.setProperty("--fill", `${scorePct}%`);
   $("v-score").textContent = num(score, 1);
-  $("b-conf").style.setProperty("--fill",
-    `${signal.probability ? signal.probability * 100 : 0}%`);
-  $("v-conf").textContent = signal.probability
-    ? num(signal.probability * 100, 0) + "%" : "n/a";
 
-  $("sig-context").textContent =
-    `H4 bias ${context.h4_bias || "?"} · M15 trigger ${context.m15_trigger || "?"}`
-    + ` · volatility ${context.volatility_state || "?"}`;
+  // Honest: a calibrated probability is only shown when the backend actually
+  // produced one. Otherwise the bar stays empty and reads "n/a" — never a
+  // number invented from an uncalibrated score.
+  const hasProb = signal.probability != null && signal.probability_calibrated;
+  $("b-conf").style.setProperty("--fill", hasProb ? `${signal.probability * 100}%` : "0%");
+  $("v-conf").textContent = hasProb ? num(signal.probability * 100, 0) + "%" : "n/a";
+
+  $("sig-context").textContent = fmt(T("context_txt"), {
+    h4: context.h4_bias || "?",
+    m15: context.m15_trigger || "?",
+    vol: context.volatility_state || "?",
+  });
   $("sig-time").textContent = analysis.timestamp
-    ? `as of ${analysis.timestamp}` : "no decision recorded yet";
-  void conf;
+    ? analysis.timestamp : T("no_decision");
+}
+
+/* ── data quality ───────────────────────────────────────────────────── */
+
+function renderDataQuality(env) {
+  const payload = (env && env.payload) || {};
+  const bars = payload.bars || payload.candles || [];
+  if (!bars.length) {
+    ["dq-freshness", "dq-lastbar", "dq-bars", "dq-range", "dq-quality"]
+      .forEach((id) => ($(id).textContent = "--"));
+    return;
+  }
+  const last = bars[bars.length - 1];
+  $("dq-freshness").textContent = payload.freshness || "--";
+  $("dq-lastbar").textContent = last.time
+    ? new Date(last.time * 1000).toLocaleString(lang === "ar" ? "ar" : undefined)
+    : "--";
+  $("dq-bars").textContent = String(bars.length);
+  let lo = Infinity, hi = -Infinity;
+  bars.forEach((b) => { lo = Math.min(lo, b.low); hi = Math.max(hi, b.high); });
+  $("dq-range").textContent = `${num(lo)}–${num(hi)}`;
+  $("dq-quality").textContent = (env && env.quality) || "--";
+}
+
+/* ── connection detail ──────────────────────────────────────────────── */
+
+function renderConn() {
+  const rows = [
+    ["health", API + "health"],
+    ["system/state", API + "system/state"],
+    ["bridge/status", API + "bridge/status"],
+    ["analysis/latest", API + "analysis/latest"],
+    ["candles(" + activeTf + ")", BRIDGE + `v1/candles?tf=${activeTf}&limit=120`],
+  ];
+  const tbody = $("conn-rows");
+  tbody.innerHTML = "";
+  rows.forEach(([label, url]) => {
+    const s = connStats[url];
+    const tr = document.createElement("tr");
+    const state = s ? (s.ok ? "OK" : "ERR") : "--";
+    tr.innerHTML =
+      `<td>${label}</td>` +
+      `<td class="${s ? (s.ok ? "ok" : "bad") : "warn"}">${state}</td>` +
+      `<td>${s ? s.ms + " ms" : "--"}</td>`;
+    tbody.appendChild(tr);
+  });
 }
 
 /* ── chart ──────────────────────────────────────────────────────────── */
+
+function ema(values, period) {
+  const k = 2 / (period + 1);
+  const out = [];
+  let prev = null;
+  values.forEach((v, i) => {
+    prev = prev == null ? v : v * k + prev * (1 - k);
+    out[i] = i < period - 1 ? null : prev;
+  });
+  return out;
+}
 
 function renderChart(payload) {
   const bars = payload.bars || payload.candles || [];
@@ -191,7 +397,7 @@ function renderChart(payload) {
   svg.innerHTML = "";
   axis.innerHTML = "";
   if (!bars.length) {
-    $("chart-meta").textContent = "no closed bars available";
+    $("chart-meta").textContent = T("chart_none");
     return;
   }
 
@@ -235,6 +441,20 @@ function renderChart(payload) {
     add("rect", { x: x - bodyW / 2, y: top, width: bodyW, height: h, fill: color });
   });
 
+  // Two EMAs as descriptive context. They summarise past closes; they do not
+  // forecast, and nothing here should be read as a trade trigger.
+  const closes = bars.map((b) => b.close);
+  [[9, "ema-fast"], [21, "ema-slow"]].forEach(([period, cls]) => {
+    const vals = ema(closes, period);
+    let d = "";
+    vals.forEach((v, i) => {
+      if (v == null) return;
+      const x = pad + i * step + step / 2;
+      d += `${d ? "L" : "M"}${x.toFixed(2)} ${y(v).toFixed(2)} `;
+    });
+    if (d) add("path", { d, class: cls, fill: "none" });
+  });
+
   // Current (newest close) price line, tied to its own axis label.
   const newest = bars[bars.length - 1];
   const cy = y(newest.close);
@@ -246,9 +466,12 @@ function renderChart(payload) {
   last.style.fontWeight = "600";
   axis.appendChild(last);
 
-  $("chart-meta").textContent =
-    `${payload.timeframe || activeTf} · ${bars.length} closed bars · `
-    + `range ${num(lo)}–${num(hi)} · ${payload.freshness || "?"}`;
+  $("chart-meta").textContent = fmt(T("chart_meta"), {
+    tf: payload.timeframe || activeTf,
+    n: bars.length,
+    lo: num(lo), hi: num(hi),
+    fresh: payload.freshness || "?",
+  });
 }
 
 /* ── alerts ─────────────────────────────────────────────────────────── */
@@ -265,13 +488,13 @@ function maybeAlert(analysis) {
   if (!changed || !alertsOn) return;
 
   const s = analysis.signal || {};
-  const dir = s.direction || "NONE";
-  const text = `ASTRA: signal changed to ${dir}`
-    + (s.score != null ? ` (score ${Number(s.score).toFixed(1)})` : "");
+  const dir = (DIR_LABEL[lang] || DIR_LABEL.en)[s.direction || "NONE"];
+  const text = `ASTRA: ${dir}` +
+    (s.score != null ? ` (${num(s.score, 1)})` : "");
   toast(text);
 
   if ("Notification" in window && Notification.permission === "granted") {
-    try { new Notification("ASTRA signal", { body: text, tag: "astra-signal" }); }
+    try { new Notification("ASTRA", { body: text, tag: "astra-signal" }); }
     catch (e) { /* notification constructor can throw on some browsers */ }
   }
   if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
@@ -282,15 +505,88 @@ async function toggleAlerts() {
   if (alertsOn) {
     alertsOn = false;
     btn.setAttribute("aria-pressed", "false");
-    toast("Signal alerts off");
+    toast(T("alerts_off"));
     return;
   }
   alertsOn = true;
   btn.setAttribute("aria-pressed", "true");
-  toast("Signal alerts on — you'll be told when the signal changes");
+  toast(T("alerts_on"));
   if ("Notification" in window && Notification.permission === "default") {
     try { await Notification.requestPermission(); } catch (e) { /* ignore */ }
   }
+}
+
+/* ── price levels ───────────────────────────────────────────────────── */
+
+function loadLevels() {
+  try {
+    const raw = localStorage.getItem(LEVELS_KEY);
+    priceLevels = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(priceLevels)) priceLevels = [];
+  } catch (e) { priceLevels = []; }
+}
+
+function saveLevels() {
+  try { localStorage.setItem(LEVELS_KEY, JSON.stringify(priceLevels)); }
+  catch (e) { /* ignore */ }
+}
+
+function renderLevels() {
+  const list = $("level-list");
+  list.innerHTML = "";
+  priceLevels.forEach((lv, i) => {
+    const li = document.createElement("li");
+    li.className = "lvl" + (lv.crossed ? " crossed" : "");
+    const span = document.createElement("span");
+    span.textContent = num(lv.value);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.setAttribute("aria-label", "remove");
+    del.textContent = "×";
+    del.addEventListener("click", () => {
+      priceLevels.splice(i, 1);
+      saveLevels();
+      renderLevels();
+    });
+    li.appendChild(span);
+    li.appendChild(del);
+    list.appendChild(li);
+  });
+}
+
+function addLevel(value) {
+  if (!Number.isFinite(value)) return;
+  priceLevels.push({ value, crossed: false });
+  priceLevels.sort((a, b) => a.value - b.value);
+  saveLevels();
+  renderLevels();
+  toast(`${T("added")} ${num(value)}`);
+}
+
+function notify(title, body) {
+  if ("Notification" in window && Notification.permission === "granted") {
+    try { new Notification(title, { body, tag: "astra-level" }); }
+    catch (e) { /* some browsers throw */ }
+  }
+  if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
+}
+
+function checkLevels(price) {
+  if (lastPrice == null) { lastPrice = price; return; }
+  let changed = false;
+  priceLevels.forEach((lv) => {
+    const crossedUp = lastPrice < lv.value && price >= lv.value;
+    const crossedDown = lastPrice > lv.value && price <= lv.value;
+    if (crossedUp || crossedDown) {
+      const dir = crossedUp ? T("crossed_above") : T("crossed_below");
+      toast(`ASTRA: ${num(price)} ${dir} ${num(lv.value)}`);
+      notify("ASTRA", `${num(price)} ${dir} ${num(lv.value)}`);
+      lv.crossed = true;
+      changed = true;
+    }
+  });
+  lastPrice = price;
+  if (changed) renderLevels();
 }
 
 /* ── orchestration ──────────────────────────────────────────────────── */
@@ -305,6 +601,7 @@ async function refresh() {
     ]);
     const aggregate = renderStatus({ health, system, bridge: br });
     renderSignal(analysis);
+    renderBridge(br);
     maybeAlert(analysis);
     banner(aggregate === "ONLINE" ? "online"
       : aggregate === "OFFLINE" ? "offline" : "degraded",
@@ -315,15 +612,19 @@ async function refresh() {
     btn.classList.remove("busy");
   }
   loadTicker();
+  loadChart();
+  renderConn();
 }
 
 async function loadChart() {
   try {
-    const payload = await bridge(`v1/candles?tf=${activeTf}&limit=120`);
-    renderChart(payload);
+    const env = await bridgeEnvelope(`v1/candles?tf=${activeTf}&limit=120`);
+    renderChart(env.payload || {});
+    renderDataQuality(env);
   } catch (err) {
-    $("chart-meta").textContent = "chart unavailable: " + err.message;
+    $("chart-meta").textContent = fmt(T("chart_unavail"), { err: err.message });
   }
+  renderConn();
 }
 
 // A prominent live price in the header. Uses the last two closed bars of the
@@ -346,6 +647,7 @@ async function loadTicker() {
     chg.className = "ticker-chg " + (change > 0 ? "up" : change < 0 ? "down" : "");
     $("price-basis").textContent = `${activeTf} · gold-api.com`;
     $("ticker").hidden = false;
+    checkLevels(last.close);
   } catch (err) {
     $("ticker").hidden = true;
   }
@@ -359,6 +661,7 @@ function banner(kind, text) {
 
 function buildTimeframes() {
   const row = $("tf-row");
+  row.innerHTML = "";
   TIMEFRAMES.forEach((tf) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -386,21 +689,38 @@ function bindTabs() {
       document.querySelectorAll(".panel").forEach((p) =>
         (p.hidden = p.id !== `view-${view}`));
       if (view === "chart") loadChart();
+      if (view === "conn") renderConn();
     });
   });
 }
 
 function init() {
+  initLang();
   initTheme();
+  loadLevels();
+  renderLevels();
   buildTimeframes();
   bindTabs();
   $("refresh").addEventListener("click", refresh);
   $("alerts").addEventListener("click", toggleAlerts);
+  $("level-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = parseFloat($("level-input").value);
+    addLevel(v);
+    $("level-input").value = "";
+  });
+  $("lang").addEventListener("click", () => {
+    lang = lang === "ar" ? "en" : "ar";
+    applyLang();
+    $("lang").textContent = T("lang_toggle");
+    refresh();
+  });
   $("theme").addEventListener("click", () => {
     const next = document.documentElement.getAttribute("data-theme") === "light"
       ? "dark" : "light";
     applyTheme(next);
   });
+  $("lang").textContent = T("lang_toggle");
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refresh();
   });

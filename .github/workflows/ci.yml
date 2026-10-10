@@ -1,0 +1,44 @@
+name: CI
+
+# Two independent guarantees on every push:
+#   * the backend still builds and its deterministic tests pass, and
+#   * the published research baseline still reproduces bit-for-bit within
+#     tolerance (scripts/verify_baseline.py).
+# The frontend has no build step; app.js is checked for syntax with node.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify the published baseline reproduces
+        run: python3 scripts/verify_baseline.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax-check the phone app
+        run: node --check mobile/app.js

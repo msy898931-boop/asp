@@ -17,7 +17,7 @@ on:
       server_url:
         description: 'ASTRA server URL baked into the app (changeable on-device)'
         required: false
-        default: 'http://127.0.0.1:12001/'
+        default: 'https://astra-xlp9.onrender.com/'
       app_name:
         description: 'Launcher name'
         required: false
@@ -62,7 +62,7 @@ jobs:
 
       - name: Build APK
         env:
-          SERVER_URL: ${{ github.event.inputs.server_url || 'http://127.0.0.1:12001/' }}
+          SERVER_URL: ${{ github.event.inputs.server_url || 'https://astra-xlp9.onrender.com/' }}
           APP_NAME: ${{ github.event.inputs.app_name || 'ASTRA' }}
         run: android/build.sh --url "$SERVER_URL" --name "$APP_NAME"
 

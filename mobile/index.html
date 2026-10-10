@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0B0E13">
-<meta name="description" content="ASTRA shadow-mode gold analysis, on your phone.">
+<meta name="description" content="ASTRA shadow-mode gold analysis, on your phone. Decision support only.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
 <title>ASTRA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -22,17 +22,18 @@
     <span class="mark" aria-hidden="true"></span>
     <div>
       <h1>ASTRA</h1>
-      <p class="sub">XAUUSD &middot; shadow mode</p>
+      <p class="sub" data-i18n="title_sub">XAUUSD &middot; shadow mode</p>
     </div>
   </div>
   <div class="controls">
-    <button id="alerts" class="icon-btn" type="button" aria-label="Signal alerts" aria-pressed="false">
+    <button id="lang" class="text-btn" type="button" aria-label="Language" data-i18n-aria="lang_toggle">العربية</button>
+    <button id="alerts" class="icon-btn" type="button" aria-label="Alerts" aria-pressed="false" data-i18n-aria="alerts">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3l-1.5 3h15L18 12V9a6 6 0 0 0-6-6Zm0 16a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 19Z"/></svg>
     </button>
-    <button id="theme" class="icon-btn" type="button" aria-label="Toggle theme">
+    <button id="theme" class="icon-btn" type="button" aria-label="Theme" data-i18n-aria="theme">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 2v14a7 7 0 0 1 0-14Z"/></svg>
     </button>
-    <button id="refresh" class="icon-btn" type="button" aria-label="Refresh">
+    <button id="refresh" class="icon-btn" type="button" aria-label="Refresh" data-i18n-aria="refresh">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
     </button>
   </div>
@@ -47,7 +48,7 @@
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <div id="banner" class="banner" role="status" aria-live="polite">
-  <span class="dot"></span><span id="banner-text">connecting</span>
+  <span class="dot"></span><span id="banner-text" data-i18n="connecting">connecting</span>
 </div>
 
 <main>
@@ -62,40 +63,60 @@
       </svg>
       <div class="gauge-label">
         <span id="health-value" class="big">--</span>
-        <span id="health-sub" class="small">waiting for data</span>
+        <span id="health-sub" class="small" data-i18n="waiting">waiting for data</span>
       </div>
     </div>
 
+    <!-- Honesty badge: no measured edge. Always visible, never hidden. -->
+    <div class="edge-badge" role="note">
+      <span class="edge-dot" aria-hidden="true"></span>
+      <span class="edge-text">
+        <b data-i18n="edge_none">Edge: none measured</b>
+        <em data-i18n="edge_none_sub">OOS 2025 · AUC ≈ 0.50</em>
+      </span>
+    </div>
+
     <dl class="readout">
-      <div><dt>Mode</dt><dd id="r-mode">--</dd></div>
-      <div><dt>Startup</dt><dd id="r-startup">--</dd></div>
-      <div><dt>Decision data</dt><dd id="r-decision">--</dd></div>
-      <div><dt>Symbol</dt><dd id="r-symbol">--</dd></div>
-      <div><dt>Source</dt><dd id="r-source">--</dd></div>
-      <div><dt>Last error</dt><dd id="r-error">--</dd></div>
+      <div><dt data-i18n="mode">Mode</dt><dd id="r-mode">--</dd></div>
+      <div><dt data-i18n="startup">Startup</dt><dd id="r-startup">--</dd></div>
+      <div><dt data-i18n="decision">Decision data</dt><dd id="r-decision">--</dd></div>
+      <div><dt data-i18n="symbol">Symbol</dt><dd id="r-symbol">--</dd></div>
+      <div><dt data-i18n="source">Source</dt><dd id="r-source">--</dd></div>
+      <div><dt data-i18n="lasterr">Last error</dt><dd id="r-error">--</dd></div>
     </dl>
 
     <ul id="reasons" class="reasons"></ul>
   </section>
 
-  <!-- SIGNAL -->
+  <!-- MARKET STATE -->
   <section class="panel" id="view-signal" hidden>
+    <h2 class="panel-title" data-i18n="market_state">Market state</h2>
+    <p class="panel-note" data-i18n="descriptive">Descriptive read of the last closed bars. Not a prediction.</p>
     <div class="signal-head">
       <span id="sig-direction" class="direction flat">--</span>
       <span id="sig-regime" class="regime">--</span>
     </div>
     <div class="levels">
-      <div><dt>Entry</dt><dd id="l-entry">--</dd></div>
-      <div><dt>Stop</dt><dd id="l-stop">--</dd></div>
-      <div><dt>Target</dt><dd id="l-tp">--</dd></div>
-      <div><dt>R:R</dt><dd id="l-rr">--</dd></div>
+      <div><dt data-i18n="entry">Reference</dt><dd id="l-entry">--</dd></div>
+      <div><dt data-i18n="stop">Stop</dt><dd id="l-stop">--</dd></div>
+      <div><dt data-i18n="target">Target</dt><dd id="l-tp">--</dd></div>
+      <div><dt data-i18n="rr">R:R</dt><dd id="l-rr">--</dd></div>
     </div>
     <div class="bars">
-      <div class="bar"><span>Score</span><i id="b-score"></i><b id="v-score">--</b></div>
-      <div class="bar"><span>Confidence</span><i id="b-conf"></i><b id="v-conf">--</b></div>
+      <div class="bar"><span data-i18n="score">Score</span><i id="b-score"></i><b id="v-score">--</b></div>
+      <div class="bar"><span data-i18n="confidence">Confidence</span><i id="b-conf"></i><b id="v-conf">--</b></div>
     </div>
     <p id="sig-context" class="context">--</p>
     <p id="sig-time" class="stamp"></p>
+
+    <h2 class="panel-title" data-i18n="levels_title">Price alerts</h2>
+    <p class="panel-note" data-i18n="levels_note">You are told when the price crosses a level you set.</p>
+    <form id="level-form" class="lvl-form" autocomplete="off">
+      <input id="level-input" type="number" step="0.01" inputmode="decimal"
+             placeholder="4180.00" aria-label="Price level">
+      <button type="submit" data-i18n="add">Add</button>
+    </form>
+    <ul id="level-list" class="lvl-list"></ul>
   </section>
 
   <!-- CHART -->
@@ -103,40 +124,66 @@
     <div class="chart-tf" id="tf-row" role="tablist" aria-label="Timeframe"></div>
     <div class="chart-wrap">
       <svg id="chart" class="chart" viewBox="0 0 320 160" preserveAspectRatio="none"
-           role="img" aria-label="Closed-bar chart"></svg>
+           role="img" aria-label="Closed-bar chart with descriptive EMAs"></svg>
       <div class="axis" id="axis" aria-hidden="true"></div>
     </div>
     <p class="stamp"><span id="chart-meta">--</span></p>
+
+    <h2 class="panel-title" data-i18n="data_quality">Data quality</h2>
+    <dl class="readout">
+      <div><dt data-i18n="dq_freshness">Freshness</dt><dd id="dq-freshness">--</dd></div>
+      <div><dt data-i18n="dq_lastbar">Last closed bar</dt><dd id="dq-lastbar">--</dd></div>
+      <div><dt data-i18n="dq_bars">Closed bars</dt><dd id="dq-bars">--</dd></div>
+      <div><dt data-i18n="dq_range">Range</dt><dd id="dq-range">--</dd></div>
+      <div><dt data-i18n="dq_quality">Quality</dt><dd id="dq-quality">--</dd></div>
+    </dl>
+  </section>
+
+  <!-- CONNECTION -->
+  <section class="panel" id="view-conn" hidden>
+    <h2 class="panel-title" data-i18n="conn_title">Connection &amp; health</h2>
+    <p class="panel-note" data-i18n="conn_hint">The app reaches the backend over one origin; these are the live links.</p>
+    <table class="conn">
+      <thead>
+        <tr>
+          <th data-i18n="conn_ep">Endpoint</th>
+          <th data-i18n="conn_state">State</th>
+          <th data-i18n="conn_lat">Latency</th>
+        </tr>
+      </thead>
+      <tbody id="conn-rows"></tbody>
+    </table>
   </section>
 
   <!-- BRIDGE -->
   <section class="panel" id="view-bridge" hidden>
+    <h2 class="panel-title" data-i18n="bridge_title">Bridge</h2>
     <dl class="readout">
-      <div><dt>Process</dt><dd id="b-process">--</dd></div>
-      <div><dt>MT5 ready</dt><dd id="b-ready">--</dd></div>
-      <div><dt>Symbol</dt><dd id="b-symbol">--</dd></div>
-      <div><dt>Broker</dt><dd id="b-broker">--</dd></div>
-      <div><dt>Server</dt><dd id="b-server">--</dd></div>
-      <div><dt>Transport</dt><dd id="b-transport">--</dd></div>
+      <div><dt data-i18n="process">Process</dt><dd id="b-process">--</dd></div>
+      <div><dt data-i18n="mt5_ready">MT5 ready</dt><dd id="b-ready">--</dd></div>
+      <div><dt data-i18n="symbol">Symbol</dt><dd id="b-symbol">--</dd></div>
+      <div><dt data-i18n="broker">Broker</dt><dd id="b-broker">--</dd></div>
+      <div><dt data-i18n="server">Server</dt><dd id="b-server">--</dd></div>
+      <div><dt data-i18n="transport">Transport</dt><dd id="b-transport">--</dd></div>
     </dl>
-    <p class="context">The bridge is the loopback market-data link. It never
-      executes trades and is bound to 127.0.0.1 only.</p>
+    <p class="context" data-i18n="bridge_note">The bridge is the loopback market-data link. It never executes trades and is bound to 127.0.0.1 only.</p>
   </section>
 </main>
 
 <nav class="tabs" role="tablist">
-  <button class="tab" data-view="status" aria-selected="true" type="button">Status</button>
-  <button class="tab" data-view="signal" type="button">Signal</button>
-  <button class="tab" data-view="chart" type="button">Chart</button>
-  <button class="tab" data-view="bridge" type="button">Bridge</button>
+  <button class="tab" data-view="status" aria-selected="true" type="button" data-i18n="tab_status">Status</button>
+  <button class="tab" data-view="signal" type="button" data-i18n="tab_signal">State</button>
+  <button class="tab" data-view="chart" type="button" data-i18n="tab_chart">Chart</button>
+  <button class="tab" data-view="conn" type="button" data-i18n="tab_conn">Data</button>
+  <button class="tab" data-view="bridge" type="button" data-i18n="tab_bridge">Bridge</button>
 </nav>
 
-  <footer class="foot">
-    <a id="get-apk" class="apk-link" href="/astra.apk" download="astra.apk">
-      Download the Android app (.apk)
-    </a>
-    <span>Decision support only. Not financial advice.</span>
-  </footer>
+<footer class="foot">
+  <a id="get-apk" class="apk-link" href="/astra.apk" download="astra.apk" data-i18n="apk">
+    Download the Android app (.apk)
+  </a>
+  <span data-i18n="ver">Decision support only. Not financial advice.</span>
+</footer>
 
 <script src="app.js"></script>
 </body>

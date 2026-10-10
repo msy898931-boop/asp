@@ -136,9 +136,19 @@ persistent disk to a free service.
 ## 7. Phone app and Android
 
 - **PWA:** open the service URL and "Add to Home Screen". The service worker
-  caches the shell but always fetches `/api/` and `/bridge/` live.
-- **APK:** offered at `/astra.apk`; asks for the server address on first launch.
-  The `android/` shell has no Gradle project in-repo yet.
+  caches the shell but always fetches `/api/` and `/bridge/` live. The interface
+  is bilingual (English / العربية) with an RTL layout; the choice persists in
+  `localStorage`. Tabs: Status, State, Chart, Data, Bridge.
+- **Honest by design:** the State tab is labelled "Market state" and always
+  shows the badge *Edge: none measured (OOS 2025, AUC ≈ 0.50)* — see §9. The
+  price-alert list on that tab only notifies, it does not trade; levels persist
+  in `localStorage` and are checked against each new close.
+- **APK:** offered at `/astra.apk`, which 302s to the rolling `android` release.
+  A new APK is built and published by `build-android.yml` on any `mobile/**` or
+  `android/**` push (build-tools 35, cached keystore). The baked server URL is
+  `https://astra-xlp9.onrender.com/`, changeable on the device from the error
+  screen. The shell has no Gradle project by design — `android/build.sh` drives
+  `aapt2`/`javac`/`d8`/`apksigner` directly.
 
 ## 8. Windows desktop
 

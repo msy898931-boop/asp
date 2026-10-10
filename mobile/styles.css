@@ -14,7 +14,7 @@
   --up: #4FB477;
   --down: #D1584F;
   --flat: #6B7683;
-  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --mono: "IBM Plex Mono", "IBM Plex Sans Arabic", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
 }
 
@@ -104,6 +104,21 @@ h1 {
 }
 .icon-btn.busy svg { animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Language toggle reads as text, not an icon. */
+.text-btn {
+  min-width: 44px; height: 44px; padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--edge);
+  background: var(--ink-2);
+  color: var(--gold);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: background .2s, transform .12s;
+}
+.text-btn:active { background: var(--ink-3); transform: scale(.94); }
 
 /* ── toast ──────────────────────────────────────────────────────────── */
 .toast {
@@ -325,11 +340,99 @@ main { flex: 1; padding: 8px 14px 90px; }
   font-variant-numeric: tabular-nums;
 }
 .price-line { stroke: var(--gold); stroke-width: 1; stroke-dasharray: 3 3; opacity: .8; }
+.ema-fast { stroke: #6FB3D6; stroke-width: 1.3; opacity: .85; }
+.ema-slow { stroke: #C98BD6; stroke-width: 1.3; opacity: .85; }
+
+/* ── section titles ─────────────────────────────────────────────────── */
+.panel-title {
+  font-family: var(--serif);
+  font-size: 17px; font-weight: 700; letter-spacing: .04em;
+  margin: 0 0 4px;
+}
+.panel-note {
+  font-size: 11.5px; color: var(--muted); line-height: 1.55;
+  margin: 0 0 16px;
+}
+
+/* ── edge / honesty badge ───────────────────────────────────────────── */
+.edge-badge {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 12px;
+  background: rgba(214,165,60,.06);
+}
+.edge-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: var(--gold); box-shadow: 0 0 10px var(--gold);
+}
+.edge-text { display: flex; flex-direction: column; line-height: 1.35; }
+.edge-text b { font-size: 13px; font-weight: 600; color: var(--gold); }
+.edge-text em { font-size: 11px; font-style: normal; color: var(--muted);
+                letter-spacing: .04em; }
+
+/* ── connection table ───────────────────────────────────────────────── */
+.conn {
+  width: 100%; border-collapse: collapse;
+  border: 1px solid var(--edge); border-radius: 12px; overflow: hidden;
+  font-size: 12.5px;
+}
+.conn th {
+  text-align: start; padding: 9px 12px;
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); background: var(--ink);
+  border-bottom: 1px solid var(--edge);
+}
+.conn td {
+  padding: 10px 12px; background: var(--ink-2);
+  border-bottom: 1px solid var(--edge);
+  overflow-wrap: anywhere;
+}
+.conn tr:last-child td { border-bottom: 0; }
+.conn td.ok { color: var(--up); }
+.conn td.bad { color: var(--down); }
+.conn td.warn { color: var(--gold); }
+
+/* ── price-level alerts ─────────────────────────────────────────────── */
+.lvl-form { display: flex; gap: 8px; margin: 0 0 12px; }
+.lvl-form input {
+  flex: 1; min-width: 0;
+  font-family: var(--mono); font-size: 15px;
+  color: var(--paper); background: var(--ink);
+  border: 1px solid var(--edge); border-radius: 10px;
+  padding: 11px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.lvl-form input:focus { outline: none; border-color: var(--gold-dim); }
+.lvl-form button {
+  flex: none;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .06em;
+  color: var(--ink); background: var(--gold);
+  border: 1px solid var(--gold); border-radius: 10px;
+  padding: 11px 18px; cursor: pointer;
+}
+.lvl-form button:active { background: var(--gold-dim); }
+
+.lvl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.lvl {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--edge); border-radius: 10px;
+  background: var(--ink);
+  font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.lvl.crossed { border-color: var(--gold-dim); color: var(--gold); }
+.lvl button {
+  border: 0; background: none; cursor: pointer;
+  color: var(--muted); font-size: 18px; line-height: 1; padding: 4px 8px;
+}
+.lvl button:active { color: var(--down); }
 
 /* ── tabs ───────────────────────────────────────────────────────────── */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   gap: 1px;
   background: var(--edge);
   border-top: 1px solid var(--edge);
@@ -394,3 +497,29 @@ html[data-theme="light"] .tab[aria-selected="true"] { background: var(--ink-3); 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ── right-to-left (Arabic) ─────────────────────────────────────────── */
+html[dir="rtl"] body { font-family: "IBM Plex Sans Arabic", var(--mono); }
+html[dir="rtl"] h1,
+html[dir="rtl"] .panel-title,
+html[dir="rtl"] .big,
+html[dir="rtl"] .direction,
+html[dir="rtl"] .ticker-price {
+  font-family: "IBM Plex Sans Arabic", var(--serif);
+  letter-spacing: 0;
+}
+html[dir="rtl"] .sub,
+html[dir="rtl"] .tab,
+html[dir="rtl"] .ticker-basis { letter-spacing: .02em; }
+
+/* Numeric readouts stay left-to-right even in RTL, and the price axis keeps
+   its right-hand position because it is a chart annotation, not prose. */
+html[dir="rtl"] .ticker-price,
+html[dir="rtl"] .ticker-chg,
+html[dir="rtl"] .readout dd,
+html[dir="rtl"] .levels dd,
+html[dir="rtl"] .bar b,
+html[dir="rtl"] .conn td { direction: ltr; unicode-bidi: embed; }
+html[dir="rtl"] .bar b { text-align: left; }
+html[dir="rtl"] .axis span { left: 0; right: auto; }
+html[dir="rtl"] .axis { text-align: left; }
