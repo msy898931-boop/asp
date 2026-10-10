@@ -37,11 +37,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # ubuntu-latest already ships the Android SDK (ANDROID_HOME set), so no
+      # setup action is needed. Just make sure the exact build-tools/platform
+      # build.sh expects are present.
       - name: Install build-tools and platform
-        run: sdkmanager "build-tools;34.0.0" "platforms;android-34"
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "build-tools;34.0.0" "platforms;android-34"
 
       # A stable keystore means an update installs over the previous build. The
       # first run generates it; later runs restore it from the cache.
