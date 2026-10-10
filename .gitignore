@@ -70,3 +70,6 @@ research/features_real/corpus/*.json
 
 # Cached macro series (DXY/FRED) fetched by scripts/crossasset_lab.py
 research/macro/
+
+# Local stack runtime (pid/log files) from scripts/start_stack.sh
+run/

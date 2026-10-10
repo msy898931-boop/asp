@@ -40,6 +40,32 @@ is set — whether a second poller holds the token.
 
 ## 3. Run it locally (exactly as validated)
 
+Three scripts do the whole job — start, keep up, stop:
+
+```sh
+scripts/start_stack.sh 12000     # build resources if missing, start host + app, verify
+scripts/watch_stack.sh 12000 20  # foreground keeper: restarts anything that dies
+scripts/stop_stack.sh            # signals only the PIDs it recorded in run/
+```
+
+`start_stack.sh` is idempotent (a healthy tick is a no-op) and refuses to leave a
+half-started stack — it waits for the API and the app, then exits non-zero if
+either is not up. PID files and logs live in `run/` (gitignored). Because it uses
+`setsid`, `stop_stack.sh` can signal the whole process group and force-kills
+anything that ignores `TERM`.
+
+**The bot is off by default.** A token merely existing in the environment does
+not start a poller; set `ASTRA_ENABLE_BOT=1` only when this machine is meant to
+own the bot. That guard exists because the deployed instance already polls the
+one token — see §5.
+
+`watch_stack.sh` checks the API and the app every interval and calls
+`start_stack.sh` when either is down. Touch `run/watchdog.stop` (or send it
+`TERM`) to retire it.
+
+<details>
+<summary>What the scripts run under the hood</summary>
+
 The host finds the bridge only if the layout exists next to the binary. From the
 repo root:
 
@@ -60,9 +86,13 @@ python3 mobile/serve_mobile.py --host 0.0.0.0 --port 12000 \
     --api-port 8790 --bridge-port 8791
 ```
 
+</details>
+
+Give the backend a few seconds to warm; until it does, `/api/v1/health` reads
+`STARTING` and the first candles call can be `NOT_FOUND`.
+
 Check it: `curl -s localhost:8790/api/v1/health` should show
-`"aggregate":"ONLINE"`. Give the bridge ~10 s to warm before the first candles
-call, or the first response can be `NOT_FOUND`.
+`"aggregate":"ONLINE"`.
 
 Route mapping (easy to trip on): the **public** app strips its prefix, so
 `/bridge/v1/candles` becomes the bridge's own `/v1/candles`. Hit the bridge
