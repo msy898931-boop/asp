@@ -12,6 +12,9 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <process.h>
+// wingdi.h (pulled in by windows.h) defines ERROR as 0, which would rewrite
+// ServiceState::ERROR below into ServiceState::0. Drop the macro.
+#undef ERROR
 #else
 #include <csignal>
 #include <cerrno>
