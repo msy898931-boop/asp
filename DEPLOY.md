@@ -33,11 +33,21 @@ list across deploys.
 
 ## Option B — Render
 
-Push this repo, then in the Render dashboard create a **Blueprint** (it reads
-`render.yaml`) or a new **Web Service** pointing at this Dockerfile. Render
-injects `$PORT`; the container binds it automatically. Set
-`TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in the dashboard (the blueprint
-marks them `sync: false`, so they are never written to git).
+The live instance runs this way. Push this repo, then in the Render dashboard
+create a **Blueprint** (it reads `render.yaml`) or a new **Web Service** pointing
+at this Dockerfile. Render injects `$PORT`; the container binds it
+automatically. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in the dashboard
+(the blueprint marks them `sync: false`, so they are never written to git).
+
+**Free plan caveat:** a free web service sleeps after 15 minutes idle, so the
+phone app cold-starts (~1 min) on the next open and the bot does not answer
+while asleep. That is fine for "open the app when I want it"; it is not fine for
+a bot that must reply 24/7 — use a paid instance for that. Do not attach a
+persistent disk to a free service (disks require a paid plan).
+
+**One instance per bot token.** Running the same token on two services (or a
+duplicate service pointing at the same repo) makes Telegram answer
+`409 Conflict` and both pollers starve. Suspend or delete the duplicate.
 
 ## Option C — any Docker host / VPS
 

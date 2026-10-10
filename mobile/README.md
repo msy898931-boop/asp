@@ -4,6 +4,18 @@ A phone app for the ASTRA backend. It is a **PWA** (installable web app): no
 store account, no build step, no APK. You open one URL once and add it to the
 home screen; after that it opens full-screen like any other app.
 
+## Deployed instance
+
+Live on Render (free plan): **https://astra-xlp9.onrender.com**
+
+Open it on the phone and "Add to Home screen". On the free plan the service
+sleeps after 15 minutes idle; the first open then cold-starts in about a minute.
+Verify a deployment (app, API, live reading, bot) with:
+
+```bash
+scripts/check_deploy.sh https://astra-xlp9.onrender.com
+```
+
 ## What it shows
 
 - **Live price** — a ticker under the header: the newest closed close and its
