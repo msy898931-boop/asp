@@ -72,7 +72,7 @@ std::string parseDataSource(int argc, char** argv) {
     if (const char* env = std::getenv("ASTRA_DATA_SOURCE")) {
         if (*env) return std::string(env);
     }
-    return "mt5";
+    return "live";
 }
 
 bool wantsOneShot(int argc, char** argv) {

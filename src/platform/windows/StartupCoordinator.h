@@ -47,10 +47,11 @@ struct StartupOptions {
     int handshakeTimeoutMillis = 15000;
     int handshakePollMillis = 250;
     std::string preferredSymbol = "XAUUSD";
-    // Which market-data source the bridge serves: "mt5" (a Windows terminal),
-    // "live" (keyless network feed), or "replay" (the synthetic corpus). The
-    // packaged host defaults to "mt5"; a host with no terminal sets "live".
-    std::string dataSource = "mt5";
+    // Which market-data source the bridge serves: "live" (keyless network
+    // feed), "mt5" (a Windows terminal), or "replay" (the synthetic corpus).
+    // Defaults to "live" so a packaged host with no MT5 terminal still serves
+    // real data; MT5 users pass --data-source mt5.
+    std::string dataSource = "live";
     bool launchBridgeProcess = true;
 };
 
