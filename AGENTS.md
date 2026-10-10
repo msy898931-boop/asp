@@ -157,3 +157,35 @@ Install on the phone via the browser's "Add to Home screen".
 installable `.apk` (see `android/README.md`). The build is Gradle-free: a JDK
 and Android SDK build-tools suffice. The server URL is baked at build time and
 can be changed on the device from the app's error screen.
+
+### Windows bundle (desktop)
+
+`.github/workflows/build-windows.yml` produces two artifacts:
+
+* `ASTRA-windows.zip` — the Qt UI alone (needs a backend elsewhere).
+* `ASTRA-full-windows.zip` — **the runnable desktop app**: `astra_desktop.exe`
+  plus `aura_backend_host.exe`, a private embedded Python under
+  `resources/python/`, the bridge, and the operator bot. Unzip, run
+  `astra_desktop.exe`; the host finds `resources/` beside itself.
+
+`scripts/embed_python.py` downloads a python-build-standalone Windows build and
+lays it down as `resources/python/python.exe` (no Python on the target, no MSI —
+the bridge and bot are stdlib-only). `scripts/bundle.py` stages the bridge/bot
+and creates `config/`, `data/`, `logs/`.
+
+The packaged host now **defaults to the live source** (`--data-source` /
+`ASTRA_DATA_SOURCE` default `"live"`); pass `--data-source mt5` to use a local
+MetaTrader5 terminal.
+
+Two Windows-only compile traps found and fixed (CI never built the backend host
+before, so the old `.exe` was UI-only):
+
+* the root `CMakeLists.txt` forced `-Wall -Wextra`, which cl rejects (`D8021`);
+  MSVC now gets `/W4` with `_CRT_SECURE_NO_WARNINGS NOMINMAX WIN32_LEAN_AND_MEAN`.
+* `windows.h` -> `wingdi.h` defines `ERROR` as `0`, so `ServiceState::ERROR`
+  became `ServiceState::0` (`C2589`/`C2062`); `ProcessSupervisor.cpp` now
+  `#undef ERROR` after the include.
+
+Telegram bot: verified end-to-end against the live feed — `/status`, `/health`,
+`/analysis`, `/bridge` all answer correctly (ONLINE/SHADOW/READY, symbol XAUUSD,
+source gold-api.com + Kraken PAXGUSD).
