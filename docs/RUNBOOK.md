@@ -125,6 +125,15 @@ start the host with `TELEGRAM_BOT_TOKEN=""` so it does not fight the deployed
 bot. If you see repeated `409` in the host log, a duplicate poller exists —
 find and stop it, do not ignore it.
 
+**Check whether the bot is actually up** with a quiet-environment probe of
+`https://api.telegram.org/bot<TOKEN>/getUpdates`: `ok` (no error) means nobody
+is polling, i.e. the bot is **off**; `409` means a poller exists. The backend
+host launches the bot only when `TELEGRAM_BOT_TOKEN` is in its environment, so a
+Render service can answer `/api/v1/health` while the bot is still off — if the
+secret was never set in the Render dashboard. Setting `TELEGRAM_BOT_TOKEN` (and
+`TELEGRAM_CHAT_ID` for the broadcast target) there and redeploying is what turns
+the always-on bot on; no code change is required.
+
 ## 6. Free-tier reality
 
 A free Render web service sleeps after ~15 min idle: the app cold-starts
