@@ -71,8 +71,10 @@ def main() -> int:
 
     print("Parity: bridge_files cover the real bridge directory")
     bridge_dir = os.path.join(REPO, "bridge", "mt5_python")
+    # Tests are not shipped, so they are not part of the bundle contract.
     real = sorted(f for f in os.listdir(bridge_dir)
-                  if os.path.isfile(os.path.join(bridge_dir, f)) and not f.endswith(".pyc"))
+                  if os.path.isfile(os.path.join(bridge_dir, f))
+                  and not f.endswith(".pyc") and not f.startswith("test_"))
     declared = sorted(manifest["bridge_files"])
     check("every declared bridge file exists", all(f in real for f in declared),
           f"missing: {[f for f in declared if f not in real]}")
