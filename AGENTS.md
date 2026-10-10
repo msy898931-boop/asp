@@ -80,26 +80,33 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
 
 ## Always-on server (Docker)
 
-For a 24/7 bot (no PC needed) the repo ships a headless image: backend host +
-MT5 bridge + Telegram bot, no desktop UI.
+For a 24/7 bot (no PC needed) the repo ships a headless image. One container
+runs **everything**: the backend host (supervising the MT5 bridge and the
+Telegram bot) and the phone app (PWA) on the public port. That means the bot
+and the phone app deploy as **one service on one port** — see `DEPLOY.md`.
 
 ```bash
 cp .env.example .env      # set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
 docker compose up -d --build
-docker compose logs -f    # expect: "ASTRA bot online ... subscribers=1"
+docker compose logs -f    # expect: "[entry] serving phone app" then bot online
 ```
 
-`docker-compose.yml` sets `restart: unless-stopped` and publishes the API on
-loopback only. Subscribers persist in the `astra-state` volume. Deploy on any
-small VPS: install Docker, `git clone`, fill `.env`, `docker compose up -d`.
+`docker-compose.yml` sets `restart: unless-stopped`, publishes the phone app on
+`8790:8080`, and keeps the API/bridge on loopback. Subscribers persist in the
+`astra-state` volume. For a managed host (no VPS to babysit), use Fly.io
+(`fly.toml`) or Render (`render.yaml`) — both read the same Dockerfile. The
+`deploy-fly.yml` workflow deploys on demand once `FLY_API_TOKEN` is set.
+
+Run exactly one instance per bot token: two pollers make Telegram answer
+`409 Conflict`.
 
 The image defaults to the **live** source (`ASTRA_DATA_SOURCE=live`), so the
 always-on host serves real gold prices with no Windows terminal and no API key.
 Set `ASTRA_DATA_SOURCE=replay` for an offline synthetic demo.
 
 Notes: the container must reach `api.telegram.org` (default egress is fine),
-`api.gold-api.com`, and `api.kraken.com`; the API port is loopback-published and
-never exposed publicly.
+`api.gold-api.com`, and `api.kraken.com`; the loopback API/bridge are never
+exposed publicly.
 
 ### Synthetic data source
 
