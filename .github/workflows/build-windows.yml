@@ -5,6 +5,10 @@ on:
     branches: [ main ]
     paths:
       - 'frontend/qt/**'
+      - 'src/**'
+      - 'bridge/**'
+      - 'scripts/**'
+      - '.github/workflows/build-windows.yml'
   workflow_dispatch:
 
 jobs:
@@ -63,3 +67,36 @@ jobs:
           path: frontend/qt/build/ASTRA-windows.zip
           retention-days: 30
           if-no-files-found: error
+
+      # ------------------------------------------------------------------
+      # Full runnable bundle: the desktop exe is only the UI; it needs the
+      # backend host (bridge + runtime) beside it. Build the host, embed a
+      # private interpreter, stage resources/, and ship one folder.
+      # ------------------------------------------------------------------
+      - name: Configure backend
+        # The Qt step above configures frontend/qt/build; the backend host has
+        # its own root CMakeLists, so configure it into the root build/ dir.
+        run: cmake -B build -A x64
+
+      - name: Build backend host
+        run: cmake --build build --config Release --target aura_backend_host --parallel
+
+      - name: Stage full bundle
+        shell: pwsh
+        run: |
+          # One-file layout: the host looks for resources/ next to itself, so
+          # the UI and the host share the app root.
+          $root = "frontend/qt/build/bin/Release"
+          python scripts/bundle.py --out "$root" --backend-host "build/Release/aura_backend_host.exe"
+          python scripts/embed_python.py --dest "$root/resources/python"
+          Compress-Archive -Path "$root\*" -DestinationPath "build\ASTRA-full.zip" -Force
+          Get-Item "build/ASTRA-full.zip" | Select-Object Name, Length
+
+      - name: Upload full bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ASTRA-full-windows
+          path: build/ASTRA-full.zip
+          retention-days: 30
+          if-no-files-found: error
+
