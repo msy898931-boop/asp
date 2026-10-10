@@ -236,6 +236,11 @@ Two cheap hypotheses for the missing edge have been tested and **refuted**
 - **Model capacity is not signal.** `scripts/nonlinearity_lab.py` runs a
   gradient-boosted tree on the identical split. It scored +0.0009 — no better
   than the linear logistic, and calibrated worse.
+- **Order flow is not signal (it hurts).** `scripts/volume_flow_lab.py` builds 8
+  causal volume/spread/imbalance features from the raw Dukascopy feed (the
+  shipped corpus stores OHLC shape only, so these are genuinely new inputs). It
+  scored **-0.0040** — negative skill, below a coin flip — while the random
+  control left the baseline untouched. The fit overfits the flow dimensions.
 
 Both scripts reuse the real pipeline (`load_corpus`, frozen labels, year split,
 IRLS logistic, Platt calibration), so their numbers are directly comparable to
@@ -243,6 +248,10 @@ the published run. Run them before proposing any new feature: if an idea beats
 the random-control arm, it is worth a C++ engine change + full corpus
 regeneration; otherwise it is not.
 
-The remaining lever is **new information** the corpus does not contain — order
-flow, real volume, or cross-asset context (DXY, real yields). No amount of
-remodelling the 185 OHLC shape features will produce an edge.
+Experiments so far: three scripts — `feature_lab.py` (calendar time),
+`nonlinearity_lab.py` (tree capacity), `volume_flow_lab.py` (order flow). All
+three refute their hypothesis. Do not re-run these expecting a different answer.
+
+The remaining lever is **new information** the corpus does not contain — real
+order-book/tape imbalance, or cross-asset context (DXY, real yields). No
+transformation of the OHLC+volume feed will produce an edge.
