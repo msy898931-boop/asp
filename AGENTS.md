@@ -241,6 +241,20 @@ Two cheap hypotheses for the missing edge have been tested and **refuted**
   shipped corpus stores OHLC shape only, so these are genuinely new inputs). It
   scored **-0.0040** — negative skill, below a coin flip — while the random
   control left the baseline untouched. The fit overfits the flow dimensions.
+- **Cross-asset macro is not signal.** `scripts/crossasset_lab.py` joins DXY
+  (Yahoo `DX-Y.NYB`) and the 10-year real yield (FRED `DFII10`) by last-value
+  carried forward. It scored +0.0006 — no better than baseline, worse than the
+  random control. The dollar and real-rate backdrop adds nothing at M15.
+- **The horizon was not the problem — and it exposes the real trap.**
+  `scripts/horizon_lab.py` sweeps horizons and looks promising: skill rises
+  monotonically, +0.0012 (15m) → +0.0033 (1h) → +0.0063 (2h) → +0.0085 (4h).
+  But `scripts/horizon_diagnostic.py` shows it is drift and overlap, not edge:
+  the model's accuracy edge over the base rate is **+0.0000 at every horizon**
+  (0.5172/0.517, 0.5320/0.532, 0.5430/0.543, 0.5537/0.554), and its skill is
+  always *below* the base-rate forecast's skill (e.g. +0.0085 vs +0.0115 at 4h).
+  The model simply predicts 2025 gold's upward drift; the longer the horizon,
+  the more drift dominates. This is why a rising skill curve must be checked
+  against the base rate before it is believed.
 
 Both scripts reuse the real pipeline (`load_corpus`, frozen labels, year split,
 IRLS logistic, Platt calibration), so their numbers are directly comparable to
@@ -248,10 +262,16 @@ the published run. Run them before proposing any new feature: if an idea beats
 the random-control arm, it is worth a C++ engine change + full corpus
 regeneration; otherwise it is not.
 
-Experiments so far: three scripts — `feature_lab.py` (calendar time),
-`nonlinearity_lab.py` (tree capacity), `volume_flow_lab.py` (order flow). All
-three refute their hypothesis. Do not re-run these expecting a different answer.
+Experiments so far: five scripts — `feature_lab.py` (calendar time),
+`nonlinearity_lab.py` (tree capacity), `volume_flow_lab.py` (order flow),
+`crossasset_lab.py` (DXY + real yield), `horizon_lab.py` + `horizon_diagnostic.py`
+(forecast horizon). Every one refutes its hypothesis. Do not re-run them
+expecting a different answer.
+
+The decisive lesson is the horizon diagnostic: a model can show *rising* Brier
+skill purely from market drift, with **zero** accuracy edge over the base rate.
+Always score against the base-rate forecast, not just the 0.5 reference.
 
 The remaining lever is **new information** the corpus does not contain — real
-order-book/tape imbalance, or cross-asset context (DXY, real yields). No
-transformation of the OHLC+volume feed will produce an edge.
+order-book/tape imbalance, or a stationary target the drift cannot game. No
+transformation of the OHLC feed, and no horizon, will produce an edge.
