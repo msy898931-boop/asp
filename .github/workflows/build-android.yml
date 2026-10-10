@@ -37,13 +37,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # ubuntu-latest already ships the Android SDK (ANDROID_HOME set), so no
-      # setup action is needed. Just make sure the exact build-tools/platform
-      # build.sh expects are present.
+      # ubuntu-latest ships the Android SDK, but sdkmanager is not on PATH.
+      # Resolve the SDK root and add its cmdline-tools before installing the
+      # exact build-tools/platform build.sh expects.
       - name: Install build-tools and platform
         run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/cmdline-tools/bin:$SDK/platform-tools:$PATH"
+          echo "SDK=$SDK"
+          command -v sdkmanager || ls "$SDK"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "build-tools;34.0.0" "platforms;android-34"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
 
       # A stable keystore means an update installs over the previous build. The
       # first run generates it; later runs restore it from the cache.
