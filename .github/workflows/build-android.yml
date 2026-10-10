@@ -26,6 +26,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # publish the APK to the rolling release
 
     steps:
       - name: Checkout
