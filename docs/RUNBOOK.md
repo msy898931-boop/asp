@@ -64,6 +64,11 @@ Check it: `curl -s localhost:8790/api/v1/health` should show
 `"aggregate":"ONLINE"`. Give the bridge ~10 s to warm before the first candles
 call, or the first response can be `NOT_FOUND`.
 
+Route mapping (easy to trip on): the **public** app strips its prefix, so
+`/bridge/v1/candles` becomes the bridge's own `/v1/candles`. Hit the bridge
+*directly* on its own port with `/v1/candles?tf=M15&limit=1`, not
+`/bridge/v1/candles` — the latter is only valid through the app's proxy.
+
 ## 4. Deploy (container host)
 
 One container runs everything: `Dockerfile` + the entrypoint start the backend
