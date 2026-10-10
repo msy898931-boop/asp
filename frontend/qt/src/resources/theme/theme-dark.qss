@@ -273,3 +273,38 @@ QProgressBar::chunk {
     background: #4A90D9;
     border-radius: 3px;
 }
+
+/* ── Keyboard focus ──
+   A visible ring so keyboard users can see where focus is. Buttons, tabs and
+   checkboxes had no focus style at all, so tabbing gave no feedback. */
+QPushButton:focus {
+    border-color: #5AA0E9;
+    color: #E8EEF5;
+}
+
+QPushButton[primary="true"]:focus,
+QPushButton[danger="true"]:focus {
+    border-color: #E8EEF5;
+}
+
+QCheckBox:focus {
+    color: #E8EEF5;
+}
+
+QCheckBox::indicator:focus {
+    border-color: #4A90D9;
+}
+
+QTabBar::tab:focus {
+    color: #E8EEF5;
+    border: 1px solid #4A90D9;
+    border-bottom: none;
+}
+
+/* ── Text selection ── */
+QLineEdit::selection,
+QTextEdit::selection,
+QPlainTextEdit::selection {
+    background: #4A90D9;
+    color: #FFFFFF;
+}
