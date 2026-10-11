@@ -110,25 +110,26 @@ public class MainActivity extends Activity {
 
     private TextView buildErrorView() {
         TextView t = new TextView(this);
-        t.setText("ASTRA\n\nEnter your server address to begin.\n\nTap here.");
+        t.setText("ASTRA\n\nأدخل عنوان الخادم للبدء.\n\nاضغط هنا.");
         t.setTextColor(Color.parseColor("#ECE6D8"));
         t.setBackgroundColor(Color.parseColor("#0B0E13"));
         t.setGravity(android.view.Gravity.CENTER);
         t.setPadding(48, 48, 48, 48);
         t.setTextSize(16);
+        t.setTextDirection(View.TEXT_DIRECTION_RTL);
         t.setOnClickListener(v -> promptForUrl());
         return t;
     }
 
     private void showError() {
         web.setVisibility(View.GONE);
-        error.setText("Can't reach the ASTRA server.\n\nTap to change the address.");
+        error.setText("تعذّر الوصول إلى خادم ASTRA.\n\nاضغط لتغيير العنوان.");
         error.setVisibility(View.VISIBLE);
     }
 
     private void showSetup() {
         web.setVisibility(View.GONE);
-        error.setText("ASTRA\n\nEnter your server address to begin.\n\nTap here.");
+        error.setText("ASTRA\n\nأدخل عنوان الخادم للبدء.\n\nاضغط هنا.");
         error.setVisibility(View.VISIBLE);
         promptForUrl();
     }
@@ -137,20 +138,31 @@ public class MainActivity extends Activity {
         final android.widget.EditText input = new android.widget.EditText(this);
         input.setText(serverUrl());
         input.setHint("http://host:12001/");
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("ASTRA server address")
+        // A URL is written left-to-right even in an Arabic UI.
+        input.setTextDirection(View.TEXT_DIRECTION_LTR);
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(this)
+                .setTitle("عنوان خادم ASTRA")
                 .setView(input)
-                .setPositiveButton("Save", (d, w) -> {
+                .setPositiveButton("حفظ", (d, w) -> {
                     String url = input.getText().toString().trim();
                     if (!url.isEmpty()) {
                         getSharedPreferences(PREFS, MODE_PRIVATE)
                                 .edit().putString(KEY_URL, url).apply();
-                        Toast.makeText(this, "Loading " + url, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "جارٍ التحميل " + url, Toast.LENGTH_SHORT).show();
                         web.loadUrl(url);
                     }
                 })
-                .setNegativeButton("Cancel", null)
-                .show();
+                .setNegativeButton("إلغاء", null);
+        // If a server was baked in at build time, let the user accept it with
+        // one tap instead of retyping the address.
+        if (!DEFAULT_URL.isEmpty()) {
+            b.setNeutralButton("الافتراضي", (d, w) -> {
+                getSharedPreferences(PREFS, MODE_PRIVATE)
+                        .edit().putString(KEY_URL, DEFAULT_URL).apply();
+                web.loadUrl(DEFAULT_URL);
+            });
+        }
+        b.show();
     }
 
     @Override
