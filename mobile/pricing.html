@@ -71,13 +71,27 @@
 
 </main>
 <script>
-  // If the server injected a real upgrade URL, point the button at it.
+  // The buy button is fed by /upgrade.json, which the server fills from
+  // ASTRA_UPGRADE_URL. With no URL set the tool is not on sale yet, so the
+  // button is disabled rather than left as a dead link.
   (function () {
     var buy = document.getElementById("buy");
     fetch("upgrade.json").then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
-        if (d && d.url) { buy.href = d.url; buy.target = "_blank"; }
-      }).catch(function () {});
+        if (d && d.url) {
+          buy.href = d.url;
+          buy.target = "_blank";
+        } else {
+          buy.removeAttribute("href");
+          buy.classList.add("disabled");
+          buy.textContent = "Coming soon";
+          buy.setAttribute("aria-disabled", "true");
+        }
+      }).catch(function () {
+        buy.removeAttribute("href");
+        buy.classList.add("disabled");
+        buy.textContent = "Coming soon";
+      });
   })();
 </script>
 </body>

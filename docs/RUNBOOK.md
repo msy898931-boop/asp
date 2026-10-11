@@ -228,7 +228,9 @@ Related knobs: `ASTRA_FREE_LEVELS` (default 2), `ASTRA_PRO_LEVELS` (default 50),
 A Stripe Payment Link needs no server code and no secret: create it in the
 Stripe dashboard, point it at the hosted `pricing.html`, and paste the URL into
 `ASTRA_UPGRADE_URL`. Payment Links can collect the buyer's Telegram chat id as a
-custom field, so each purchase arrives with the id to activate.
+custom field, so each purchase arrives with the id to activate. Step-by-step
+copy for the Stripe product, the custom field, and the confirmation page is in
+**docs/SELLING.md**.
 
 Activate a purchase by granting Pro to that chat id — either set it in
 `ASTRA_PRO_CHATS` and redeploy, or, from an admin chat, run:

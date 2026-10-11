@@ -66,7 +66,8 @@ Pro, so dev and CI are unchanged. Related knobs: `ASTRA_FREE_LEVELS` (2),
 Stripe Payment Link (no server code, no secret). `mobile/pricing.html` is the
 plan page; the buy button reads its URL from `/upgrade.json`, which the mobile
 server fills from `ASTRA_UPGRADE_URL`. An admin grants Pro with
-`/grant <chat_id> pro`; users read their id with `/myid`. See RUNBOOK §11.
+`/grant <chat_id> pro`; users read their id with `/myid`. See RUNBOOK §11 for
+the mechanics and docs/SELLING.md for the Stripe product/custom-field copy.
 
 ## Windows .exe
 

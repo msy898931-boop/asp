@@ -67,6 +67,13 @@ list, and restarts the container unless stopped.
 - **Bot:** message it and send `/status` — it should answer with the live
   reading (mode, source, symbol).
 
+## Turning on the paid tier
+
+The free/pro gate stays dormant until `ASTRA_UPGRADE_URL` is set, so deploy
+first and sell later. To sell, create a Stripe Payment Link and set that one
+variable — see **docs/SELLING.md** for the exact product, custom field, and
+confirmation-page copy.
+
 ## Notes
 
 - The platform's own health check hits `/api/v1/health`, which only returns
