@@ -358,7 +358,7 @@ class CommandRouter:
     HELP = (
         "[ASTRA] الأوامر\n"
         "💰 /price - سعر الذهب الحالي\n"
-        "🔔 /level <سعر> [above|below|cross] - تنبيه عند اختراق مستوى\n"
+        "🔔 /level <سعر> [فوق|تحت|أي] - تنبيه عند اختراق مستوى\n"
         "📋 /levels - مستوياتك\n"
         "🗑 /clearlevels - حذف كل مستوياتك\n"
         "🔕 /subscribe - تشغيل التنبيهات\n"
