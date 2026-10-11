@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ASTRA — Plans</title>
-<meta name="description" content="Live gold price alerts and market state. No predictions, no signals.">
+<title>ASTRA — الأسعار</title>
+<meta name="description" content="تنبيهات سعر الذهب الحيّة وحالة السوق. بلا تنبؤات، بلا توصيات.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="pricing.css">
 </head>
 <body>
@@ -12,86 +15,111 @@
 
   <header class="head">
     <div class="brand">ASTRA</div>
-    <h1>Live gold alerts, honestly priced.</h1>
+    <h1>تنبيهات ذهب حيّة، بسعر صادق.</h1>
     <p class="lede">
-      Set a price, get told when it is crossed. That is the whole product.
-      No forecasts, no "signals", no claims we cannot prove.
+      حدّد سعرًا، ونخبرك عند اختراقه. هذا هو المنتج كله.
+      بلا تنبؤات، بلا «توصيات»، وبلا وعود لا نستطيع إثباتها.
     </p>
   </header>
 
   <section class="plans">
 
     <article class="plan">
-      <h2>Free</h2>
-      <p class="price">$0</p>
-      <p class="terms">forever</p>
+      <h2>مجاني</h2>
+      <p class="price">0<span> $</span></p>
+      <p class="terms">للأبد</p>
       <ul>
-        <li>Live XAUUSD price</li>
-        <li>2 price levels</li>
-        <li>Crossing alerts in Telegram</li>
-        <li>Market-state view</li>
+        <li>سعر الذهب الحي (XAUUSD)</li>
+        <li>مستويان سعريان</li>
+        <li>تنبيهات الاختراق على تلغرام</li>
+        <li>عرض حالة السوق</li>
       </ul>
-      <a class="cta ghost" href="/">Open the app</a>
+      <a class="cta ghost" href="/">افتح التطبيق</a>
     </article>
 
     <article class="plan featured">
       <div class="tag">Pro</div>
       <h2>Pro</h2>
-      <p class="price">$19<span>/mo</span></p>
-      <p class="terms">cancel anytime</p>
+      <p class="price">19<span> $/شهر</span></p>
+      <p class="terms">يمكنك الإلغاء في أي وقت</p>
       <ul>
-        <li>Everything in Free</li>
-        <li>Up to 50 price levels</li>
-        <li>Faster level checks</li>
-        <li>Push alert stream</li>
+        <li>كل ما في المجاني</li>
+        <li>حتى 50 مستوًى سعريًا</li>
+        <li>فحص أسرع للمستويات</li>
+        <li>تدفّق تنبيهات فوري</li>
       </ul>
-      <!-- Replace # with the Stripe Payment Link, then set ASTRA_UPGRADE_URL. -->
-      <a class="cta" id="buy" href="#" rel="noopener">Get Pro</a>
+      <!-- استبدل # برابط Stripe، ثم اضبط ASTRA_UPGRADE_URL. -->
+      <a class="cta" id="buy" href="#" rel="noopener">اشترك في Pro</a>
     </article>
 
   </section>
 
+  <section class="honest">
+    <h2>ما الذي يفعله ASTRA — وما لا يفعله</h2>
+    <div class="honest-grid">
+      <div>
+        <h3 class="yes">يفعله ✓</h3>
+        <ul>
+          <li>يراقب سعرًا تختاره أنت</li>
+          <li>يخبرك عند اختراق المستوى</li>
+          <li>يعرض حالة السوق الحيّة</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="no">لا يفعله ✗</h3>
+        <ul>
+          <li>لا يتنبّأ بالأسعار</li>
+          <li>لا يعطي توصيات شراء أو بيع</li>
+          <li>لا ينفّذ صفقات نيابة عنك</li>
+          <li>لا وعود بأرباح — لا ميزة مُثبَتة إحصائيًا</li>
+        </ul>
+      </div>
+    </div>
+    <p class="honest-note">
+      نقولها بصراحة: نموذج التحليل في ASTRA معايَر بدقة عالية، لكن قدرته
+      التمييزية قريبة من المصادفة (AUC ≈ 0.50). لذلك نبيعه كأداة تنبيه سعر —
+      مفيدة وصادقة — لا كنبوءة.
+    </p>
+  </section>
+
   <section class="how">
-    <h2>How to subscribe</h2>
+    <h2>كيف تشترك</h2>
     <ol>
-      <li>Open the Telegram bot and send <code>/myid</code>.</li>
-      <li>Tap <strong>Get Pro</strong>, pay, and paste your chat id at checkout.</li>
-      <li>You are activated within a few minutes. Send <code>/plan</code> to confirm.</li>
+      <li>افتح بوت تلغرام وأرسل <code>/myid</code>.</li>
+      <li>اضغط <strong>اشترك في Pro</strong>، وادفع، وألصق معرّف محادثتك عند الدفع.</li>
+      <li>يُفعَّل حسابك خلال دقائق. أرسل <code>/plan</code> للتأكد.</li>
     </ol>
   </section>
 
   <footer class="foot">
     <p>
-      ASTRA alerts you to price levels you choose. It does not predict prices and
-      does not place trades. Nothing here is financial advice. Past data quality
-      is not a promise about the future.
+      ASTRA ينبّهك للمستويات السعرية التي تختارها. لا يتنبّأ بالأسعار ولا ينفّذ
+      صفقات. لا شيء هنا نصيحة مالية. جودة البيانات السابقة ليست وعدًا بالمستقبل.
     </p>
-    <p><a href="/">Back to the app</a></p>
+    <p><a href="/">العودة إلى التطبيق</a></p>
   </footer>
 
 </main>
 <script>
-  // The buy button is fed by /upgrade.json, which the server fills from
-  // ASTRA_UPGRADE_URL. With no URL set the tool is not on sale yet, so the
-  // button is disabled rather than left as a dead link.
+  // زر الشراء يُغذّى من upgrade.json، الذي يملؤه الخادم من ASTRA_UPGRADE_URL.
+  // بلا رابط، الأداة ليست للبيع بعد، فيُعطَّل الزر بدل أن يبقى رابطًا ميتًا.
   (function () {
     var buy = document.getElementById("buy");
+    var off = function () {
+      buy.removeAttribute("href");
+      buy.classList.add("disabled");
+      buy.textContent = "قريبًا";
+      buy.setAttribute("aria-disabled", "true");
+    };
     fetch("upgrade.json").then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (d && d.url) {
           buy.href = d.url;
           buy.target = "_blank";
         } else {
-          buy.removeAttribute("href");
-          buy.classList.add("disabled");
-          buy.textContent = "Coming soon";
-          buy.setAttribute("aria-disabled", "true");
+          off();
         }
-      }).catch(function () {
-        buy.removeAttribute("href");
-        buy.classList.add("disabled");
-        buy.textContent = "Coming soon";
-      });
+      }).catch(off);
   })();
 </script>
 </body>

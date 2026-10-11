@@ -109,12 +109,18 @@ Buyers confirm with `/plan` (reads `pro`) and can set more price levels.
 
 ## 5. The plan page copy
 
-`mobile/pricing.html` already carries this; edit it if you change the price or
-wording. It shows Free vs Pro and a "How to subscribe" list, and the buy button
-reads its URL from `/upgrade.json`. Keep the footer disclaimer:
+`mobile/pricing.html` carries this and is written in **Arabic** (RTL) to match
+the bot and the product's market. Edit it if you change the price or wording. It
+shows Free vs Pro, an explicit **"what it does / what it does not do"** block,
+and a "How to subscribe" list, and the buy button reads its URL from
+`/upgrade.json`. Keep the footer disclaimer:
 
 > ASTRA alerts you to price levels you choose. It does not predict prices and
 > does not place trades. Nothing here is financial advice.
+
+The honesty block names the measured result on purpose — calibration is
+excellent but discrimination is near chance (AUC ≈ 0.50). Saying it up front is
+what makes the "price-alert tool, not a signal service" pitch credible.
 
 ## 6. What NOT to promise
 

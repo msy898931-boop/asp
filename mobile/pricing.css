@@ -35,6 +35,11 @@ body {
 .head h1 { font-size: clamp(24px, 5vw, 34px); margin: 0 0 12px; font-weight: 600; }
 .lede { color: var(--muted); max-width: 46ch; margin: 0 auto; font-size: 15px; }
 
+/* Right-to-left: the bullet dash sits on the right, and the Pro tag flips. */
+[dir="rtl"] .plan li { padding: 7px 22px 7px 0; }
+[dir="rtl"] .plan li::before { left: auto; right: 0; }
+[dir="rtl"] .tag { left: auto; right: 22px; }
+
 .plans {
   display: grid;
   grid-template-columns: 1fr;
@@ -80,6 +85,33 @@ body {
 .how h2 { font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
 .how ol { padding-left: 20px; }
 .how li { margin: 8px 0; font-size: 14px; }
+[dir="rtl"] .how ol { padding-left: 0; padding-right: 20px; }
+
+/* What it does / does not do — the honesty block, kept visually plain so it
+   reads as a statement of fact rather than a marketing panel. */
+.honest { margin-top: 44px; }
+.honest h2 { font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.honest-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 14px; }
+@media (min-width: 640px) { .honest-grid { grid-template-columns: 1fr 1fr; } }
+.honest-grid > div {
+  background: var(--ink-2);
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.honest h3 { margin: 0 0 10px; font-size: 14px; }
+.honest h3.yes { color: var(--gold); }
+.honest h3.no { color: var(--paper); }
+.honest ul { list-style: none; margin: 0; padding: 0; }
+.honest li { padding: 5px 0; font-size: 14px; border-bottom: 1px solid var(--edge); }
+.honest li:last-child { border-bottom: 0; }
+.honest-note {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  border-inline-start: 2px solid var(--gold);
+  padding-inline-start: 12px;
+}
 code {
   background: var(--ink-2); border: 1px solid var(--edge);
   padding: 1px 6px; border-radius: 6px; color: var(--gold);
