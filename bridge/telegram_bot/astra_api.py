@@ -13,6 +13,7 @@ import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
 DEFAULT_API_BASE = "http://127.0.0.1:8790/api/v1"
+BRIDGE_PORT = 8791   # the host's Python bridge port (see StartupCoordinator)
 _READ_TIMEOUT_SECONDS = 5.0
 
 
@@ -24,14 +25,23 @@ class AstraApi:
     """Read-only view over the ASTRA backend loopback API."""
 
     def __init__(self, base_url: str = DEFAULT_API_BASE,
-                 timeout: float = _READ_TIMEOUT_SECONDS) -> None:
+                 timeout: float = _READ_TIMEOUT_SECONDS,
+                 bridge_base: Optional[str] = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        # The bridge answers on the host's loopback bridge port (8791 by
+        # default), outside the /api/v1 prefix. Keep the API host but swap in
+        # the bridge port unless an explicit base is given.
+        if bridge_base is None:
+            from urllib.parse import urlsplit, urlunsplit
+            parts = urlsplit(self.base_url)
+            bridge_base = urlunsplit((parts.scheme, f"{parts.hostname}:{BRIDGE_PORT}",
+                                      "/v1", "", ""))
+        self.bridge_base = bridge_base.rstrip("/")
 
     # -- transport ----------------------------------------------------------
 
-    def _get(self, path: str) -> Dict[str, Any]:
-        url = f"{self.base_url}/{path.lstrip('/')}"
+    def _get_abs(self, url: str) -> Dict[str, Any]:
         try:
             with urllib.request.urlopen(url, timeout=self.timeout) as resp:
                 raw = resp.read()
@@ -43,6 +53,10 @@ class AstraApi:
             return json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:
             raise ApiError(f"malformed response from {url}: {exc}") from exc
+
+    def _get(self, path: str) -> Dict[str, Any]:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        return self._get_abs(url)
 
     @staticmethod
     def _data(envelope: Dict[str, Any]) -> Dict[str, Any]:
@@ -74,6 +88,28 @@ class AstraApi:
 
     def shadow_positions(self) -> Dict[str, Any]:
         return self._data(self._get("shadow/positions"))
+
+    # -- bridge (live candles) ---------------------------------------------
+
+    def candles(self, timeframe: str = "M15", limit: int = 2) -> Dict[str, Any]:
+        """Live candles straight from the MT5/python bridge."""
+        return self._get_abs(f"{self.bridge_base}/candles?tf={timeframe}&limit={limit}")
+
+    def last_price(self) -> Optional[float]:
+        """Most recent close, or None when the bridge has nothing usable."""
+        try:
+            env = self.candles()
+        except ApiError:
+            return None
+        payload = env.get("payload") if isinstance(env, dict) else None
+        bars = payload.get("bars") if isinstance(payload, dict) else None
+        if not isinstance(bars, list) or not bars:
+            return None
+        last = bars[-1]
+        try:
+            return float(last.get("close"))
+        except (TypeError, ValueError, AttributeError):
+            return None
 
     # -- composite health snapshot -----------------------------------------
 

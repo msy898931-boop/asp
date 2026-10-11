@@ -44,16 +44,29 @@ Frontend is Linux/Qt and Windows-only for the packaged `.exe`.
 export TELEGRAM_BOT_TOKEN=...   # @BotFather token
 export TELEGRAM_CHAT_ID=...     # default chat to notify
 ./bridge/telegram_bot/run_bot.sh          # backend + bot together
-python3 -m unittest discover -s bridge/telegram_bot   # 18 tests
+python3 bridge/telegram_bot/test_astra_bot.py       # 28 tests
+python3 bridge/telegram_bot/test_entitlements.py    # 17 tests
 ```
 
 `aura_backend_host` launches the bot as a **supervised sidecar** automatically
 when `TELEGRAM_BOT_TOKEN` is set (mirroring how it launches the MT5 bridge).
 Absence of a token is not an error.
 
-Commands: `/status` `/health` `/analysis` `/signal` `/bridge` `/subscribe`
-`/unsubscribe` `/help`. Push alerts fire on health/bridge/new-signal
-transitions (first reading is primed silently).
+Commands: `/price` `/level` `/levels` `/clearlevels` `/plan` `/myid` `/status`
+`/health` `/analysis` `/signal` `/bridge` `/subscribe` `/unsubscribe` `/help`.
+Push alerts fire on health/bridge/new-signal transitions (first reading is
+primed silently) and when a user's price level is crossed.
+
+### Selling the tool (tiers)
+
+`entitlements.py` + `price_levels.py` add a free/pro gate and price alerts. The
+gate is **dormant until `ASTRA_UPGRADE_URL` is set** — with no URL everyone is
+Pro, so dev and CI are unchanged. Related knobs: `ASTRA_FREE_LEVELS` (2),
+`ASTRA_PRO_LEVELS` (50), `ASTRA_PRO_CHATS` (always-Pro ids). Payment uses a
+Stripe Payment Link (no server code, no secret). `mobile/pricing.html` is the
+plan page; the buy button reads its URL from `/upgrade.json`, which the mobile
+server fills from `ASTRA_UPGRADE_URL`. An admin grants Pro with
+`/grant <chat_id> pro`; users read their id with `/myid`. See RUNBOOK §11.
 
 ## Windows .exe
 

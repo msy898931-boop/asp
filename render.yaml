@@ -24,6 +24,12 @@ services:
         sync: false          # set in the dashboard; never stored in git
       - key: TELEGRAM_CHAT_ID
         sync: false
+      - key: ASTRA_UPGRADE_URL
+        sync: false          # Stripe Payment Link; empty = gate off (all free)
+      - key: ASTRA_FREE_LEVELS
+        value: "2"
+      - key: ASTRA_PRO_LEVELS
+        value: "50"
     disk:
       name: astra-state
       mountPath: /root/.astra

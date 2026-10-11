@@ -208,3 +208,35 @@ python3 scripts/verify_baseline.py   # exits non-zero if docs/FINAL_REPORT.md dr
 `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are host secrets. `.env` is for a
 local Docker run and is not committed; `.env.example` shows the shape. The repo
 contains no secret values.
+
+## 11. Selling the tool (tiers, upgrade URL, granting Pro)
+
+The tool has two tiers. **Free** gives a live price and a small number of price
+levels; **Pro** gives more levels and the push-alert stream. When no upgrade URL
+is set, everyone is treated as Pro — the gate stays dormant so development and
+CI behave as before.
+
+Turn the gate on by setting one variable (no code change):
+
+```sh
+ASTRA_UPGRADE_URL=https://buy.stripe.com/...   # a Stripe Payment Link
+```
+
+Related knobs: `ASTRA_FREE_LEVELS` (default 2), `ASTRA_PRO_LEVELS` (default 50),
+`ASTRA_PRO_CHATS` (comma-separated chat ids that are always Pro).
+
+A Stripe Payment Link needs no server code and no secret: create it in the
+Stripe dashboard, point it at the hosted `pricing.html`, and paste the URL into
+`ASTRA_UPGRADE_URL`. Payment Links can collect the buyer's Telegram chat id as a
+custom field, so each purchase arrives with the id to activate.
+
+Activate a purchase by granting Pro to that chat id — either set it in
+`ASTRA_PRO_CHATS` and redeploy, or, from an admin chat, run:
+
+```
+/grant <chat_id> pro
+```
+
+Users learn their own id with `/myid`. Tier state lives in
+`entitlements.json` under the state dir; price levels live in
+`price_levels.json`.

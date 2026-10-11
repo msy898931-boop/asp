@@ -42,3 +42,8 @@ jobs:
 
       - name: Syntax-check the phone app
         run: node --check mobile/app.js
+
+      - name: Test the paid-tool layer (tiers + price levels)
+        run: |
+          python3 bridge/telegram_bot/test_entitlements.py
+          python3 bridge/telegram_bot/test_astra_bot.py

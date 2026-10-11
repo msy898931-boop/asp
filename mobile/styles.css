@@ -470,6 +470,15 @@ main { flex: 1; padding: 8px 14px 90px; }
 .apk-link:active { background: var(--ink-3); }
 /* Inside the installed app the APK is already on the phone — hide the link. */
 @media (display-mode: standalone) { .apk-link { display: none; } }
+.plans-link {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.plans-link:active { color: var(--gold); }
 
 /* ── light theme ────────────────────────────────────────────────────── */
 html[data-theme="light"] {

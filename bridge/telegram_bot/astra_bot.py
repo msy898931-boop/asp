@@ -31,6 +31,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from astra_api import ApiError, AstraApi
+from entitlements import Entitlements, from_env as entitlements_from_env
+from price_levels import (DIR_ABOVE, DIR_BELOW, DIR_CROSS, Level, LevelStore,
+                          side_of)
 
 TELEGRAM_API = "https://api.telegram.org"
 _POLL_TIMEOUT_SECONDS = 25
@@ -269,23 +272,76 @@ class AlertEngine:
 
 class CommandRouter:
     def __init__(self, api: AstraApi, subs: Subscriptions,
-                 default_chat: Optional[str]) -> None:
+                 default_chat: Optional[str],
+                 levels: Optional[LevelStore] = None,
+                 ent: Optional[Entitlements] = None) -> None:
         self.api = api
         self.subs = subs
         self.default_chat = default_chat
+        self.levels = levels
+        self.ent = ent
 
     HELP = (
         "[ASTRA] Commands\n"
+        "/price - current gold price\n"
+        "/level <price> [above|below|cross] - alert when price crosses it\n"
+        "/levels - your price levels\n"
+        "/clearlevels - remove all your levels\n"
+        "/subscribe - receive push alerts\n"
+        "/unsubscribe - stop push alerts\n"
+        "/plan - your access and limits\n"
         "/status - backend health, mode, bridge\n"
         "/health - health detail\n"
         "/analysis - latest analysis\n"
         "/signal - latest signal\n"
         "/bridge - MT5 bridge status\n"
-        "/subscribe - receive push alerts\n"
-        "/unsubscribe - stop push alerts\n"
+        "/myid - show your chat id (needed to activate Pro)\n"
         "/help - this list\n\n"
-        "Shadow mode: decision support only, never a trading signal."
+        "Price alerts and market state only. No predictions, no trading signal."
     )
+
+    def _gated(self, chat_id: str) -> Optional[str]:
+        """Return an upsell line when the chat may not use paid features."""
+        if self.ent is None or self.ent.is_pro(chat_id):
+            return None
+        return self.ent.upgrade_line()
+
+    def _add_level(self, chat_id: str, text: str) -> str:
+        parts = text.split()
+        if len(parts) < 2:
+            return "Usage: /level <price> [above|below|cross]\nExample: /level 4180 above"
+        try:
+            price = float(parts[1].replace(",", ""))
+        except ValueError:
+            return f"'{parts[1]}' is not a number. Example: /level 4180 above"
+        direction = parts[2].lower() if len(parts) > 2 else DIR_CROSS
+        if direction not in (DIR_ABOVE, DIR_BELOW, DIR_CROSS):
+            return "Direction must be above, below, or cross."
+
+        gate = self._gated(chat_id)
+        if gate and self.levels is not None:
+            cap = self.ent.free_levels if self.ent else 0
+            if self.levels.count(chat_id) >= cap:
+                return (f"Free plan allows {cap} price levels. "
+                        f"Remove one with /clearlevels, or:\n{gate}")
+
+        assert self.levels is not None
+        self.levels.add(chat_id, price, direction)
+        n = self.levels.count(chat_id)
+        return (f"Level set: {price:g} ({direction}). "
+                f"Alert fires once when crossed. You have {n} level(s).")
+
+    def _list_levels(self, chat_id: str) -> str:
+        if self.levels is None:
+            return "Price levels are not available."
+        items = self.levels.list(chat_id)
+        if not items:
+            return "No price levels yet. Add one: /level 4180 above"
+        lines = ["[ASTRA] Your price levels"]
+        for lv in items:
+            state = "armed" if not lv.fired else "fired"
+            lines.append(f"  {lv.price:g} ({lv.direction}) - {state}")
+        return "\n".join(lines)
 
     def handle(self, chat_id: str, text: str) -> str:
         cmd = text.strip().split()[0].lower() if text.strip() else ""
@@ -294,6 +350,41 @@ class CommandRouter:
         try:
             if cmd in ("/start", "/help"):
                 return self.HELP
+            if cmd == "/myid":
+                return (f"Your chat id: {chat_id}\n"
+                        "Send this with your payment to activate Pro.")
+            if cmd == "/grant" and self.ent is not None and self.ent.is_admin(chat_id):
+                parts = text.split()
+                if len(parts) < 3:
+                    return "Usage: /grant <chat_id> <pro|free>"
+                target, tier = parts[1], parts[2].lower()
+                try:
+                    self.ent.set_tier(target, tier)
+                except ValueError:
+                    return "Tier must be pro or free."
+                return f"{target} is now {tier}."
+            if cmd == "/plan":
+                if self.ent is None:
+                    return "Plan: (single tier)"
+                tier = self.ent.tier(chat_id)
+                cap = self.ent.max_levels(chat_id)
+                lines = [f"[ASTRA] Plan: {tier}",
+                         f"Price levels: up to {cap}"]
+                if not self.ent.is_pro(chat_id):
+                    lines.append(self.ent.upgrade_line())
+                return "\n".join(l for l in lines if l)
+            if cmd == "/price":
+                price = self.api.last_price()
+                if price is None:
+                    return "[ASTRA] Price\nNo live price available right now."
+                return f"[ASTRA] XAUUSD {price:,.2f}"
+            if cmd == "/level":
+                return self._add_level(chat_id, text)
+            if cmd == "/levels":
+                return self._list_levels(chat_id)
+            if cmd == "/clearlevels":
+                n = self.levels.clear(chat_id) if self.levels else 0
+                return f"Cleared {n} level(s)."
             if cmd == "/status":
                 return format_status(self.api.snapshot())
             if cmd == "/health":
@@ -306,6 +397,10 @@ class CommandRouter:
             if cmd == "/bridge":
                 return format_bridge(self.api.bridge_status())
             if cmd == "/subscribe":
+                gate = self._gated(chat_id)
+                if gate:
+                    return ("Push alerts are part of Pro. Your price levels still "
+                            "work with /levels.\n" + gate)
                 self.subs.add(chat_id)
                 return "[ASTRA] Subscribed. You will receive state-change alerts."
             if cmd == "/unsubscribe":
@@ -355,7 +450,8 @@ def poll_updates(client: TelegramClient, router: CommandRouter) -> None:
 
 
 def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
-                    interval: int) -> None:
+                    interval: int, levels: Optional[LevelStore] = None,
+                    ent: Optional[Entitlements] = None) -> None:
     engine = AlertEngine(api)
     engine.prime()
     while not _stop.is_set():
@@ -366,6 +462,29 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                 _broadcast(client, subs, alert)
         except Exception as exc:  # never let the monitor thread die silently
             print(f"[warn] monitor: {exc}", file=sys.stderr)
+        if levels is not None:
+            try:
+                _check_levels(api, levels, ent, client)
+            except Exception as exc:
+                print(f"[warn] levels: {exc}", file=sys.stderr)
+
+
+def _check_levels(api: AstraApi, levels: LevelStore,
+                  ent: Optional[Entitlements], client: TelegramClient) -> None:
+    """Poll the live price once and alert every chat whose level was crossed."""
+    price = api.last_price()
+    if price is None:
+        return
+    for chat_id in levels.chats():
+        for lv in levels.observe(chat_id, price):
+            arrow = "up through" if lv.last_side == "above" else "down through"
+            line = (f"[ASTRA] Price alert: XAUUSD moved {arrow} {lv.price:g}\n"
+                    f"Now {price:,.2f}. This level is done; add another with /level.")
+            try:
+                client.send_message(chat_id, line)
+            except RuntimeError as exc:
+                print(f"[warn] level alert to {chat_id} failed: {exc}",
+                      file=sys.stderr)
 
 
 def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
@@ -393,17 +512,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     client = TelegramClient(args.token)
     api = AstraApi(args.api)
     subs = Subscriptions(Path(args.state))
+    state_dir = Path(args.state).parent
+    levels = LevelStore(state_dir / "price_levels.json")
+    ent = entitlements_from_env(state_dir)
     # The default chat is always subscribed so the operator gets alerts without
     # having to send /subscribe first.
     if args.chat:
         subs.add(args.chat)
-    router = CommandRouter(api, subs, args.chat or None)
+    router = CommandRouter(api, subs, args.chat or None, levels=levels, ent=ent)
 
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         _signal.signal(sig, lambda *_: _stop.set())
 
-    print(f"[OK] ASTRA bot online | api={args.api} | subscribers={len(subs.all())}",
-          flush=True)
+    print(f"[OK] ASTRA bot online | api={args.api} | subscribers={len(subs.all())}"
+          f" | selling={ent.selling}", flush=True)
     if args.chat:
         try:
             client.send_message(args.chat, "[ASTRA] Bot online. Send /help.")
@@ -411,7 +533,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"[warn] startup message failed: {exc}", file=sys.stderr)
 
     monitor = threading.Thread(target=monitor_backend,
-                               args=(api, subs, client, args.interval), daemon=True)
+                               args=(api, subs, client, args.interval, levels, ent),
+                               daemon=True)
     monitor.start()
     try:
         poll_updates(client, router)

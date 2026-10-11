@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ASTRA — Plans</title>
+<meta name="description" content="Live gold price alerts and market state. No predictions, no signals.">
+<link rel="stylesheet" href="pricing.css">
+</head>
+<body>
+<main class="wrap">
+
+  <header class="head">
+    <div class="brand">ASTRA</div>
+    <h1>Live gold alerts, honestly priced.</h1>
+    <p class="lede">
+      Set a price, get told when it is crossed. That is the whole product.
+      No forecasts, no "signals", no claims we cannot prove.
+    </p>
+  </header>
+
+  <section class="plans">
+
+    <article class="plan">
+      <h2>Free</h2>
+      <p class="price">$0</p>
+      <p class="terms">forever</p>
+      <ul>
+        <li>Live XAUUSD price</li>
+        <li>2 price levels</li>
+        <li>Crossing alerts in Telegram</li>
+        <li>Market-state view</li>
+      </ul>
+      <a class="cta ghost" href="/">Open the app</a>
+    </article>
+
+    <article class="plan featured">
+      <div class="tag">Pro</div>
+      <h2>Pro</h2>
+      <p class="price">$19<span>/mo</span></p>
+      <p class="terms">cancel anytime</p>
+      <ul>
+        <li>Everything in Free</li>
+        <li>Up to 50 price levels</li>
+        <li>Faster level checks</li>
+        <li>Push alert stream</li>
+      </ul>
+      <!-- Replace # with the Stripe Payment Link, then set ASTRA_UPGRADE_URL. -->
+      <a class="cta" id="buy" href="#" rel="noopener">Get Pro</a>
+    </article>
+
+  </section>
+
+  <section class="how">
+    <h2>How to subscribe</h2>
+    <ol>
+      <li>Open the Telegram bot and send <code>/myid</code>.</li>
+      <li>Tap <strong>Get Pro</strong>, pay, and paste your chat id at checkout.</li>
+      <li>You are activated within a few minutes. Send <code>/plan</code> to confirm.</li>
+    </ol>
+  </section>
+
+  <footer class="foot">
+    <p>
+      ASTRA alerts you to price levels you choose. It does not predict prices and
+      does not place trades. Nothing here is financial advice. Past data quality
+      is not a promise about the future.
+    </p>
+    <p><a href="/">Back to the app</a></p>
+  </footer>
+
+</main>
+<script>
+  // If the server injected a real upgrade URL, point the button at it.
+  (function () {
+    var buy = document.getElementById("buy");
+    fetch("upgrade.json").then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.url) { buy.href = d.url; buy.target = "_blank"; }
+      }).catch(function () {});
+  })();
+</script>
+</body>
+</html>

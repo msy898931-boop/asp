@@ -17,6 +17,7 @@ Run: python3 mobile/serve_mobile.py --port 12000
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import urllib.error
@@ -63,6 +64,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/astra.apk":
             self._apk()
+        elif path == "/upgrade.json":
+            self._upgrade_json()
         elif path.startswith("/api/v1/"):
             self._proxy(self.api_base + path[len("/api/v1"):], self.path)
         elif path.startswith("/bridge/"):
@@ -86,6 +89,18 @@ class Handler(BaseHTTPRequestHandler):
             body = fh.read()
         ctype = _CONTENT_TYPES.get(ext, "application/octet-stream")
         self._send(200, body, ctype)
+
+    # -- upgrade link -------------------------------------------------------
+
+    def _upgrade_json(self) -> None:
+        """Expose the configured upgrade URL to the pricing page.
+
+        The URL is not a secret, so serving it as JSON keeps the page static
+        while letting one env var (ASTRA_UPGRADE_URL) drive the buy button.
+        """
+        url = os.environ.get("ASTRA_UPGRADE_URL", "").strip()
+        body = json.dumps({"url": url}).encode("utf-8")
+        self._send(200, body, "application/json; charset=utf-8")
 
     # -- APK download -------------------------------------------------------
 

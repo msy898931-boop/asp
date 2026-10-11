@@ -68,6 +68,10 @@ class FakeApi(AstraApi):
         self._maybe_raise()
         return {"available": False, "reason": "no decisions recorded yet"}
 
+    def last_price(self):
+        self._maybe_raise()
+        return 4181.87
+
 
 class FakeClient:
     def __init__(self):
@@ -207,6 +211,106 @@ class BroadcastTests(unittest.TestCase):
             client = FakeClient()
             bot._broadcast(client, subs, "hello")
             self.assertEqual(sorted(c for c, _ in client.sent), ["1", "2"])
+
+
+class PaidToolTests(unittest.TestCase):
+    """The free/pro gate and price-level commands, end to end through the router."""
+
+    def _router(self, ent=None, chat="9"):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        subs = bot.Subscriptions(Path(d.name) / "s.json")
+        levels = bot.LevelStore(Path(d.name) / "levels.json")
+        return bot.CommandRouter(api, subs, chat, levels=levels, ent=ent), subs, levels
+
+    def test_price_command(self):
+        router, _, _ = self._router()
+        out = router.handle("9", "/price")
+        self.assertIn("4,181.87", out)
+
+    def test_level_add_and_list(self):
+        router, _, levels = self._router()
+        router.handle("9", "/level 4180 above")
+        self.assertEqual(levels.count("9"), 1)
+        self.assertIn("4180", router.handle("9", "/levels"))
+
+    def test_level_bad_input(self):
+        router, _, _ = self._router()
+        self.assertIn("not a number", router.handle("9", "/level abc"))
+
+    def test_free_tier_level_cap(self):
+        from entitlements import Entitlements
+        with tempfile.TemporaryDirectory() as d:
+            ent = Entitlements(Path(d) / "e.json", upgrade_url="https://buy/x",
+                               free_levels=1)
+            router, _, levels = self._router(ent=ent)
+            router.handle("9", "/level 4180")
+            out = router.handle("9", "/level 4200")
+            self.assertIn("Free plan allows 1", out)
+            self.assertIn("https://buy/x", out)
+            self.assertEqual(levels.count("9"), 1)
+
+    def test_pro_tier_no_cap(self):
+        from entitlements import Entitlements
+        with tempfile.TemporaryDirectory() as d:
+            ent = Entitlements(Path(d) / "e.json", upgrade_url="https://buy/x",
+                               free_levels=1)
+            ent.grant_pro("9")
+            router, _, levels = self._router(ent=ent)
+            router.handle("9", "/level 4180")
+            router.handle("9", "/level 4200")
+            self.assertEqual(levels.count("9"), 2)
+
+    def test_free_subscribe_is_gated(self):
+        from entitlements import Entitlements
+        with tempfile.TemporaryDirectory() as d:
+            ent = Entitlements(Path(d) / "e.json", upgrade_url="https://buy/x")
+            router, subs, _ = self._router(ent=ent)
+            out = router.handle("9", "/subscribe")
+            self.assertIn("Pro", out)
+            self.assertNotIn("9", subs.all())
+
+    def test_myid(self):
+        router, _, _ = self._router()
+        self.assertIn("9", router.handle("9", "/myid"))
+
+    def test_plan_free_shows_upgrade(self):
+        from entitlements import Entitlements
+        with tempfile.TemporaryDirectory() as d:
+            ent = Entitlements(Path(d) / "e.json", upgrade_url="https://buy/x")
+            router, _, _ = self._router(ent=ent)
+            out = router.handle("9", "/plan")
+            self.assertIn("free", out)
+            self.assertIn("https://buy/x", out)
+
+    def test_grant_only_for_admin(self):
+        from entitlements import Entitlements
+        with tempfile.TemporaryDirectory() as d:
+            ent = Entitlements(Path(d) / "e.json", upgrade_url="https://buy/x",
+                               admin_chats=["1"])
+            router, _, _ = self._router(ent=ent)
+            # Non-admin cannot grant.
+            router.handle("9", "/grant 55 pro")
+            self.assertFalse(ent.is_pro("55"))
+            # Admin can.
+            router.handle("1", "/grant 55 pro")
+            self.assertTrue(ent.is_pro("55"))
+
+    def test_level_alert_fires_once(self):
+        router, _, levels = self._router()
+        router.handle("9", "/level 4180 above")
+        client = FakeClient()
+        router.api.last_price = lambda: 4170.0   # start below the level
+        bot._check_levels(router.api, levels, None, client)
+        self.assertEqual(client.sent, [])        # first look only learns the side
+        router.api.last_price = lambda: 4181.0   # now rise through it
+        bot._check_levels(router.api, levels, None, client)
+        self.assertEqual(len(client.sent), 1)
+        self.assertIn("up through", client.sent[0][1])
+        # One-shot: no repeat.
+        bot._check_levels(router.api, levels, None, client)
+        self.assertEqual(len(client.sent), 1)
 
 
 if __name__ == "__main__":

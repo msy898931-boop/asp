@@ -57,6 +57,7 @@ const STRINGS = {
     add: "Add", added: "Added level",
     crossed_above: "crossed above", crossed_below: "crossed below",
     apk: "Download the Android app (.apk)",
+    plans: "Plans & pricing",
     overview: "Overview", data: "Data",
   },
   ar: {
@@ -100,6 +101,7 @@ const STRINGS = {
     add: "إضافة", added: "أُضيف المستوى",
     crossed_above: "اخترق صعودًا", crossed_below: "اخترق هبوطًا",
     apk: "حمّل تطبيق أندرويد (.apk)",
+    plans: "الخطط والأسعار",
     overview: "نظرة عامة", data: "البيانات",
   },
 };

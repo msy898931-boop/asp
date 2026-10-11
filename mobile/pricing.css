@@ -1,0 +1,88 @@
+/* ASTRA pricing — same instrument-panel language as the app: deep ink field,
+   engraved gold, monospace telemetry. One column on a phone, two on desktop. */
+
+:root {
+  --ink: #0B0E13;
+  --ink-2: #12161E;
+  --edge: #232B36;
+  --gold: #D6A53C;
+  --paper: #ECE6D8;
+  --muted: #7C8794;
+  --mono: "IBM Plex Mono", "IBM Plex Sans Arabic", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 880px; margin: 0 auto; padding: 40px 20px 64px; }
+
+.head { text-align: center; margin-bottom: 40px; }
+.brand {
+  color: var(--gold);
+  letter-spacing: 0.42em;
+  font-size: 13px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.head h1 { font-size: clamp(24px, 5vw, 34px); margin: 0 0 12px; font-weight: 600; }
+.lede { color: var(--muted); max-width: 46ch; margin: 0 auto; font-size: 15px; }
+
+.plans {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+@media (min-width: 640px) { .plans { grid-template-columns: 1fr 1fr; } }
+
+.plan {
+  position: relative;
+  background: var(--ink-2);
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  padding: 26px 22px;
+  display: flex;
+  flex-direction: column;
+}
+.plan.featured { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(214,165,60,0.25); }
+.tag {
+  position: absolute; top: -11px; left: 22px;
+  background: var(--gold); color: var(--ink);
+  font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 999px;
+}
+.plan h2 { margin: 0 0 8px; font-size: 15px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.price { font-size: 40px; margin: 0; color: var(--paper); }
+.price span { font-size: 16px; color: var(--muted); }
+.terms { color: var(--muted); font-size: 13px; margin: 4px 0 18px; }
+
+.plan ul { list-style: none; margin: 0 0 22px; padding: 0; flex: 1; }
+.plan li { padding: 7px 0 7px 22px; position: relative; font-size: 14px; border-bottom: 1px solid var(--edge); }
+.plan li::before { content: "—"; position: absolute; left: 0; color: var(--gold); }
+
+.cta {
+  display: block; text-align: center; text-decoration: none;
+  background: var(--gold); color: var(--ink);
+  padding: 13px; border-radius: 10px; font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.cta.ghost { background: transparent; color: var(--paper); border: 1px solid var(--edge); }
+
+.how { margin-top: 44px; }
+.how h2 { font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.how ol { padding-left: 20px; }
+.how li { margin: 8px 0; font-size: 14px; }
+code {
+  background: var(--ink-2); border: 1px solid var(--edge);
+  padding: 1px 6px; border-radius: 6px; color: var(--gold);
+}
+
+.foot { margin-top: 48px; border-top: 1px solid var(--edge); padding-top: 20px; color: var(--muted); font-size: 12.5px; }
+.foot a { color: var(--gold); }
