@@ -41,6 +41,60 @@ _SEND_TIMEOUT_SECONDS = 10
 
 _stop = threading.Event()
 
+# ── the user-facing surface (Arabic) ────────────────────────────────────────
+# The reply keyboard the user taps. Each label maps to a command token, and the
+# router understands the label as well as the token, so a tap works like typing.
+REPLY_KEYBOARD: List[List[str]] = [
+    ["💰 سعر الذهب", "📊 حالة السوق"],
+    ["🔔 مستوى جديد", "📋 مستوياتي"],
+    ["🗑 مسح المستويات", "⭐ خطتي"],
+    ["❓ مساعدة"],
+]
+
+BUTTON_COMMANDS: Dict[str, str] = {
+    "💰 سعر الذهب": "/price",
+    "📊 حالة السوق": "/status",
+    "🔔 مستوى جديد": "/level",
+    "📋 مستوياتي": "/levels",
+    "🗑 مسح المستويات": "/clearlevels",
+    "⭐ خطتي": "/plan",
+    "❓ مساعدة": "/help",
+}
+
+# Registered with Telegram on startup, so the menu button lists the real
+# commands. This replaces whatever was set by hand in BotFather.
+BOT_COMMANDS: List[tuple] = [
+    ("/start", "بدء الاستخدام والقائمة"),
+    ("/price", "سعر الذهب الحي"),
+    ("/level", "إضافة مستوى سعري للتنبيه"),
+    ("/levels", "مستوياتي وحالتها"),
+    ("/clearlevels", "حذف كل مستوياتي"),
+    ("/status", "حالة النظام والوضع"),
+    ("/plan", "خطتي وحدودي"),
+    ("/myid", "معرّف محادثتي"),
+    ("/subscribe", "تشغيل التنبيهات"),
+    ("/unsubscribe", "إيقاف التنبيهات"),
+    ("/help", "المساعدة"),
+]
+
+# Commands whose reply should also re-show the keyboard.
+_SHOW_KEYBOARD = ("/start", "/help", "/menu")
+
+# Arabic direction words map to the stored English tokens.
+_DIRECTION_ALIASES: Dict[str, str] = {
+    "فوق": DIR_ABOVE, "أعلى": DIR_ABOVE, "above": DIR_ABOVE,
+    "تحت": DIR_BELOW, "أسفل": DIR_BELOW, "below": DIR_BELOW,
+    "أي": DIR_CROSS, "اي": DIR_CROSS, "cross": DIR_CROSS,
+}
+
+_DIRECTION_AR: Dict[str, str] = {
+    DIR_ABOVE: "فوق", DIR_BELOW: "تحت", DIR_CROSS: "أي اتجاه",
+}
+
+
+def _dir_ar(direction: str) -> str:
+    return _DIRECTION_AR.get(direction, direction)
+
 
 # ───────────────────────────── Telegram client ──────────────────────────────
 
@@ -70,9 +124,29 @@ class TelegramClient:
             raise RuntimeError(f"telegram {method} error: {body.get('description')}")
         return body
 
-    def send_message(self, chat_id: str, text: str) -> None:
-        self._call("sendMessage",
-                   {"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+    def send_message(self, chat_id: str, text: str,
+                     keyboard: bool = False) -> None:
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id, "text": text, "disable_web_page_preview": True,
+        }
+        if keyboard:
+            payload["reply_markup"] = {
+                "keyboard": [[{"text": label} for label in row]
+                             for row in REPLY_KEYBOARD],
+                "resize_keyboard": True,
+                "is_persistent": True,
+            }
+        self._call("sendMessage", payload, _SEND_TIMEOUT_SECONDS)
+
+    def set_my_commands(self) -> None:
+        """Register the command menu. Overrides anything set in BotFather."""
+        payload = {"commands": [{"command": c, "description": d}
+                                for c, d in BOT_COMMANDS]}
+        self._call("setMyCommands", payload, _SEND_TIMEOUT_SECONDS)
+
+    def set_menu_button(self) -> None:
+        """Make the menu button open the command list (default: all chats)."""
+        self._call("setChatMenuButton", {"menu_button": {"type": "commands"}},
                    _SEND_TIMEOUT_SECONDS)
 
     def get_updates(self, offset: Optional[int]) -> List[Dict[str, Any]]:
@@ -133,7 +207,7 @@ class Subscriptions:
 
 
 def _yn(value: Any) -> str:
-    return "yes" if value else "no"
+    return "نعم" if value else "لا"
 
 
 def format_status(snap: Dict[str, Any]) -> str:
@@ -142,27 +216,27 @@ def format_status(snap: Dict[str, Any]) -> str:
     bridge = snap.get("bridge", {})
 
     def err(d: Dict[str, Any]) -> str:
-        return f"unavailable ({d['_error']})" if "_error" in d else ""
+        return f"غير متاح ({d['_error']})" if "_error" in d else ""
 
-    lines = ["[ASTRA] Status"]
+    lines = ["[ASTRA] الحالة"]
     if "_error" in health:
-        lines.append(f"Backend: {err(health)}")
+        lines.append(f"الخادم: {err(health)}")
     else:
-        lines.append(f"Health: {health.get('aggregate', 'UNKNOWN')} "
-                     f"(decision-grade data: {_yn(health.get('decision_grade_data'))})")
+        lines.append(f"الصحة: {health.get('aggregate', 'UNKNOWN')} "
+                     f"(بيانات موثوقة: {_yn(health.get('decision_grade_data'))})")
     if "_error" not in system:
-        lines.append(f"Mode: {system.get('mode', 'UNKNOWN')} "
-                     f"(shadow only: {_yn(system.get('shadow_only'))})")
-        lines.append(f"Startup: {system.get('startup_stage', 'UNKNOWN')} "
-                     f"(ready: {_yn(system.get('ready'))})")
+        lines.append(f"الوضع: {system.get('mode', 'UNKNOWN')} "
+                     f"(ظل فقط: {_yn(system.get('shadow_only'))})")
+        lines.append(f"الإقلاع: {system.get('startup_stage', 'UNKNOWN')} "
+                     f"(جاهز: {_yn(system.get('ready'))})")
     if "_error" not in bridge:
-        symbol = bridge.get("resolved_symbol") or "(none)"
-        lines.append(f"MT5 bridge: {bridge.get('bridge_process_state', 'UNKNOWN')} "
-                     f"(mt5 ready: {_yn(bridge.get('mt5_ready'))}, symbol: {symbol})")
+        symbol = bridge.get("resolved_symbol") or "(لا شيء)"
+        lines.append(f"جسر MT5: {bridge.get('bridge_process_state', 'UNKNOWN')} "
+                     f"(MT5 جاهز: {_yn(bridge.get('mt5_ready'))}, الرمز: {symbol})")
         broker = bridge.get("broker") or ""
         if broker:
-            lines.append(f"Source: {broker}")
-    lines.append("Shadow mode. Not a trading signal.")
+            lines.append(f"المصدر: {broker}")
+    lines.append("وضع الظل. ليست إشارة تداول.")
     return "\n".join(lines)
 
 
@@ -170,42 +244,42 @@ def format_analysis(data: Dict[str, Any]) -> str:
     signal = data.get("signal", {}) or {}
     context = data.get("context", {}) or {}
     if not data.get("timestamp"):
-        return ("[ASTRA] Analysis\nNo decision recorded yet "
-                "(waiting for decision-grade data).")
+        return ("[ASTRA] التحليل\nلا قرار مسجّل بعد "
+                "(بانتظار بيانات موثوقة).")
     lines = [
-        "[ASTRA] Analysis",
-        f"Direction: {signal.get('direction', 'NONE')}",
-        f"Regime: {context.get('regime', 'UNKNOWN')} "
+        "[ASTRA] التحليل",
+        f"الاتجاه: {signal.get('direction', 'NONE')}",
+        f"النمط: {context.get('regime', 'UNKNOWN')} "
         f"(H4 {context.get('h4_bias', 'UNKNOWN')}, M15 {context.get('m15_trigger', 'UNKNOWN')})",
     ]
     score = signal.get("score")
     if score is not None:
-        lines.append(f"Score: {score}")
+        lines.append(f"الدرجة: {score}")
     prob = signal.get("probability")
     if prob is not None:
-        lines.append(f"Probability: {prob} (calibrated: {_yn(signal.get('probability_calibrated'))})")
-    lines.append("Decision support only. Not financial advice.")
+        lines.append(f"الاحتمال: {prob} (مُعاير: {_yn(signal.get('probability_calibrated'))})")
+    lines.append("دعم قرار فقط. ليست نصيحة مالية.")
     return "\n".join(lines)
 
 
 def format_signal(data: Dict[str, Any]) -> str:
     if not data.get("available", True):
-        return ("[ASTRA] Signals\nNone available: "
-                f"{data.get('reason', 'no decisions recorded yet')}.")
-    return ("[ASTRA] Latest signal\n" + json.dumps(data, indent=2, ensure_ascii=False))
+        return ("[ASTRA] الإشارات\nلا يوجد: "
+                f"{data.get('reason', 'لا قرارات مسجّلة بعد')}.")
+    return ("[ASTRA] آخر إشارة\n" + json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def format_bridge(data: Dict[str, Any]) -> str:
     broker = data.get("broker") or ""
     lines = [
-        "[ASTRA] MT5 bridge",
-        f"Process: {data.get('bridge_process_state', 'UNKNOWN')}",
-        f"MT5 ready: {_yn(data.get('mt5_ready'))}",
-        f"Symbol: {data.get('resolved_symbol') or '(none)'}",
+        "[ASTRA] جسر MT5",
+        f"العملية: {data.get('bridge_process_state', 'UNKNOWN')}",
+        f"MT5 جاهز: {_yn(data.get('mt5_ready'))}",
+        f"الرمز: {data.get('resolved_symbol') or '(لا شيء)'}",
     ]
     if broker:
-        lines.append(f"Source: {broker}")
-    lines.append(f"Last error: {data.get('last_error') or '(none)'}")
+        lines.append(f"المصدر: {broker}")
+    lines.append(f"آخر خطأ: {data.get('last_error') or '(لا شيء)'}")
     return "\n".join(lines)
 
 
@@ -247,15 +321,15 @@ class AlertEngine:
         if h and h != self._last_health:
             if emit and self._last_health is not None:
                 alerts.append(
-                    f"[ASTRA] Health changed: {self._last_health} -> {h} "
-                    f"(decision-grade data: {_yn(health.get('decision_grade_data'))})")
+                    f"[ASTRA] تغيّرت الصحة: {self._last_health} ← {h} "
+                    f"(بيانات موثوقة: {_yn(health.get('decision_grade_data'))})")
             self._last_health = h
 
         b = str(bridge.get("bridge_process_state", "")) or None
         if b and b != self._last_bridge:
             if emit and self._last_bridge is not None:
-                alerts.append(f"[ASTRA] MT5 bridge: {self._last_bridge} -> {b} "
-                              f"(mt5 ready: {_yn(bridge.get('mt5_ready'))})")
+                alerts.append(f"[ASTRA] جسر MT5: {self._last_bridge} ← {b} "
+                              f"(MT5 جاهز: {_yn(bridge.get('mt5_ready'))})")
             self._last_bridge = b
 
         ts = analysis.get("timestamp")
@@ -282,22 +356,21 @@ class CommandRouter:
         self.ent = ent
 
     HELP = (
-        "[ASTRA] Commands\n"
-        "/price - current gold price\n"
-        "/level <price> [above|below|cross] - alert when price crosses it\n"
-        "/levels - your price levels\n"
-        "/clearlevels - remove all your levels\n"
-        "/subscribe - receive push alerts\n"
-        "/unsubscribe - stop push alerts\n"
-        "/plan - your access and limits\n"
-        "/status - backend health, mode, bridge\n"
-        "/health - health detail\n"
-        "/analysis - latest analysis\n"
-        "/signal - latest signal\n"
-        "/bridge - MT5 bridge status\n"
-        "/myid - show your chat id (needed to activate Pro)\n"
-        "/help - this list\n\n"
-        "Price alerts and market state only. No predictions, no trading signal."
+        "[ASTRA] الأوامر\n"
+        "💰 /price - سعر الذهب الحالي\n"
+        "🔔 /level <سعر> [above|below|cross] - تنبيه عند اختراق مستوى\n"
+        "📋 /levels - مستوياتك\n"
+        "🗑 /clearlevels - حذف كل مستوياتك\n"
+        "🔕 /subscribe - تشغيل التنبيهات\n"
+        "🔔 /unsubscribe - إيقاف التنبيهات\n"
+        "⭐ /plan - خطتك وحدودها\n"
+        "📊 /status - حالة النظام والوضع\n"
+        "🩺 /health - تفاصيل الصحة\n"
+        "📈 /analysis - آخر تحليل\n"
+        "📶 /bridge - حالة جسر MT5\n"
+        "🆔 /myid - معرّف محادثتك (لتفعيل Pro)\n"
+        "❓ /help - هذه القائمة\n\n"
+        "تنبيهات سعرية وحالة السوق فقط. لا تنبؤات ولا إشارات تداول."
     )
 
     def _gated(self, chat_id: str) -> Optional[str]:
@@ -309,86 +382,95 @@ class CommandRouter:
     def _add_level(self, chat_id: str, text: str) -> str:
         parts = text.split()
         if len(parts) < 2:
-            return "Usage: /level <price> [above|below|cross]\nExample: /level 4180 above"
+            return ("الصيغة: /level <السعر> [فوق|تحت|أي]\n"
+                    "مثال: /level 4180 فوق")
         try:
             price = float(parts[1].replace(",", ""))
         except ValueError:
-            return f"'{parts[1]}' is not a number. Example: /level 4180 above"
-        direction = parts[2].lower() if len(parts) > 2 else DIR_CROSS
+            return f"«{parts[1]}» ليس رقمًا. مثال: /level 4180 فوق"
+        raw_dir = parts[2].lower() if len(parts) > 2 else DIR_CROSS
+        direction = _DIRECTION_ALIASES.get(raw_dir, raw_dir)
         if direction not in (DIR_ABOVE, DIR_BELOW, DIR_CROSS):
-            return "Direction must be above, below, or cross."
+            return "الاتجاه يجب أن يكون: فوق أو تحت أو أي."
 
         gate = self._gated(chat_id)
         if gate and self.levels is not None:
             cap = self.ent.free_levels if self.ent else 0
             if self.levels.count(chat_id) >= cap:
-                return (f"Free plan allows {cap} price levels. "
-                        f"Remove one with /clearlevels, or:\n{gate}")
+                return (f"الخطة المجانية تسمح بـ {cap} مستوى.\n"
+                        f"احذف مستوى بـ /clearlevels، أو:\n{gate}")
 
         assert self.levels is not None
         self.levels.add(chat_id, price, direction)
         n = self.levels.count(chat_id)
-        return (f"Level set: {price:g} ({direction}). "
-                f"Alert fires once when crossed. You have {n} level(s).")
+        return (f"تم ضبط المستوى: {price:g} ({_dir_ar(direction)}).\n"
+                f"سينبّهك مرة واحدة عند اختراقه. لديك {n} مستوى.")
 
     def _list_levels(self, chat_id: str) -> str:
         if self.levels is None:
-            return "Price levels are not available."
+            return "المستويات السعرية غير متاحة."
         items = self.levels.list(chat_id)
         if not items:
-            return "No price levels yet. Add one: /level 4180 above"
-        lines = ["[ASTRA] Your price levels"]
+            return "لا مستويات بعد. أضف واحدًا: /level 4180 فوق"
+        lines = ["[ASTRA] مستوياتك السعرية"]
         for lv in items:
-            state = "armed" if not lv.fired else "fired"
-            lines.append(f"  {lv.price:g} ({lv.direction}) - {state}")
+            state = "مفعّل" if not lv.fired else "انطلق"
+            lines.append(f"  {lv.price:g} ({_dir_ar(lv.direction)}) - {state}")
         return "\n".join(lines)
 
     def handle(self, chat_id: str, text: str) -> str:
-        cmd = text.strip().split()[0].lower() if text.strip() else ""
+        raw = text.strip()
+        cmd = raw.split()[0].lower() if raw else ""
         if cmd.startswith("/"):
             cmd = cmd.split("@", 1)[0]  # strip @BotName suffix
+        # A tapped keyboard label works exactly like typing its command, so the
+        # sub-parsers (e.g. /level) see a clean command and not the label text.
+        if raw in BUTTON_COMMANDS:
+            cmd = BUTTON_COMMANDS[raw]
+            text = cmd
         try:
             if cmd in ("/start", "/help"):
                 return self.HELP
             if cmd == "/myid":
-                return (f"Your chat id: {chat_id}\n"
-                        "Send this with your payment to activate Pro.")
+                return (f"🆔 معرّف محادثتك: {chat_id}\n"
+                        "أرسله مع الدفع لتفعيل Pro.")
             if cmd == "/grant" and self.ent is not None and self.ent.is_admin(chat_id):
                 parts = text.split()
                 if len(parts) < 3:
-                    return "Usage: /grant <chat_id> <pro|free>"
+                    return "الصيغة: /grant <chat_id> <pro|free>"
                 target, tier = parts[1], parts[2].lower()
                 try:
                     self.ent.set_tier(target, tier)
                 except ValueError:
-                    return "Tier must be pro or free."
-                return f"{target} is now {tier}."
+                    return "الخطة يجب أن تكون pro أو free."
+                return f"{target} صار {tier}."
             if cmd == "/plan":
                 if self.ent is None:
-                    return "Plan: (single tier)"
+                    return "الخطة: (مستوى واحد)"
                 tier = self.ent.tier(chat_id)
                 cap = self.ent.max_levels(chat_id)
-                lines = [f"[ASTRA] Plan: {tier}",
-                         f"Price levels: up to {cap}"]
+                tier_ar = "مدفوع (Pro)" if tier == "pro" else "مجاني"
+                lines = [f"[ASTRA] خطتك: {tier_ar}",
+                         f"المستويات السعرية: حتى {cap}"]
                 if not self.ent.is_pro(chat_id):
                     lines.append(self.ent.upgrade_line())
                 return "\n".join(l for l in lines if l)
             if cmd == "/price":
                 price = self.api.last_price()
                 if price is None:
-                    return "[ASTRA] Price\nNo live price available right now."
-                return f"[ASTRA] XAUUSD {price:,.2f}"
+                    return "💰 سعر الذهب\nلا يوجد سعر حي الآن."
+                return f"💰 XAUUSD {price:,.2f}"
             if cmd == "/level":
                 return self._add_level(chat_id, text)
             if cmd == "/levels":
                 return self._list_levels(chat_id)
             if cmd == "/clearlevels":
                 n = self.levels.clear(chat_id) if self.levels else 0
-                return f"Cleared {n} level(s)."
+                return f"🗑 تم مسح {n} مستوى."
             if cmd == "/status":
                 return format_status(self.api.snapshot())
             if cmd == "/health":
-                return ("[ASTRA] Health\n" +
+                return ("[ASTRA] الصحة\n" +
                         json.dumps(self.api.health(), indent=2, ensure_ascii=False))
             if cmd == "/analysis":
                 return format_analysis(self.api.latest_analysis())
@@ -399,17 +481,17 @@ class CommandRouter:
             if cmd == "/subscribe":
                 gate = self._gated(chat_id)
                 if gate:
-                    return ("Push alerts are part of Pro. Your price levels still "
-                            "work with /levels.\n" + gate)
+                    return ("التنبيهات الفورية جزء من Pro. مستوياتك السعرية "
+                            "تعمل بـ /levels.\n" + gate)
                 self.subs.add(chat_id)
-                return "[ASTRA] Subscribed. You will receive state-change alerts."
+                return "🔕 تم الاشتراك. ستصلك تنبيهات تغيّر الحالة."
             if cmd == "/unsubscribe":
                 self.subs.remove(chat_id)
-                return "[ASTRA] Unsubscribed. No more push alerts."
+                return "🔔 تم إيقاف الاشتراك. لا مزيد من التنبيهات."
             if cmd:
-                return "Unknown command. Try /help."
+                return "أمر غير معروف. جرّب /help."
         except ApiError as exc:
-            return f"[ASTRA] Backend unavailable: {exc}"
+            return f"[ASTRA] الخادم غير متاح: {exc}"
         return ""
 
 
@@ -443,8 +525,10 @@ def poll_updates(client: TelegramClient, router: CommandRouter) -> None:
                 continue
             reply = router.handle(chat_id, text)
             if reply:
+                show_kb = text.strip().lower().split()[0] in _SHOW_KEYBOARD \
+                    if text.strip() else False
                 try:
-                    client.send_message(chat_id, reply)
+                    client.send_message(chat_id, reply, keyboard=show_kb)
                 except RuntimeError as exc:
                     print(f"[warn] reply to {chat_id} failed: {exc}", file=sys.stderr)
 
@@ -477,9 +561,9 @@ def _check_levels(api: AstraApi, levels: LevelStore,
         return
     for chat_id in levels.chats():
         for lv in levels.observe(chat_id, price):
-            arrow = "up through" if lv.last_side == "above" else "down through"
-            line = (f"[ASTRA] Price alert: XAUUSD moved {arrow} {lv.price:g}\n"
-                    f"Now {price:,.2f}. This level is done; add another with /level.")
+            arrow = "صعودًا عبر" if lv.last_side == "above" else "هبوطًا عبر"
+            line = (f"🔔 تنبيه سعري: XAUUSD تحرّك {arrow} {lv.price:g}\n"
+                    f"الآن {price:,.2f}. هذا المستوى انتهى؛ أضف غيره بـ /level.")
             try:
                 client.send_message(chat_id, line)
             except RuntimeError as exc:
@@ -526,9 +610,19 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     print(f"[OK] ASTRA bot online | api={args.api} | subscribers={len(subs.all())}"
           f" | selling={ent.selling}", flush=True)
+
+    # Register the command menu and the menu button. This overwrites anything
+    # that was set by hand in BotFather, so the app always shows the real list.
+    try:
+        client.set_my_commands()
+        client.set_menu_button()
+    except RuntimeError as exc:
+        print(f"[warn] could not register commands: {exc}", file=sys.stderr)
+
     if args.chat:
         try:
-            client.send_message(args.chat, "[ASTRA] Bot online. Send /help.")
+            client.send_message(args.chat, "🤖 ASTRA جاهز. أرسل /help أو استخدم الأزرار.",
+                                keyboard=True)
         except RuntimeError as exc:
             print(f"[warn] startup message failed: {exc}", file=sys.stderr)
 

@@ -44,7 +44,7 @@ Frontend is Linux/Qt and Windows-only for the packaged `.exe`.
 export TELEGRAM_BOT_TOKEN=...   # @BotFather token
 export TELEGRAM_CHAT_ID=...     # default chat to notify
 ./bridge/telegram_bot/run_bot.sh          # backend + bot together
-python3 bridge/telegram_bot/test_astra_bot.py       # 28 tests
+python3 bridge/telegram_bot/test_astra_bot.py       # 33 tests
 python3 bridge/telegram_bot/test_entitlements.py    # 17 tests
 ```
 
@@ -56,6 +56,14 @@ Commands: `/price` `/level` `/levels` `/clearlevels` `/plan` `/myid` `/status`
 `/health` `/analysis` `/signal` `/bridge` `/subscribe` `/unsubscribe` `/help`.
 Push alerts fire on health/bridge/new-signal transitions (first reading is
 primed silently) and when a user's price level is crossed.
+
+**Language: Arabic.** Everything the user sees is Arabic — command replies,
+alerts, and the startup message. On boot the bot calls `setMyCommands` with
+`BOT_COMMANDS` and `setChatMenuButton`, so the Telegram menu always shows the
+real command list regardless of what BotFather was set to. `REPLY_KEYBOARD`
+draws a persistent tap keyboard; `BUTTON_COMMANDS` maps each label to its
+command, and the router accepts either the label or the command. Direction words
+accept Arabic (`فوق`/`تحت`/`أي`) or English (`above`/`below`/`cross`).
 
 ### Selling the tool (tiers)
 

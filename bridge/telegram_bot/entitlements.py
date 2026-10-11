@@ -113,8 +113,8 @@ class Entitlements:
         """One-line upsell used when a free user hits a gate."""
         if not self.selling:
             return ""
-        return (f"Upgrade to Pro for {self.pro_levels} price levels and faster "
-                f"checks: {self.upgrade_url}")
+        return (f"⬆️ ترقَّ إلى Pro لتحصل على {self.pro_levels} مستوى سعري "
+                f"وفحص أسرع:\n{self.upgrade_url}")
 
 
 def from_env(state_dir: Path) -> Entitlements:

@@ -88,16 +88,16 @@ class FormattingTests(unittest.TestCase):
         self.assertIn("ONLINE", out)
         self.assertIn("SHADOW", out)
         self.assertIn("XAUUSD", out)
-        self.assertIn("Not a trading signal", out)
+        self.assertIn("ليست إشارة تداول", out)
 
     def test_status_tolerates_unavailable_section(self):
         snap = {"health": {"_error": "boom"}, "system": SYSTEM, "bridge": BRIDGE}
         out = bot.format_status(snap)
-        self.assertIn("unavailable", out)
+        self.assertIn("غير متاح", out)
 
     def test_analysis_empty_state(self):
         out = bot.format_analysis(ANALYSIS_EMPTY)
-        self.assertIn("No decision recorded yet", out)
+        self.assertIn("لا قرار مسجّل بعد", out)
 
     def test_analysis_full_state(self):
         out = bot.format_analysis(ANALYSIS_FULL)
@@ -112,7 +112,7 @@ class FormattingTests(unittest.TestCase):
     def test_bridge_formatting(self):
         out = bot.format_bridge(BRIDGE)
         self.assertIn("ONLINE", out)
-        self.assertIn("yes", out)
+        self.assertIn("نعم", out)
 
 
 class SubscriptionTests(unittest.TestCase):
@@ -164,12 +164,12 @@ class RouterTests(unittest.TestCase):
         api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY, available=False)
         router, _ = self._router(api)
         out = router.handle("9", "/status")
-        self.assertIn("unavailable", out)
+        self.assertIn("غير متاح", out)
 
     def test_unknown_command(self):
         api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
         router, _ = self._router(api)
-        self.assertIn("Unknown command", router.handle("9", "/nope"))
+        self.assertIn("أمر غير معروف", router.handle("9", "/nope"))
 
 
 class AlertEngineTests(unittest.TestCase):
@@ -185,7 +185,7 @@ class AlertEngineTests(unittest.TestCase):
         engine.prime()
         api._health = HEALTH_DEGRADED
         alerts = engine.poll()
-        self.assertTrue(any("Health changed" in a for a in alerts))
+        self.assertTrue(any("تغيّرت الصحة" in a for a in alerts))
 
     def test_new_signal_alerts(self):
         api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
@@ -193,7 +193,7 @@ class AlertEngineTests(unittest.TestCase):
         engine.prime()
         api._analysis = ANALYSIS_FULL
         alerts = engine.poll()
-        self.assertTrue(any("Analysis" in a for a in alerts))
+        self.assertTrue(any("التحليل" in a for a in alerts))
 
     def test_no_change_no_alert(self):
         api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
@@ -237,7 +237,7 @@ class PaidToolTests(unittest.TestCase):
 
     def test_level_bad_input(self):
         router, _, _ = self._router()
-        self.assertIn("not a number", router.handle("9", "/level abc"))
+        self.assertIn("ليس رقمًا", router.handle("9", "/level abc"))
 
     def test_free_tier_level_cap(self):
         from entitlements import Entitlements
@@ -247,7 +247,7 @@ class PaidToolTests(unittest.TestCase):
             router, _, levels = self._router(ent=ent)
             router.handle("9", "/level 4180")
             out = router.handle("9", "/level 4200")
-            self.assertIn("Free plan allows 1", out)
+            self.assertIn("الخطة المجانية تسمح بـ 1", out)
             self.assertIn("https://buy/x", out)
             self.assertEqual(levels.count("9"), 1)
 
@@ -281,7 +281,7 @@ class PaidToolTests(unittest.TestCase):
             ent = Entitlements(Path(d) / "e.json", upgrade_url="https://buy/x")
             router, _, _ = self._router(ent=ent)
             out = router.handle("9", "/plan")
-            self.assertIn("free", out)
+            self.assertIn("مجاني", out)
             self.assertIn("https://buy/x", out)
 
     def test_grant_only_for_admin(self):
@@ -307,10 +307,49 @@ class PaidToolTests(unittest.TestCase):
         router.api.last_price = lambda: 4181.0   # now rise through it
         bot._check_levels(router.api, levels, None, client)
         self.assertEqual(len(client.sent), 1)
-        self.assertIn("up through", client.sent[0][1])
+        self.assertIn("صعودًا عبر", client.sent[0][1])
         # One-shot: no repeat.
         bot._check_levels(router.api, levels, None, client)
         self.assertEqual(len(client.sent), 1)
+
+
+class ArabicSurfaceTests(unittest.TestCase):
+    """The Arabic keyboard, the command menu, and Arabic direction words."""
+
+    def test_keyboard_labels_all_map_to_commands(self):
+        for row in bot.REPLY_KEYBOARD:
+            for label in row:
+                self.assertIn(label, bot.BUTTON_COMMANDS)
+
+    def test_tapping_a_button_runs_its_command(self):
+        router, _, levels = _paid_router()
+        out = router.handle("9", "🔔 مستوى جديد")  # same as /level
+        self.assertIn("الصيغة", out)              # the /level usage line
+
+    def test_button_price_label(self):
+        router, _, _ = _paid_router()
+        self.assertIn("XAUUSD", router.handle("9", "💰 سعر الذهب"))
+
+    def test_arabic_direction_word_is_accepted(self):
+        router, _, levels = _paid_router()
+        router.handle("9", "/level 4200 فوق")
+        self.assertEqual(levels.list("9")[0].direction, "above")
+
+    def test_command_menu_is_arabic_and_covers_the_real_commands(self):
+        cmds = dict(bot.BOT_COMMANDS)
+        for expected in ("/price", "/level", "/levels", "/plan", "/myid",
+                         "/subscribe", "/unsubscribe", "/help"):
+            self.assertIn(expected, cmds)
+        self.assertTrue(any("\u0600" <= ch <= "\u06ff" for d in cmds.values()
+                            for ch in d), "menu descriptions should be Arabic")
+
+
+def _paid_router(ent=None):
+    """A router with a working fake backend, for the surface tests."""
+    api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+    subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+    levels = bot.LevelStore(Path(tempfile.mkdtemp()) / "l.json")
+    return bot.CommandRouter(api, subs, None, levels=levels, ent=ent), subs, levels
 
 
 if __name__ == "__main__":
