@@ -46,13 +46,17 @@ PROVIDER = os.environ.get("ASTRA_ADVISOR_PROVIDER", "groq").strip().lower()
 
 GROQ_URL = os.environ.get("ASTRA_ADVISOR_GROQ_URL",
                           "https://api.groq.com/openai/v1/chat/completions")
-GROQ_MODEL = os.environ.get("ASTRA_ADVISOR_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.environ.get("ASTRA_ADVISOR_MODEL", "openai/gpt-oss-120b")
 GEMINI_MODEL = os.environ.get("ASTRA_ADVISOR_MODEL", "gemini-2.5-flash")
 GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
               "{model}:generateContent")
 
 # Which env var holds the key for each provider.
 _KEY_ENV = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}
+
+# Groq sits behind Cloudflare, which rejects the default urllib user agent with
+# a 403 (error 1010). Identify ourselves so the request is served.
+_USER_AGENT = os.environ.get("ASTRA_ADVISOR_USER_AGENT", "ASTRA-advisor/1.0")
 
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_ADVISOR_TIMEOUT", "20"))
 CACHE_TTL = float(os.environ.get("ASTRA_ADVISOR_TTL", "120"))
@@ -174,11 +178,21 @@ def call_groq(prompt: str, api_key: str) -> str | None:
     req = urllib.request.Request(
         GROQ_URL, data=body, method="POST",
         headers={"Content-Type": "application/json",
-                 "Authorization": "Bearer " + api_key})
+                 "Authorization": "Bearer " + api_key,
+                 "User-Agent": _USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, OSError, ValueError):
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "replace")[:200]
+        except OSError:
+            pass
+        sys.stderr.write("[advisor] groq HTTP %s: %s\n" % (exc.code, detail))
+        return None
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        sys.stderr.write("[advisor] groq request failed: %s\n" % (exc,))
         return None
     try:
         return payload["choices"][0]["message"]["content"]
