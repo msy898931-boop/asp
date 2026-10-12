@@ -35,8 +35,9 @@ stop_one() {
 }
 
 stop_one mobile
+stop_one tracker
 stop_one advisor
 stop_one host
 sleep 2
 echo "[stop] done. Remaining astra processes:"
-ps -ef | grep -E "[a]ura_backend_host|[s]erve_mobile.py|[b]ridge_service.py|[a]i_advisor.py" || echo "  none"
+ps -ef | grep -E "[a]ura_backend_host|[s]erve_mobile.py|[b]ridge_service.py|[a]i_advisor.py|[s]ignal_tracker.py" || echo "  none"

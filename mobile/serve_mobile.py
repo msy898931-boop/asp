@@ -84,6 +84,7 @@ class Handler(BaseHTTPRequestHandler):
     api_base = "http://127.0.0.1:8790/api/v1"
     bridge_base = "http://127.0.0.1:8791"
     advisor_base = "http://127.0.0.1:8792"
+    tracker_base = "http://127.0.0.1:8793"
     apk_path = ""
 
     def log_message(self, fmt, *args):  # quieter logs
@@ -103,6 +104,8 @@ class Handler(BaseHTTPRequestHandler):
             self._proxy(self.bridge_base + path[len("/bridge"):], self.path)
         elif path.startswith("/advisor/"):
             self._proxy(self.advisor_base + path[len("/advisor"):], self.path)
+        elif path.startswith("/tracker/"):
+            self._proxy(self.tracker_base + path[len("/tracker"):], self.path)
         else:
             self._static(path)
 
@@ -206,6 +209,7 @@ def main(argv=None) -> int:
     parser.add_argument("--api-port", type=int, default=8790)
     parser.add_argument("--bridge-port", type=int, default=8791)
     parser.add_argument("--advisor-port", type=int, default=8792)
+    parser.add_argument("--tracker-port", type=int, default=8793)
     parser.add_argument("--apk", default=os.path.join(
         os.path.dirname(HERE), "android", "dist", "astra.apk"),
         help="APK to offer at /astra.apk (optional)")
@@ -214,6 +218,7 @@ def main(argv=None) -> int:
     Handler.api_base = f"http://127.0.0.1:{args.api_port}/api/v1"
     Handler.bridge_base = f"http://127.0.0.1:{args.bridge_port}"
     Handler.advisor_base = f"http://127.0.0.1:{args.advisor_port}"
+    Handler.tracker_base = f"http://127.0.0.1:{args.tracker_port}"
     Handler.apk_path = os.path.abspath(args.apk)
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)

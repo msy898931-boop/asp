@@ -20,6 +20,7 @@ PORT="${1:-12000}"
 API_PORT=8790
 BRIDGE_PORT=8791
 ADVISOR_PORT=8792
+TRACKER_PORT=8793
 RUNDIR="$ROOT/run"
 mkdir -p "$RUNDIR"
 
@@ -80,7 +81,7 @@ else
     setsid nohup python3 "$ROOT/mobile/serve_mobile.py" \
         --host 0.0.0.0 --port "$PORT" \
         --api-port "$API_PORT" --bridge-port "$BRIDGE_PORT" \
-        --advisor-port "$ADVISOR_PORT" \
+        --advisor-port "$ADVISOR_PORT" --tracker-port "$TRACKER_PORT" \
         > "$RUNDIR/mobile.log" 2>&1 < /dev/null &
     echo $! > "$RUNDIR/mobile.pid"
     echo "[start] mobile launched on :$PORT (pid $!)"
@@ -106,6 +107,21 @@ else
     else
         echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, not configured (set GROQ_API_KEY)"
     fi
+fi
+
+# --- signal tracker (isolated, optional) ---------------------------------
+# Replays the engine chain over closed bars and scores the trade ideas. Its
+# own process and port, like the advisor: it never touches the engine or the
+# ledger. Opt out with ASTRA_DISABLE_TRACKER=1.
+if [ "${ASTRA_DISABLE_TRACKER:-0}" = "1" ]; then
+    echo "[start] signal tracker disabled (ASTRA_DISABLE_TRACKER=1)"
+elif alive "$(pid_of tracker)"; then
+    echo "[start] signal tracker already running (pid $(pid_of tracker))"
+else
+    setsid nohup python3 "$ROOT/tracker/signal_tracker.py" --port "$TRACKER_PORT" \
+        > "$RUNDIR/tracker.log" 2>&1 < /dev/null &
+    echo $! > "$RUNDIR/tracker.pid"
+    echo "[start] signal tracker launched on :$TRACKER_PORT (pid $!)"
 fi
 
 # --- wait for readiness --------------------------------------------------
