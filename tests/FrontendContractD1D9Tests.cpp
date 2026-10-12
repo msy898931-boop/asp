@@ -197,6 +197,10 @@ TEST_CASE(d4_latest_signal_exposes_decision_states) {
     CHECK(contains(response.body, "\"eligibility_state\":\"UNKNOWN\""));
     CHECK(contains(response.body, "\"strategy_version\":null"));
     CHECK(contains(response.body, "\"configuration_version\":null"));
+    // The live price is exposed beside the decision's own reference, and with
+    // no tick observed it is explicitly null rather than copied from the bar.
+    CHECK(contains(response.body, "\"last_price\":null"));
+    CHECK(contains(response.body, "\"last_price_time\":null"));
 }
 
 // D5: risk route always reports portfolio risk, proposal explicitly gated.

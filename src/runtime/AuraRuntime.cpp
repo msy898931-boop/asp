@@ -153,6 +153,26 @@ RuntimeCycleReport AuraRuntime::tick(Timestamp now) {
         } else {
             lastBridgeHealthValid_ = false;
         }
+
+        // Freshest price the engine can see. The candle series only moves at
+        // bar close, so a tick read is what makes the reported price current
+        // rather than up to one interval old. A failed read leaves the last
+        // good value in place and never invents one.
+        const std::string tickSymbol =
+            startupReport_.resolvedSymbol.empty()
+                ? startupOptions_.preferredSymbol
+                : startupReport_.resolvedSymbol;
+        const auto tickResult = client->tick(tickSymbol);
+        if (tickResult.ok) {
+            const BridgeTick& tick = tickResult.value;
+            const double price = tick.last > 0.0 ? tick.last
+                               : (tick.bid > 0.0 ? tick.bid : tick.ask);
+            if (price > 0.0) {
+                lastTickPrice_ = price;
+                lastTickTimeSec_ = tick.time;
+                lastTickPriceValid_ = true;
+            }
+        }
     }
 
     // Operating mode reflects data availability. M15 is the primary

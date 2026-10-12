@@ -232,6 +232,21 @@ ApiResponse BackendFacade::latestSignal() const {
     fields.push_back({"system_mode", "SHADOW"});
     fields.push_back({"has_outcome", jsonBool(record.hasOutcome), true});
 
+    // Freshest price seen, when a live tick has been read. `reference_price`
+    // above is the decision's own bar close and is deliberately left as the
+    // frozen contract value; this is the current market price beside it, so a
+    // caller can see how far the entry level has drifted.
+    double lastPrice = 0.0;
+    std::int64_t lastPriceTime = 0;
+    if (deps_.runtime != nullptr &&
+        deps_.runtime->lastTickPrice(lastPrice, lastPriceTime)) {
+        fields.push_back({"last_price", jsonNumber(lastPrice), true});
+        fields.push_back({"last_price_time", jsonInteger(lastPriceTime), true});
+    } else {
+        fields.push_back({"last_price", "null", true});
+        fields.push_back({"last_price_time", "null", true});
+    }
+
     // Decision display contract: symbol, trigger time, data/structure/regime/
     // eligibility states, and version identity. These come from the live
     // decision context (the actual chain inputs), not from re-derivation.

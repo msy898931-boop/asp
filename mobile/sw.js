@@ -2,7 +2,7 @@
    The app shell is cached so it opens instantly (and offline); API and bridge
    calls always go to the network so readings are never stale. */
 
-const SHELL = "astra-shell-v9";
+const SHELL = "astra-shell-v10";
 const ASSETS = [
   "./",
   "./index.html",

@@ -108,6 +108,22 @@ public:
         return true;
     }
 
+    // Most recent live tick read from the bridge this cycle. The candle series
+    // is only sampled at bar close, so this is the freshest price the engine
+    // has seen. Returns false (leaving `out` untouched) when no tick has been
+    // read; it never fabricates a price.
+    bool lastTickPrice(double& out) const {
+        if (!lastTickPriceValid_) return false;
+        out = lastTickPrice_;
+        return true;
+    }
+    bool lastTickPrice(double& out, std::int64_t& timeSec) const {
+        if (!lastTickPriceValid_) return false;
+        out = lastTickPrice_;
+        timeSec = lastTickTimeSec_;
+        return true;
+    }
+
     // Health summary for the frontend/API layer.
     std::map<std::string, std::string> healthSummary() const;
 
@@ -141,6 +157,11 @@ private:
     FailureMemory failures_;
     BridgeHealth lastBridgeHealth_;
     bool lastBridgeHealthValid_ = false;
+
+    // Newest live tick observed this cycle (see lastTickPrice).
+    double lastTickPrice_ = 0.0;
+    std::int64_t lastTickTimeSec_ = 0;
+    bool lastTickPriceValid_ = false;
 
     // Last bar published per timeframe, so an overlapping bridge window does
     // not duplicate closed-bar history.

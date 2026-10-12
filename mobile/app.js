@@ -629,27 +629,35 @@ async function loadChart() {
   renderConn();
 }
 
-// A prominent live price in the header. Uses the last two closed bars of the
-// active timeframe: the newest close is the price, the change is against the
-// prior close. Read-only market data, same loopback bridge as the chart.
+// A prominent live price in the header. The price itself comes from the live
+// tick (the freshest quote the bridge has); the closed-bar series only supplies
+// the reference for the change. Sampling the price from the newest *closed* bar
+// would show a price up to a full interval old.
 async function loadTicker() {
   try {
-    const payload = await bridge(`v1/candles?tf=${activeTf}&limit=2`);
-    const bars = payload.bars || payload.candles || [];
+    const [candleEnv, tickEnv] = await Promise.all([
+      bridge(`v1/candles?tf=${activeTf}&limit=2`),
+      bridge(`v1/tick?symbol=XAUUSD`).catch(() => null),
+    ]);
+    const bars = candleEnv.bars || candleEnv.candles || [];
     if (!bars.length) { $("ticker").hidden = true; return; }
     const last = bars[bars.length - 1];
     const prev = bars[bars.length - 2] || last;
-    const change = last.close - prev.close;
+    const live = tickEnv && Number(tickEnv.last) > 0 ? Number(tickEnv.last) : null;
+    const price = live !== null ? live : last.close;
+    const change = price - prev.close;
     const pct = prev.close ? (change / prev.close) * 100 : 0;
 
-    $("price").textContent = num(last.close);
+    $("price").textContent = num(price);
     const chg = $("price-chg");
     chg.textContent = `${change >= 0 ? "+" : ""}${num(change)}  `
       + `${change >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
     chg.className = "ticker-chg " + (change > 0 ? "up" : change < 0 ? "down" : "");
-    $("price-basis").textContent = `${activeTf} · gold-api.com`;
+    $("price-basis").textContent = live !== null
+      ? `live · gold-api.com`
+      : `${activeTf} close · gold-api.com`;
     $("ticker").hidden = false;
-    checkLevels(last.close);
+    checkLevels(price);
   } catch (err) {
     $("ticker").hidden = true;
   }
