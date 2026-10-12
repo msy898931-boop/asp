@@ -23,6 +23,18 @@ ADVISOR_PORT=8792
 RUNDIR="$ROOT/run"
 mkdir -p "$RUNDIR"
 
+# Load local secrets (gitignored) so a restart does not need the key on the
+# command line. Existing environment values win, so an injected secret is not
+# overridden by a stale file.
+if [ -f "$ROOT/.env" ]; then
+    while IFS='=' read -r _k _v; do
+        case "$_k" in ''|'#'*) continue ;; esac
+        [ -n "${!_k:-}" ] && continue
+        _v="${_v%\"}"; _v="${_v#\"}"
+        export "$_k=$_v"
+    done < "$ROOT/.env"
+fi
+
 alive() {
     [ -n "${1:-}" ] || return 1
     kill -0 "$1" 2>/dev/null || return 1
