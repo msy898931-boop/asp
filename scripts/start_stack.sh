@@ -124,6 +124,22 @@ else
     echo "[start] signal tracker launched on :$TRACKER_PORT (pid $!)"
 fi
 
+# --- telegram notifier (optional, opt-in) --------------------------------
+# Off unless ASTRA_ENABLE_BOT=1 so a bot that talks to a chat is switched on
+# deliberately. Needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.
+if [ "${ASTRA_ENABLE_BOT:-0}" != "1" ]; then
+    echo "[start] telegram bot off (set ASTRA_ENABLE_BOT=1 to enable)"
+elif alive "$(pid_of bot)"; then
+    echo "[start] telegram bot already running (pid $(pid_of bot))"
+elif [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+    echo "[start] telegram bot not started: TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID unset"
+else
+    setsid nohup python3 "$ROOT/bot/telegram_bot.py" \
+        > "$RUNDIR/bot.log" 2>&1 < /dev/null &
+    echo $! > "$RUNDIR/bot.pid"
+    echo "[start] telegram bot launched (pid $!)"
+fi
+
 # --- wait for readiness --------------------------------------------------
 echo "[start] waiting for the backend API ..."
 for _ in $(seq 1 30); do
