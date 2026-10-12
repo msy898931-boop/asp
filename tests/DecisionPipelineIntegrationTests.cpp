@@ -44,6 +44,24 @@ std::vector<Bar> syntheticUptrend(Timeframe timeframe, std::int64_t startOpen,
     return bars;
 }
 
+// The mirror image: a wavy downtrend, so the short side is exercised with the
+// same shape as the long side.
+std::vector<Bar> syntheticDowntrend(Timeframe timeframe, std::int64_t startOpen,
+                                    std::size_t count) {
+    std::vector<Bar> bars = syntheticUptrend(timeframe, startOpen, count);
+    // Mirror around a *fixed* level: a moving pivot would keep the drift upward.
+    const double pivot = 2000.0;
+    for (Bar& bar : bars) {
+        bar.open = 2.0 * pivot - bar.open;
+        bar.high = 2.0 * pivot - bar.high;
+        bar.low = 2.0 * pivot - bar.low;
+        bar.close = 2.0 * pivot - bar.close;
+        // Mirroring flips high/low; restore their invariant.
+        if (bar.low > bar.high) std::swap(bar.low, bar.high);
+    }
+    return bars;
+}
+
 }  // namespace
 
 TEST_CASE(closed_bar_produces_decision_and_shadow_command) {
@@ -133,6 +151,52 @@ TEST_CASE(re_evaluating_the_same_closed_bar_is_a_no_op) {
     CHECK_EQ(ledger.size(), ledgerAfterFirst);
     CHECK_EQ(positions.openCount(), positionsAfterFirst);
     CHECK(!second.shadowIssued);
+
+    std::filesystem::remove_all(root);
+}
+
+TEST_CASE(downtrend_produces_a_short_decision_and_shadow_command) {
+    const std::string root = "/tmp/aura-pipeline-short-dir";
+    std::filesystem::remove_all(root);
+
+    auto guardian = makeGuardian();
+    PredictionLedger ledger;
+    PositionSimulator positions;
+    OutcomeEngine outcomes;
+    FilePersistenceStore store(root);
+    REQUIRE(store.isAvailable());
+    PersistenceEngine persistence(&store);
+
+    DecisionPipeline pipeline(guardian.get(), &ledger, &persistence, &positions,
+                              &outcomes);
+    const std::vector<Bar> bars =
+        syntheticDowntrend(Timeframe::M15, 1700000000, 200);
+    REQUIRE(bars.size() >= 60);
+
+    const Timestamp now = Timestamp::fromEpochMillis(
+        (bars.back().openTimeSec + 900) * 1000);
+
+    const PipelineCycleReport report =
+        pipeline.onClosedBar(bars.back(), bars, now);
+
+    CHECK(report.decisionProduced);
+    REQUIRE(report.decisions.size() == 1);
+    const PipelineDecision& decision = report.decisions[0];
+    // The engine is symmetric: the same chain that yields LONG on an uptrend
+    // must yield SHORT on the mirror image, with the stop above and the target
+    // below the entry.
+    CHECK_EQ(static_cast<int>(decision.direction),
+             static_cast<int>(SignalDirection::SHORT));
+    CHECK(decision.shadowIssued);
+    CHECK_EQ(ledger.size(), static_cast<std::size_t>(1));
+    CHECK_EQ(positions.openCount(), static_cast<std::size_t>(1));
+
+    const PredictionRecord& record = ledger.records().back();
+    CHECK(record.stopPrice > record.referencePrice);
+    CHECK(record.targetPrice < record.referencePrice);
+    CHECK_EQ(record.decisionId.value(),
+             std::string("M15-") + std::to_string(record.asOfBarOpenSec) +
+                 "-SHORT");
 
     std::filesystem::remove_all(root);
 }
