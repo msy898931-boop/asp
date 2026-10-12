@@ -75,6 +75,25 @@ PipelineCycleReport DecisionPipeline::onClosedBar(const Bar& closedBar,
 
     if (candidate.direction == SignalDirection::NONE || !score.valid ||
         !confidence.valid) {
+        // The chain evaluated this bar; it just found no directional agreement.
+        // Record the market read anyway, so the frontend shows the real regime
+        // and structure instead of UNKNOWN. "No trade" is a result, not a
+        // missing one — and this build claims no edge, so it will often be the
+        // honest answer.
+        DecisionContext context;
+        context.available = true;
+        context.symbol = symbol_;
+        context.timeframe = timeframe;
+        context.asOfBarOpenSec = asOf;
+        context.direction = SignalDirection::NONE;
+        context.dataState = features.quality;
+        context.structure = structure.bias;
+        context.regime = regime.regime;
+        context.eligibility = eligibility.decision;
+        context.strategyVersion = strategyVersion_;
+        context.configurationVersion = configurationVersion_;
+        context.evaluatedAt = now;
+        lastContext_ = context;
         report.issues.push_back("no decision-grade candidate on this bar");
         return report;
     }
