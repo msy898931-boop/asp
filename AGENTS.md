@@ -192,10 +192,17 @@ public quote feed, not a broker — not a trading path.
 
 `mobile/` is an installable phone app (no store, no build step): an
 instrument-panel shell that reads the same loopback API through its own origin.
-`mobile/serve_mobile.py` serves the shell and reverse-proxies `/api/v1/*` and
-`/bridge/*` to 127.0.0.1 (GET only, upstream fixed to loopback). Run it on a
-public port; icons are generated with `mobile/icons/make_icons.py` (stdlib only).
-Install on the phone via the browser's "Add to Home screen".
+`mobile/serve_mobile.py` serves the shell and reverse-proxies `/api/v1/*`,
+`/bridge/*` and `/advisor/*` to 127.0.0.1 (GET only, upstream fixed to loopback).
+Run it on a public port; icons are generated with `mobile/icons/make_icons.py`
+(stdlib only). Install on the phone via the browser's "Add to Home screen".
+
+Shell caching: the shell is served `Cache-Control: no-cache` and the HTML has a
+content hash appended to `styles.css`/`app.js` (`?v=<build>`), while `sw.js`
+fetches the shell network-first. A stale shell is the failure mode to watch for
+— the AI tab showed only placeholders because the browser kept an old `app.js`
+whose panel markup had no renderer. When a UI change does not appear, suspect
+the cache before the code.
 
 ### Android APK
 
