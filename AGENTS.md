@@ -343,6 +343,25 @@ CI workflow `build-android.yml` builds it on every `mobile/**` or `android/**`
 push, signed with a cached keystore, and publishes it to the rolling `android`
 release — which is what the web footer's `/astra.apk` link redirects to.
 
+### Live price provenance (gold-api vs Kraken PAXG)
+
+Two upstreams, and only one of them can serve candles for free:
+
+* **Spot / tick** - `api.gold-api.com/price/XAU`. Free, unlimited, no key. This
+  is the exact spot XAUUSD and the source of truth for the tick read.
+* **Candles** - Kraken `PAXGUSD`. gold-api's own `/ohlc` and `/history` endpoints
+  return `401 No x-api-key header` without a key, and the free tier caps them at
+  10 requests/hour with a finest `groupBy` of `day` — no M15, so it cannot feed
+  the M1..D1 engine. PAXGUSD stays the candle source.
+
+Because PAXG carries its own premium/discount (~0.1%, several dollars at $4200),
+`_fetch` scales the series onto the spot quote using the **live proxy tick** as
+the anchor leg. Do not anchor on the newest closed bar: it closed up to a full
+interval ago and would drag the current price to a stale level. Verified live,
+the bridge close then tracks spot to within about a dollar.
+
+Yahoo `GC=F` is not a substitute — it is COMEX futures and runs ~$29 above spot.
+
 ### "No signals / market shows UNKNOWN"
 
 Two separate causes, both diagnosed by inspecting the live API:
