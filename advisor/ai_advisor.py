@@ -336,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     sys.stderr.write("[advisor] listening on http://%s:%d (provider=%s configured=%s)\n"
-                     % (args.host, args.port, _PROVIDER,
+                     % (args.host, args.port, PROVIDER,
                         bool(provider_key())))
     try:
         server.serve_forever()
