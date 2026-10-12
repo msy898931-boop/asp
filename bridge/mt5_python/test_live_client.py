@@ -93,6 +93,24 @@ class LiveClientNetworkTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertGreater(result.data["last"], 0.0)
 
+    def test_candles_are_anchored_to_the_spot_quote(self) -> None:
+        # The candle proxy (PAXGUSD) and the spot quote (gold-api XAU) are two
+        # quotes for the same underlying. The newest close must land on the spot
+        # price, or the chart and the tick read would disagree.
+        candles = self.client.read_candles("XAUUSD", "M15", 5, closed_only=True)
+        tick = self.client.read_tick("XAUUSD")
+        self.assertTrue(candles.ok and tick.ok)
+        close = candles.data["candles"][-1]["close"]
+        spot = tick.data["last"]
+        self.assertLess(abs(close - spot) / spot, 0.002,
+                        f"anchored close {close} strayed from spot {spot}")
+
+    def test_health_reports_the_applied_basis(self) -> None:
+        self.client.read_candles("XAUUSD", "M15", 5, closed_only=True)
+        health = self.client.health()
+        self.assertTrue(health["candle_anchored_to_spot"])
+        self.assertLess(abs(health["last_basis_fraction"]), 0.05)
+
 
 if __name__ == "__main__":
     unittest.main()

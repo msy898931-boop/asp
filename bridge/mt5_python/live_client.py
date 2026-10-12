@@ -22,6 +22,11 @@ reports ``broker = "gold-api.com + Kraken (PAXGUSD)"`` and health carries
 ``synthetic: false`` / ``data_source: "live"``, so no surface can mistake this
 for a broker feed or for the replay corpus.
 
+The proxy basis is reconciled rather than left to skew the chart: the candle
+series is scaled onto the spot quote (see ``_MAX_BASIS_FRACTION``), and health
+reports ``last_basis_fraction`` so the correction is visible, not hidden. A gap
+too wide to be a proxy premium is reported as an error and left unanchored.
+
 Enable with ``ASTRA_DATA_SOURCE=live`` (or ``bridge_service --data-source
 live``). The default stays ``mt5``; this module only runs when asked.
 """
@@ -49,6 +54,8 @@ _SPOT_URL = "https://api.gold-api.com/price/{symbol}"
 # Kraken OHLC pair used for candles. PAXGUSD is gold-backed and trades 24/7.
 _DEFAULT_CANDLE_PAIR = "PAXGUSD"
 _KRAKEN_URL = "https://api.kraken.com/0/public/OHLC?pair={pair}&interval={interval}"
+# Live last-trade for the candle pair; the anchor leg of the spot reconciliation.
+_TICKER_URL = "https://api.kraken.com/0/public/Ticker?pair={pair}"
 
 # Timeframe -> Kraken interval in minutes. Kraken has a native 4h bar, so no
 # client-side aggregation is needed.
@@ -78,6 +85,14 @@ _TIMEOUT = 12.0
 # One upstream fetch serves many requests. Short enough to stay live, long
 # enough that a chart refresh does not hammer the upstream.
 _CACHE_TTL_SECONDS = 20.0
+
+# Kraken's PAXGUSD tracks spot XAUUSD but carries its own premium/discount, so
+# the two quotes differ by a fraction of a percent (observed ~0.1%, ~$4 at
+# $4200). The candle series is anchored to the spot quote so the chart and the
+# levels derived from it agree with the price the app also shows. A gap wider
+# than _MAX_BASIS_FRACTION is a real dislocation rather than a proxy premium,
+# so it is reported instead of silently scaled away.
+_MAX_BASIS_FRACTION = 0.05
 
 
 def spot_symbol_from_env() -> str:
@@ -119,6 +134,9 @@ class LiveMt5Client:
         self._initialized = False
         self._last_error = ""
         self._cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+        self._spot_cache: Tuple[float, float] = (0.0, 0.0)
+        self._proxy_cache: Tuple[float, float] = (0.0, 0.0)
+        self._last_basis = 0.0
         self._lock = threading.Lock()
 
     # -- availability -------------------------------------------------------
@@ -164,6 +182,57 @@ class LiveMt5Client:
 
     # -- market data --------------------------------------------------------
 
+    def _spot_price(self) -> float:
+        """Current spot XAU price, or 0.0 if the upstream is unreachable.
+
+        Cached briefly: anchoring every timeframe would otherwise re-fetch the
+        same quote once per timeframe per cycle.
+        """
+        now = time.monotonic()
+        with self._lock:
+            if self._spot_cache[0] > now:
+                return self._spot_cache[1]
+        price = 0.0
+        try:
+            doc = _http_json(_SPOT_URL.format(symbol=self._spot_symbol))
+            price = float(doc.get("price", 0.0))
+        except (RuntimeError, TypeError, ValueError):
+            price = 0.0
+        if price > 0.0:
+            with self._lock:
+                self._spot_cache = (now + _CACHE_TTL_SECONDS, price)
+        return price
+
+    def _proxy_price(self) -> float:
+        """Live tick for the candle pair (PAXGUSD), or 0.0 if unreachable.
+
+        This is the series' own current level, so it is the right anchor for
+        reconciling the series onto spot: both legs are then read at the same
+        instant.
+        """
+        now = time.monotonic()
+        with self._lock:
+            if self._proxy_cache[0] > now:
+                return self._proxy_cache[1]
+        price = 0.0
+        try:
+            url = _TICKER_URL.format(pair=self._candle_pair)
+            doc = _http_json(url)
+            result = doc.get("result") or {}
+            for key, value in result.items():
+                if key == "last" or not isinstance(value, dict):
+                    continue
+                last = value.get("c") or []
+                if last:
+                    price = float(last[0])
+                    break
+        except (RuntimeError, TypeError, ValueError, IndexError):
+            price = 0.0
+        if price > 0.0:
+            with self._lock:
+                self._proxy_cache = (now + _CACHE_TTL_SECONDS, price)
+        return price
+
     def _fetch(self, timeframe: str) -> List[Dict[str, Any]]:
         """Return ascending bars for a timeframe, cached briefly."""
         now = time.monotonic()
@@ -206,6 +275,33 @@ class LiveMt5Client:
         # Keep only bars the engine's validator will accept as decision-grade.
         floor = int(time.time()) - _MAX_AGE_SECONDS
         bars = [b for b in bars if b["time"] >= floor]
+
+        # Reconcile the proxy series onto the spot quote. PAXGUSD and XAUUSD are
+        # two quotes for the same underlying, so the ratio between them at this
+        # instant is the proxy's basis. Scaling the whole series preserves its
+        # shape (all features are relative) while making the absolute price
+        # match the spot the app reports.
+        #
+        # The anchor is the *live* proxy tick, not the newest closed bar: that
+        # bar closed up to a full interval ago, so anchoring on it would drag
+        # the current price to a stale level and erase where the bar really
+        # closed.
+        spot = self._spot_price()
+        proxy = self._proxy_price()
+        if spot > 0.0 and proxy > 0.0 and bars:
+            basis = (spot - proxy) / proxy
+            self._last_basis = basis
+            if abs(basis) <= _MAX_BASIS_FRACTION:
+                factor = spot / proxy
+                for bar in bars:
+                    bar["open"] = round(bar["open"] * factor, 2)
+                    bar["high"] = round(bar["high"] * factor, 2)
+                    bar["low"] = round(bar["low"] * factor, 2)
+                    bar["close"] = round(bar["close"] * factor, 2)
+            else:
+                self._last_error = (
+                    f"candle proxy basis {basis:.4%} exceeds "
+                    f"{_MAX_BASIS_FRACTION:.0%}; series left unanchored")
 
         with self._lock:
             self._cache[timeframe] = (time.monotonic() + _CACHE_TTL_SECONDS, bars)
@@ -308,5 +404,7 @@ class LiveMt5Client:
             "synthetic": False,
             "spot_symbol": self._spot_symbol,
             "candle_pair": self._candle_pair,
+            "candle_anchored_to_spot": True,
+            "last_basis_fraction": self._last_basis,
             "last_error": self._last_error,
         }
