@@ -1,8 +1,8 @@
 /* ASTRA service worker — offline shell, live data.
-   The app shell is cached so it opens instantly (and offline); API and bridge
-   calls always go to the network so readings are never stale. */
+   The app shell is cached so it opens instantly (and offline); API, bridge and
+   advisor calls always go to the network so readings are never stale. */
 
-const SHELL = "astra-shell-v11";
+const SHELL = "astra-shell-v12";
 const ASSETS = [
   "./",
   "./index.html",
@@ -29,7 +29,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  const live = url.pathname.includes("/api/") || url.pathname.includes("/bridge/");
+  const live = url.pathname.includes("/api/") ||
+               url.pathname.includes("/bridge/") ||
+               url.pathname.includes("/advisor/");
   if (live || event.request.method !== "GET") return; // network only
 
   event.respondWith(
