@@ -23,7 +23,12 @@ on:
   schedule:
     # Every 15 minutes. Offset by 5 so the newest M15 bar has closed when we read.
     - cron: "5,20,35,50 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test_ping:
+        description: "Send a Telegram confirmation ping and skip the scan"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -58,7 +63,12 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python3 bot/scan_once.py
+        run: |
+          if [ "${{ inputs.test_ping }}" = "true" ]; then
+            python3 bot/scan_once.py --test-message
+          else
+            python3 bot/scan_once.py
+          fi
 
       - name: Save scanner state
         if: always()

@@ -19,6 +19,7 @@ Run: python3 bot/scan_once.py
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -108,6 +109,24 @@ def select_events(signals: list, newest: int) -> tuple[list, list]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="ASTRA one-shot scanner")
+    parser.add_argument("--test-message", action="store_true",
+                        help="send a confirmation ping and exit; no scan")
+    args = parser.parse_args(argv)
+
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+    if args.test_message:
+        if not token or not chat:
+            sys.stderr.write("[scan] test ping skipped: telegram credentials unset\n")
+            return 1
+        text = ("✅ فحص الاتصال: بوت ASTRA يستقبل ويعمل.\n"
+                "سأرسل الإشارات الجديدة ونتائجها هنا.")
+        ok = bot.Telegram(token).send(chat, text)
+        print(json.dumps({"test_message_sent": ok}))
+        return 0 if ok else 1
+
     try:
         bars = fetch_bars()
     except Exception as exc:
@@ -134,8 +153,6 @@ def main(argv: list[str] | None = None) -> int:
     for s in fresh_results:
         print("DONE " + json.dumps(s.as_dict(), ensure_ascii=False))
 
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    chat = os.environ.get("TELEGRAM_CHAT_ID", "")
     if token and chat and not priming:
         tg = bot.Telegram(token)
         for s in new_ideas:
