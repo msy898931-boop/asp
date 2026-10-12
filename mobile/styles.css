@@ -532,3 +532,25 @@ html[dir="rtl"] .conn td { direction: ltr; unicode-bidi: embed; }
 html[dir="rtl"] .bar b { text-align: left; }
 html[dir="rtl"] .axis span { left: 0; right: auto; }
 html[dir="rtl"] .axis { text-align: left; }
+
+/* ── AI advisor (isolated, unvalidated) ─────────────────────── */
+.ai-warn {
+  color: var(--warn, #b26a00);
+  border-left: 3px solid var(--warn, #b26a00);
+  padding-left: .6rem;
+}
+html[dir="rtl"] .ai-warn {
+  border-left: none;
+  border-right: 3px solid var(--warn, #b26a00);
+  padding-left: 0;
+  padding-right: .6rem;
+}
+.ai-stance-row { display: flex; align-items: baseline; gap: .6rem; margin: .8rem 0 .4rem; }
+.ai-stance { font-size: 1.35rem; font-weight: 600; }
+.ai-stance.long { color: var(--up, #1a7f37); }
+.ai-stance.short { color: var(--down, #c62828); }
+.ai-stance.neutral { color: var(--muted, #6b7280); }
+.ai-conf { font-size: .85rem; color: var(--muted, #6b7280); }
+.ai-thesis { margin: .3rem 0; line-height: 1.5; }
+.ai-risks { margin: .3rem 0; font-size: .9rem; color: var(--muted, #6b7280); }
+#ai-refresh { margin-top: .8rem; }

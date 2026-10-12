@@ -19,6 +19,7 @@ cd "$ROOT"
 PORT="${1:-12000}"
 API_PORT=8790
 BRIDGE_PORT=8791
+ADVISOR_PORT=8792
 RUNDIR="$ROOT/run"
 mkdir -p "$RUNDIR"
 
@@ -67,9 +68,29 @@ else
     setsid nohup python3 "$ROOT/mobile/serve_mobile.py" \
         --host 0.0.0.0 --port "$PORT" \
         --api-port "$API_PORT" --bridge-port "$BRIDGE_PORT" \
+        --advisor-port "$ADVISOR_PORT" \
         > "$RUNDIR/mobile.log" 2>&1 < /dev/null &
     echo $! > "$RUNDIR/mobile.pid"
     echo "[start] mobile launched on :$PORT (pid $!)"
+fi
+
+# --- AI advisor (isolated, optional) -------------------------------------
+# Its own process and port. It never touches the engine or the ledger, and if
+# it fails to start the rest of the stack is unaffected. Opt out with
+# ASTRA_DISABLE_ADVISOR=1.
+if [ "${ASTRA_DISABLE_ADVISOR:-0}" = "1" ]; then
+    echo "[start] ai advisor disabled (ASTRA_DISABLE_ADVISOR=1)"
+elif alive "$(pid_of advisor)"; then
+    echo "[start] ai advisor already running (pid $(pid_of advisor))"
+else
+    setsid nohup python3 "$ROOT/advisor/ai_advisor.py" --port "$ADVISOR_PORT" \
+        > "$RUNDIR/advisor.log" 2>&1 < /dev/null &
+    echo $! > "$RUNDIR/advisor.pid"
+    if [ -n "${GEMINI_API_KEY:-}" ]; then
+        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - configured"
+    else
+        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - not configured (set GEMINI_API_KEY)"
+    fi
 fi
 
 # --- wait for readiness --------------------------------------------------

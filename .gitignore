@@ -1,5 +1,6 @@
 # Build output (BLD-0002)
 build/
+build2/
 out/
 dist/
 cmake-build-*/

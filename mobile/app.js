@@ -19,7 +19,18 @@ const STRINGS = {
   en: {
     title_sub: "XAUUSD · shadow mode",
     tab_status: "Status", tab_signal: "State", tab_chart: "Chart",
-    tab_conn: "Data", tab_bridge: "Bridge",
+    tab_conn: "Data", tab_bridge: "Bridge", tab_ai: "AI",
+    ai_title: "AI advisor",
+    ai_warn: "Second opinion from an external model. Outside the validated system, not scored. Not financial advice.",
+    ai_price: "Live price", ai_engine: "Engine read",
+    ai_news: "Used news", ai_model: "Model", ai_status: "Status",
+    ai_refresh: "Ask again",
+    ai_stance_long: "AI leans long", ai_stance_short: "AI leans short",
+    ai_stance_neutral: "AI is neutral", ai_stance_none: "No opinion yet",
+    ai_conf: "{p}% own confidence", ai_risks: "Risks", ai_ok: "Advisory loaded",
+    ai_off: "AI advisor not configured",
+    ai_off_sub: "Set GEMINI_API_KEY on the server to enable it.",
+    ai_unavail: "AI advisor unreachable",
     ver: "decision support · not financial advice",
     connecting: "connecting",
     alerts_off: "Signal alerts off",
@@ -63,7 +74,18 @@ const STRINGS = {
   ar: {
     title_sub: "الذهب · وضع الظل",
     tab_status: "الحالة", tab_signal: "السوق", tab_chart: "الشارت",
-    tab_conn: "البيانات", tab_bridge: "الجسر",
+    tab_conn: "البيانات", tab_bridge: "الجسر", tab_ai: "الذكاء",
+    ai_title: "المستشار الذكي",
+    ai_warn: "رأي ثانٍ من نموذج خارجي. خارج النظام المُتحقَّق منه، وغير مُقيَّم. ليس نصيحة مالية.",
+    ai_price: "السعر اللحظي", ai_engine: "قراءة المحرك",
+    ai_news: "استخدم الأخبار", ai_model: "النموذج", ai_status: "الحالة",
+    ai_refresh: "اسأل من جديد",
+    ai_stance_long: "الذكاء يميل للشراء", ai_stance_short: "الذكاء يميل للبيع",
+    ai_stance_neutral: "الذكاء محايد", ai_stance_none: "لا رأي بعد",
+    ai_conf: "ثقة النموذج {p}%", ai_risks: "المخاطر", ai_ok: "تم تحميل الرأي",
+    ai_off: "المستشار الذكي غير مُهيَّأ",
+    ai_off_sub: "اضبط GEMINI_API_KEY على الخادم لتفعيله.",
+    ai_unavail: "المستشار الذكي غير متاح",
     ver: "دعم قرار · ليس نصيحة مالية",
     connecting: "جارٍ الاتصال",
     alerts_off: "تنبيهات الإشارة متوقفة",
@@ -286,6 +308,65 @@ function renderBridge(br) {
   $("b-broker").textContent = br.broker || "(none)";
   $("b-server").textContent = br.server || "(none)";
   $("b-transport").textContent = br.transport || "(none)";
+}
+
+/* ── AI advisor (isolated, unvalidated) ─────────────────────────────── */
+
+const AI_STANCE_KEY = {
+  LONG: "ai_stance_long", SHORT: "ai_stance_short", NEUTRAL: "ai_stance_neutral",
+};
+
+// Reads the isolated advisor through the same-origin proxy. A failure here is
+// shown as "unreachable" and changes nothing else in the app: the advisor is
+// outside the system and must never affect the validated views.
+async function loadAdvisor(force) {
+  const stanceEl = $("ai-stance");
+  const setStatus = (text) => { $("ai-status").textContent = text; };
+  try {
+    const env = await getJson("advisor/v1/advisor" + (force ? "?refresh=1" : ""));
+    const a = (env && env.advisor) || {};
+    const snap = a.snapshot || {};
+    const op = a.opinion;
+
+    $("ai-price").textContent = snap.price != null ? num(snap.price) : "--";
+    const eng = (snap.analysis || {}).signal || {};
+    $("ai-engine").textContent = snap.analysis_available
+      ? (eng.direction || "NONE") : T("ai_stance_none");
+    $("ai-model").textContent = a.model || "--";
+    $("ai-news").textContent = op ? yn(op.news_used) : "--";
+
+    stanceEl.className = "ai-stance";
+    if (op) {
+      stanceEl.textContent = T(AI_STANCE_KEY[op.stance] || "ai_stance_neutral");
+      stanceEl.classList.add(op.stance.toLowerCase());
+      $("ai-conf").textContent = T("ai_conf").replace(
+        "{p}", Math.round((op.confidence || 0) * 100));
+      $("ai-thesis").textContent = op.thesis || "";
+      $("ai-risks").textContent = op.risks ? `${T("ai_risks")}: ${op.risks}` : "";
+      setStatus(T("ai_ok"));
+    } else if (!a.configured) {
+      stanceEl.textContent = T("ai_off");
+      stanceEl.classList.add("neutral");
+      $("ai-conf").textContent = "";
+      $("ai-thesis").textContent = T("ai_off_sub");
+      $("ai-risks").textContent = "";
+      setStatus(T("ai_off"));
+    } else {
+      stanceEl.textContent = T("ai_stance_none");
+      stanceEl.classList.add("neutral");
+      $("ai-conf").textContent = "";
+      $("ai-thesis").textContent = a.note || "";
+      $("ai-risks").textContent = "";
+      setStatus(T("ai_unavail"));
+    }
+  } catch (err) {
+    stanceEl.textContent = T("ai_unavail");
+    stanceEl.className = "ai-stance neutral";
+    $("ai-conf").textContent = "";
+    $("ai-thesis").textContent = "";
+    $("ai-risks").textContent = "";
+    setStatus(T("ai_unavail"));
+  }
 }
 
 /* ── market state ───────────────────────────────────────────────────── */
@@ -700,6 +781,7 @@ function bindTabs() {
         (p.hidden = p.id !== `view-${view}`));
       if (view === "chart") loadChart();
       if (view === "conn") renderConn();
+      if (view === "ai") loadAdvisor(false);
     });
   });
 }
@@ -712,6 +794,7 @@ function init() {
   buildTimeframes();
   bindTabs();
   $("refresh").addEventListener("click", refresh);
+  $("ai-refresh").addEventListener("click", () => loadAdvisor(true));
   $("alerts").addEventListener("click", toggleAlerts);
   $("level-form").addEventListener("submit", (e) => {
     e.preventDefault();

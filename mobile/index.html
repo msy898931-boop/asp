@@ -168,12 +168,33 @@
     </dl>
     <p class="context" data-i18n="bridge_note">The bridge is the loopback market-data link. It never executes trades and is bound to 127.0.0.1 only.</p>
   </section>
+
+  <!-- AI ADVISOR (isolated, unvalidated) -->
+  <section class="panel" id="view-ai" hidden>
+    <h2 class="panel-title" data-i18n="ai_title">AI advisor</h2>
+    <p class="panel-note ai-warn" data-i18n="ai_warn">Second opinion from an external model. Outside the validated system, not scored. Not financial advice.</p>
+    <div class="ai-stance-row">
+      <span class="ai-stance" id="ai-stance">--</span>
+      <span class="ai-conf" id="ai-conf"></span>
+    </div>
+    <p class="ai-thesis" id="ai-thesis"></p>
+    <p class="ai-risks" id="ai-risks"></p>
+    <dl class="readout">
+      <div><dt data-i18n="ai_price">Live price</dt><dd id="ai-price">--</dd></div>
+      <div><dt data-i18n="ai_engine">Engine read</dt><dd id="ai-engine">--</dd></div>
+      <div><dt data-i18n="ai_news">Used news</dt><dd id="ai-news">--</dd></div>
+      <div><dt data-i18n="ai_model">Model</dt><dd id="ai-model">--</dd></div>
+      <div><dt data-i18n="ai_status">Status</dt><dd id="ai-status">--</dd></div>
+    </dl>
+    <button id="ai-refresh" class="text-btn" type="button" data-i18n="ai_refresh">Ask again</button>
+  </section>
 </main>
 
 <nav class="tabs" role="tablist">
   <button class="tab" data-view="status" aria-selected="true" type="button" data-i18n="tab_status">Status</button>
   <button class="tab" data-view="signal" type="button" data-i18n="tab_signal">State</button>
   <button class="tab" data-view="chart" type="button" data-i18n="tab_chart">Chart</button>
+  <button class="tab" data-view="ai" type="button" data-i18n="tab_ai">AI</button>
   <button class="tab" data-view="conn" type="button" data-i18n="tab_conn">Data</button>
   <button class="tab" data-view="bridge" type="button" data-i18n="tab_bridge">Bridge</button>
 </nav>
