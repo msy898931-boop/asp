@@ -1,0 +1,70 @@
+# The always-on half of ASTRA: a scheduled scan that needs no server.
+#
+# GitHub runs the job for free on a cron. Each run fetches M15 candles straight
+# from the same upstream the local bridge uses, replays the engine chain, and
+# pings Telegram when a trade idea appears or a result lands. The bot is the
+# only moving part, and it lives and dies with the runner, so there is nothing
+# to keep powered on.
+#
+# State between runs rides in the Actions cache, keyed to a single scope so
+# every run reads and writes the same entry. The scanner primes silently on the
+# first run, so a lost or cold cache never blasts the back-catalogue.
+#
+# Required repository secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+# Without them the job still runs and prints the scoreboard (dry mode).
+#
+# Note: GitHub's cron is best-effort and can lag a few minutes at busy times.
+# The scanner selects every event since the last alerted bar, so a late or
+# skipped slot changes latency only, never what gets reported.
+
+name: astra-bot
+
+on:
+  schedule:
+    # Every 15 minutes. Offset by 5 so the newest M15 bar has closed when we read.
+    - cron: "5,20,35,50 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-bot
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore scanner state
+        uses: actions/cache/restore@v4
+        with:
+          path: run/scan_state.json
+          key: astra-scan-state-${{ github.run_id }}
+          restore-keys: |
+            astra-scan-state-
+
+      - name: Run the tests
+        run: python3 -m unittest discover -s bot -p "test_*.py"
+
+      - name: Scan once and notify
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 bot/scan_once.py
+
+      - name: Save scanner state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: run/scan_state.json
+          # A fresh key each run: cache entries cannot be overwritten, so the
+          # latest write must land under a new name and be found via the prefix.
+          key: astra-scan-state-${{ github.run_id }}
