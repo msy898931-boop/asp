@@ -109,11 +109,13 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
 - The AI advisor (`advisor/`) is an isolated, unvalidated second opinion on
   port 8792. It is deliberately outside the engine and the ledger: the engine
   reads price only and its own edge is ~0, so the advisor adds context/news
-  and logs itself (`run/advisor_advisories.jsonl`) to be scored later. It needs
-  `GEMINI_API_KEY` (server-side only; the app reaches it via the same-origin
-  `/advisor` proxy). Without the key it answers with the snapshot and
-  `configured:false`. Disable with `ASTRA_DISABLE_ADVISOR=1`. A failure there
-  must never affect the rest of the stack.
+  and logs itself (`run/advisor_advisories.jsonl`) to be scored later. Default
+  provider is Groq (`GROQ_API_KEY`, global free tier); Gemini is opt-in via
+  `ASTRA_ADVISOR_PROVIDER=gemini` (region-restricted). Keys stay server-side;
+  the app reaches it via the same-origin `/advisor` proxy. Without a key it
+  answers with the snapshot and `configured:false`. Disable with
+  `ASTRA_DISABLE_ADVISOR=1`. A failure there must never affect the rest of the
+  stack.
 
 ## Always-on server (Docker)
 

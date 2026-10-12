@@ -110,9 +110,9 @@ class SnapshotTests(unittest.TestCase):
 class BuildTests(unittest.TestCase):
     def setUp(self):
         self._orig_get = advisor._get_json
-        self._orig_call = advisor.call_gemini
+        self._orig_call = advisor.call_model
         self._orig_log = advisor.append_log
-        self._orig_key = os.environ.get("GEMINI_API_KEY")
+        self._orig_key = os.environ.get("GROQ_API_KEY")
         advisor.append_log = lambda record: None
         advisor._get_json = lambda url: (
             {"payload": {"last": 4185.9}} if "/v1/tick" in url
@@ -120,15 +120,15 @@ class BuildTests(unittest.TestCase):
 
     def tearDown(self):
         advisor._get_json = self._orig_get
-        advisor.call_gemini = self._orig_call
+        advisor.call_model = self._orig_call
         advisor.append_log = self._orig_log
         if self._orig_key is None:
-            os.environ.pop("GEMINI_API_KEY", None)
+            os.environ.pop("GROQ_API_KEY", None)
         else:
-            os.environ["GEMINI_API_KEY"] = self._orig_key
+            os.environ["GROQ_API_KEY"] = self._orig_key
 
     def test_unconfigured_reports_the_snapshot_without_an_opinion(self):
-        os.environ.pop("GEMINI_API_KEY", None)
+        os.environ.pop("GROQ_API_KEY", None)
         result = advisor.Advisor()._build()
         self.assertFalse(result["configured"])
         self.assertIsNone(result["opinion"])
@@ -136,8 +136,8 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result["snapshot"]["price"], 4185.9)
 
     def test_configured_builds_an_unvalidated_opinion(self):
-        os.environ["GEMINI_API_KEY"] = "test-key"
-        advisor.call_gemini = lambda prompt, key: json.dumps(
+        os.environ["GROQ_API_KEY"] = "test-key"
+        advisor.call_model = lambda prompt, key: json.dumps(
             {"stance": "SHORT", "confidence": 0.6, "thesis": "t",
              "risks": "r", "news_used": False})
         result = advisor.Advisor()._build()
@@ -147,8 +147,8 @@ class BuildTests(unittest.TestCase):
         self.assertIn("outside the validated system", result["note"])
 
     def test_unusable_reply_does_not_produce_an_opinion(self):
-        os.environ["GEMINI_API_KEY"] = "test-key"
-        advisor.call_gemini = lambda prompt, key: "not json at all"
+        os.environ["GROQ_API_KEY"] = "test-key"
+        advisor.call_model = lambda prompt, key: "not json at all"
         result = advisor.Advisor()._build()
         self.assertIsNone(result["opinion"])
         self.assertIn("unavailable", result["note"])
@@ -158,6 +158,56 @@ class BuildTests(unittest.TestCase):
         self.assertIn("4185.9", prompt)
         self.assertIn("JSON only", prompt)
         self.assertIn("news_used", prompt)
+
+
+class ProviderTests(unittest.TestCase):
+    def test_default_provider_is_groq(self):
+        self.assertEqual(advisor.PROVIDER, "groq")
+        self.assertEqual(advisor._KEY_ENV["groq"], "GROQ_API_KEY")
+
+    def test_provider_key_reads_the_right_env_var(self):
+        os.environ["GROQ_API_KEY"] = "  gsk_abc  "
+        try:
+            self.assertEqual(advisor.provider_key(), "gsk_abc")
+        finally:
+            os.environ.pop("GROQ_API_KEY", None)
+
+    def test_unknown_provider_is_inert(self):
+        original = advisor.PROVIDER
+        advisor.PROVIDER = "nope"
+        try:
+            self.assertIsNone(advisor.call_model("p", "k"))
+        finally:
+            advisor.PROVIDER = original
+
+    def test_groq_request_shape_is_openai_compatible(self):
+        captured = {}
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps(
+                    {"choices": [{"message": {"content": '{"stance":"LONG"}'}}]}
+                ).encode()
+
+        def fake_urlopen(req, timeout=None):
+            captured["url"] = req.full_url
+            captured["auth"] = req.get_header("Authorization")
+            captured["body"] = json.loads(req.data.decode())
+            return FakeResp()
+
+        original = advisor.urllib.request.urlopen
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            out = advisor.call_groq("hello", "gsk_test")
+        finally:
+            advisor.urllib.request.urlopen = original
+        self.assertIn("api.groq.com", captured["url"])
+        self.assertEqual(captured["auth"], "Bearer gsk_test")
+        self.assertEqual(captured["body"]["messages"][0]["content"], "hello")
+        self.assertEqual(captured["body"]["temperature"], 0.0)
+        self.assertEqual(out, '{"stance":"LONG"}')
 
 
 class CacheTests(unittest.TestCase):

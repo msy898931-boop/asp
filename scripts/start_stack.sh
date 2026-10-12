@@ -86,10 +86,13 @@ else
     setsid nohup python3 "$ROOT/advisor/ai_advisor.py" --port "$ADVISOR_PORT" \
         > "$RUNDIR/advisor.log" 2>&1 < /dev/null &
     echo $! > "$RUNDIR/advisor.pid"
-    if [ -n "${GEMINI_API_KEY:-}" ]; then
-        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - configured"
+    # Groq is the default provider (global free tier); Gemini is opt-in.
+    _prov="${ASTRA_ADVISOR_PROVIDER:-groq}"
+    if [ "$_prov" = "gemini" ]; then _key="${GEMINI_API_KEY:-}"; else _key="${GROQ_API_KEY:-}"; fi
+    if [ -n "$_key" ]; then
+        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, configured"
     else
-        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - not configured (set GEMINI_API_KEY)"
+        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, not configured (set GROQ_API_KEY)"
     fi
 fi
 

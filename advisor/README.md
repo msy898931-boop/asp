@@ -15,13 +15,22 @@ itself so it can be scored later.
   the engine and never writes to the prediction ledger.
 - Every advisory is stamped `validated: false` and logged to
   `run/advisor_advisories.jsonl` for later scoring.
-- Without `GEMINI_API_KEY` it still answers with the factual snapshot and
+- Without a provider key it still answers with the factual snapshot and
   `configured: false`, so the UI degrades instead of erroring.
 
 ## Run
 
+Groq is the default provider (global free tier):
+
 ```bash
-GEMINI_API_KEY=... python3 advisor/ai_advisor.py --port 8792
+GROQ_API_KEY=gsk_... python3 advisor/ai_advisor.py --port 8792
+```
+
+Gemini is opt-in (its free tier is region-restricted):
+
+```bash
+ASTRA_ADVISOR_PROVIDER=gemini GEMINI_API_KEY=... \
+  python3 advisor/ai_advisor.py --port 8792
 ```
 
 Started by `scripts/start_stack.sh` unless `ASTRA_DISABLE_ADVISOR=1`. The app

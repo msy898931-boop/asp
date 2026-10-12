@@ -12,9 +12,13 @@ Scope and boundaries, all deliberate:
   * Every advisory is appended to a JSONL log so it can be scored against
     outcomes later. Until that scoring exists, treat it as commentary.
 
-Without ``GEMINI_API_KEY`` the service still answers: it returns the factual
+Without a provider key the service still answers: it returns the factual
 market snapshot with ``configured: false`` and no opinion, so the UI degrades
 to "not configured" rather than erroring.
+
+Providers (``ASTRA_ADVISOR_PROVIDER``, default ``groq``):
+  * ``groq``   - GROQ_API_KEY, OpenAI-compatible, global free tier.
+  * ``gemini`` - GEMINI_API_KEY, region-restricted free tier.
 
 Run: python3 advisor/ai_advisor.py --port 8792
 """
@@ -36,9 +40,20 @@ ROOT = os.path.dirname(HERE)
 API_BASE = os.environ.get("ASTRA_ADVISOR_API", "http://127.0.0.1:8790")
 BRIDGE_BASE = os.environ.get("ASTRA_ADVISOR_BRIDGE", "http://127.0.0.1:8791")
 SYMBOL = os.environ.get("ASTRA_ADVISOR_SYMBOL", "XAUUSD")
+# Provider selection. Groq is the default because its free tier is global;
+# Gemini's is region-restricted. Both are plain REST calls.
+PROVIDER = os.environ.get("ASTRA_ADVISOR_PROVIDER", "groq").strip().lower()
+
+GROQ_URL = os.environ.get("ASTRA_ADVISOR_GROQ_URL",
+                          "https://api.groq.com/openai/v1/chat/completions")
+GROQ_MODEL = os.environ.get("ASTRA_ADVISOR_MODEL", "llama-3.3-70b-versatile")
 GEMINI_MODEL = os.environ.get("ASTRA_ADVISOR_MODEL", "gemini-2.5-flash")
 GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
               "{model}:generateContent")
+
+# Which env var holds the key for each provider.
+_KEY_ENV = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}
+
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_ADVISOR_TIMEOUT", "20"))
 CACHE_TTL = float(os.environ.get("ASTRA_ADVISOR_TTL", "120"))
 LOG_PATH = os.environ.get("ASTRA_ADVISOR_LOG",
@@ -148,6 +163,47 @@ def parse_advisory(text: str) -> dict | None:
     }
 
 
+def call_groq(prompt: str, api_key: str) -> str | None:
+    """OpenAI-compatible chat completion on Groq."""
+    body = json.dumps({
+        "model": GROQ_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.0,
+        "response_format": {"type": "json_object"},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        GROQ_URL, data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": "Bearer " + api_key})
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    try:
+        return payload["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def call_model(prompt: str, api_key: str) -> str | None:
+    """Dispatch to the configured provider. Unknown providers are inert."""
+    if PROVIDER == "gemini":
+        return call_gemini(prompt, api_key)
+    if PROVIDER == "groq":
+        return call_groq(prompt, api_key)
+    return None
+
+
+def provider_key() -> str:
+    """The API key for the active provider, or empty if unset."""
+    return os.environ.get(_KEY_ENV.get(PROVIDER, ""), "").strip()
+
+
+def active_model() -> str | None:
+    return {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL}.get(PROVIDER)
+
+
 def call_gemini(prompt: str, api_key: str) -> str | None:
     url = GEMINI_URL.format(model=GEMINI_MODEL) + "?key=" + api_key
     body = json.dumps({
@@ -197,7 +253,7 @@ class Advisor:
 
     def _build(self) -> dict:
         snapshot = build_snapshot()
-        api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        api_key = provider_key()
         advisory = {
             "schema_version": SCHEMA_VERSION,
             "symbol": snapshot["symbol"],
@@ -205,17 +261,19 @@ class Advisor:
             # The whole point: this is outside the validated system.
             "validated": False,
             "source": "ai-advisor (isolated)",
+            "provider": PROVIDER,
             "configured": bool(api_key),
-            "model": GEMINI_MODEL if api_key else None,
+            "model": active_model() if api_key else None,
             "snapshot": snapshot,
             "opinion": None,
         }
         if not api_key:
-            advisory["note"] = ("AI advisor not configured: set GEMINI_API_KEY "
-                                "to enable a second opinion.")
+            advisory["note"] = ("AI advisor not configured: set %s to enable a "
+                                "second opinion." % _KEY_ENV.get(PROVIDER, "the "
+                                "provider key"))
             return advisory
 
-        reply = call_gemini(build_prompt(snapshot), api_key)
+        reply = call_model(build_prompt(snapshot), api_key)
         opinion = parse_advisory(reply) if reply else None
         if opinion is None:
             advisory["note"] = "AI advisor unavailable: no usable reply."
@@ -233,7 +291,8 @@ class Advisor:
             "stance": opinion["stance"],
             "confidence": opinion["confidence"],
             "news_used": opinion["news_used"],
-            "model": GEMINI_MODEL,
+            "provider": PROVIDER,
+            "model": active_model(),
         })
         return advisory
 
@@ -251,8 +310,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"advisor": self.advisor.current(force=force)})
         elif path in ("/health", "/v1/health"):
             self._json(200, {"service": "ai-advisor", "status": "OK",
-                             "configured": bool(
-                                 os.environ.get("GEMINI_API_KEY", "").strip())})
+                             "provider": PROVIDER,
+                             "configured": bool(provider_key())})
         else:
             self._json(404, {"error": "unknown route", "path": path})
 
