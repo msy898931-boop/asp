@@ -376,8 +376,15 @@ the running binary is `Text file busy` otherwise.
 ### Telegram bot 409 conflicts
 
 `getUpdates` returns HTTP 409 when another process polls the same bot token.
-This container runs exactly one `astra_bot.py`, so persistent 409s mean a second
-instance is polling the same token from elsewhere (e.g. a previously deployed
-host). It is not caused by the local stack; confirm with `getWebhookInfo` (empty
-URL) and by watching the 409 counter in `run/host.log` while making no external
-Telegram calls.
+The second poller is the always-on deployment (`render.yaml`, and the
+manual-only `deploy-fly.yml`), which holds the token as a host secret. Killing
+the local bot removes the conflict; the remote instance then polls cleanly on
+its own.
+
+The local stack never runs the bot by default — `start_stack.sh` requires both
+`ASTRA_ENABLE_BOT=1` and a non-empty `TELEGRAM_BOT_TOKEN`. `watch_stack.sh`
+calls `start_stack.sh` with the inherited environment, so to keep the bot off
+permanently, launch the watchdog with the token unset
+(`env -u TELEGRAM_BOT_TOKEN -u ASTRA_ENABLE_BOT scripts/watch_stack.sh`).
+Confirm with `getWebhookInfo` (empty URL) and by watching the 409 counter in
+`run/host.log` while making no external Telegram calls.
