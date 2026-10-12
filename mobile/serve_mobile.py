@@ -17,8 +17,10 @@ Run: python3 mobile/serve_mobile.py --port 12000
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -45,6 +47,34 @@ _CONTENT_TYPES = {
 }
 
 _PROXY_TIMEOUT = 6.0
+
+
+def _build_stamp() -> str:
+    """A short token that changes whenever the shell changes.
+
+    Caching layers (the service worker, the browser's own cache) key off the
+    URL, so appending this to styles.css/app.js makes a redeploy fetch the new
+    files immediately instead of serving the previously cached shell.
+    """
+    h = hashlib.sha1()
+    for name in ("index.html", "styles.css", "app.js", "sw.js"):
+        try:
+            with open(os.path.join(HERE, name), "rb") as fh:
+                h.update(fh.read())
+        except OSError:
+            pass
+    return h.hexdigest()[:10]
+
+
+_BUILD = _build_stamp()
+_SHELL_ASSET_RE = re.compile(rb'(href|src)="(styles\.css|app\.js)"')
+
+
+def _stamp_shell(body: bytes) -> bytes:
+    return _SHELL_ASSET_RE.sub(
+        lambda m: b'%s="%s?v=%s"' % (m.group(1), m.group(2), _BUILD.encode()),
+        body,
+    )
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -90,6 +120,8 @@ class Handler(BaseHTTPRequestHandler):
         ext = os.path.splitext(target)[1].lower()
         with open(target, "rb") as fh:
             body = fh.read()
+        if ext in (".html", ".htm"):
+            body = _stamp_shell(body)
         ctype = _CONTENT_TYPES.get(ext, "application/octet-stream")
         self._send(200, body, ctype)
 
@@ -157,6 +189,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         if ctype.startswith("application/json"):
             self.send_header("Cache-Control", "no-store")
+        else:
+            # Without this the browser heuristically caches the shell, so a
+            # redeploy is not seen until the cache expires. The shell is small,
+            # so revalidating on every load is cheap.
+            self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)

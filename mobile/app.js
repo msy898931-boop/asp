@@ -29,7 +29,7 @@ const STRINGS = {
     ai_stance_neutral: "AI is neutral", ai_stance_none: "No opinion yet",
     ai_conf: "{p}% own confidence", ai_risks: "Risks", ai_ok: "Advisory loaded",
     ai_off: "AI advisor not configured",
-    ai_off_sub: "Set GEMINI_API_KEY on the server to enable it.",
+    ai_off_sub: "Set the advisor API key on the server to enable it.",
     ai_unavail: "AI advisor unreachable",
     ver: "decision support · not financial advice",
     connecting: "connecting",
@@ -84,7 +84,7 @@ const STRINGS = {
     ai_stance_neutral: "الذكاء محايد", ai_stance_none: "لا رأي بعد",
     ai_conf: "ثقة النموذج {p}%", ai_risks: "المخاطر", ai_ok: "تم تحميل الرأي",
     ai_off: "المستشار الذكي غير مُهيَّأ",
-    ai_off_sub: "اضبط GEMINI_API_KEY على الخادم لتفعيله.",
+    ai_off_sub: "اضبط مفتاح المستشار على الخادم لتفعيله.",
     ai_unavail: "المستشار الذكي غير متاح",
     ver: "دعم قرار · ليس نصيحة مالية",
     connecting: "جارٍ الاتصال",
@@ -348,7 +348,7 @@ async function loadAdvisor(force) {
       stanceEl.textContent = T("ai_off");
       stanceEl.classList.add("neutral");
       $("ai-conf").textContent = "";
-      $("ai-thesis").textContent = T("ai_off_sub");
+      $("ai-thesis").textContent = a.note || T("ai_off_sub");
       $("ai-risks").textContent = "";
       setStatus(T("ai_off"));
     } else {

@@ -335,9 +335,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=8792)
     args = parser.parse_args(argv)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    sys.stderr.write("[advisor] listening on http://%s:%d (configured=%s)\n"
-                     % (args.host, args.port,
-                        bool(os.environ.get("GEMINI_API_KEY", "").strip())))
+    sys.stderr.write("[advisor] listening on http://%s:%d (provider=%s configured=%s)\n"
+                     % (args.host, args.port, _PROVIDER,
+                        bool(provider_key())))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
