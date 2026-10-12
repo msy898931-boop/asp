@@ -342,3 +342,42 @@ The server URL is baked in but changeable on-device from the error screen. The
 CI workflow `build-android.yml` builds it on every `mobile/**` or `android/**`
 push, signed with a cached keystore, and publishes it to the rolling `android`
 release — which is what the web footer's `/astra.apk` link redirects to.
+
+### "No signals / market shows UNKNOWN"
+
+Two separate causes, both diagnosed by inspecting the live API:
+
+1. **No directional candidate.** `SignalEngine::generate` requires two of three
+   votes to agree (structure bias, regime trend, RSI vs `rsiLongThreshold`/
+   `rsiShortThreshold`). When they disagree the bar yields `direction=NONE` and
+   no decision — the honest outcome, not a fault.
+2. **UNKNOWN context on a no-trade bar.** Historically `DecisionPipeline::
+   onClosedBar` returned early without recording `lastContext_`, so the
+   frontend rendered `regime`/`h4_bias`/`volatility_state` as UNKNOWN — which
+   looks identical to "not analysing". Fixed by publishing the evaluated
+   context on every closed bar, including no-trade ones.
+
+Diagnose from the host, not the UI: `/api/v1/context/latest` (regime/structure),
+`/api/v1/audit/recent` (`audit_stream_size`, decisions), `/api/v1/timeframes`
+(freshness), and the bridge's `/v1/candles?tf=M15&limit=500`. A regime of
+`RANGING` or `VOLATILE` with defaults (`allowRanging=true`,
+`allowVolatile=false`) is ineligible by policy; RSI thresholds are 52/48.
+
+### Building the backend in a sandbox
+
+`build/CMakeCache.txt` pins `CMAKE_COMMAND=/usr/bin/cmake`, which does not exist
+here — a stale `build/` will fail with `gmake: /usr/bin/cmake: No such file or
+directory`. Install cmake with `pip install cmake` (it lands in
+`~/.local/bin`, which is not on PATH), configure a fresh tree
+(`cmake -S . -B build2 -DCMAKE_BUILD_TYPE=Release`), build, then copy
+`build2/aura_backend_host` over `build/aura_backend_host`. Stop the stack first:
+the running binary is `Text file busy` otherwise.
+
+### Telegram bot 409 conflicts
+
+`getUpdates` returns HTTP 409 when another process polls the same bot token.
+This container runs exactly one `astra_bot.py`, so persistent 409s mean a second
+instance is polling the same token from elsewhere (e.g. a previously deployed
+host). It is not caused by the local stack; confirm with `getWebhookInfo` (empty
+URL) and by watching the 409 counter in `run/host.log` while making no external
+Telegram calls.
