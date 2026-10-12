@@ -554,3 +554,40 @@ html[dir="rtl"] .ai-warn {
 .ai-thesis { margin: .3rem 0; line-height: 1.5; }
 .ai-risks { margin: .3rem 0; font-size: .9rem; color: var(--muted, #6b7280); }
 #ai-refresh { margin-top: .8rem; }
+
+/* ── signal tracker ─────────────────────────────────────────────────── */
+.trk-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: .5rem;
+  margin: .8rem 0;
+}
+.trk-stat {
+  display: flex; flex-direction: column; gap: .15rem;
+  background: var(--panel-2, rgba(255,255,255,.04));
+  border: 1px solid var(--line, rgba(255,255,255,.08));
+  border-radius: 10px; padding: .5rem .6rem;
+}
+.trk-stat-label { font-size: .72rem; color: var(--muted, #6b7280); }
+.trk-stat-value { font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.trk-stat-value.up, .trk-r.up, .trk-oc.up { color: var(--up, #4FB477); }
+.trk-stat-value.down, .trk-r.down, .trk-oc.down { color: var(--down, #D1584F); }
+.trk-list { display: flex; flex-direction: column; gap: .35rem; margin-top: .6rem; }
+.trk-row {
+  display: grid;
+  grid-template-columns: 3.4rem 1fr auto auto;
+  grid-template-areas: "dir levels meta r" "dir oc oc r";
+  align-items: center; gap: .2rem .6rem;
+  padding: .45rem .55rem;
+  background: var(--panel-2, rgba(255,255,255,.04));
+  border: 1px solid var(--line, rgba(255,255,255,.08));
+  border-radius: 10px;
+}
+.trk-dir { grid-area: dir; font-weight: 700; font-size: .85rem; }
+.trk-dir.up { color: var(--up, #4FB477); }
+.trk-dir.down { color: var(--down, #D1584F); }
+.trk-levels { grid-area: levels; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.trk-meta { grid-area: meta; font-size: .72rem; color: var(--muted, #6b7280); }
+.trk-oc { grid-area: oc; font-size: .72rem; }
+.trk-r { grid-area: r; font-weight: 700; font-variant-numeric: tabular-nums; }
+

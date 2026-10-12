@@ -188,12 +188,21 @@
     </dl>
     <button id="ai-refresh" class="text-btn" type="button" data-i18n="ai_refresh">Ask again</button>
   </section>
+
+  <section class="panel" id="view-tracker" hidden>
+    <h2 class="panel-title" data-i18n="tracker_title">Signal tracker</h2>
+    <p class="panel-note ai-warn" data-i18n="tracker_warn">Replayed from closed bars. Unvalidated; not scored long enough to trust. Not financial advice.</p>
+    <div class="trk-stats" id="trk-stats"></div>
+    <p class="panel-note" id="trk-note"></p>
+    <div class="trk-list" id="trk-list"></div>
+  </section>
 </main>
 
 <nav class="tabs" role="tablist">
   <button class="tab" data-view="status" aria-selected="true" type="button" data-i18n="tab_status">Status</button>
   <button class="tab" data-view="signal" type="button" data-i18n="tab_signal">State</button>
   <button class="tab" data-view="chart" type="button" data-i18n="tab_chart">Chart</button>
+  <button class="tab" data-view="tracker" type="button" data-i18n="tab_tracker">Signals</button>
   <button class="tab" data-view="ai" type="button" data-i18n="tab_ai">AI</button>
   <button class="tab" data-view="conn" type="button" data-i18n="tab_conn">Data</button>
   <button class="tab" data-view="bridge" type="button" data-i18n="tab_bridge">Bridge</button>

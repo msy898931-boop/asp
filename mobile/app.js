@@ -70,6 +70,19 @@ const STRINGS = {
     apk: "Download the Android app (.apk)",
     plans: "Plans & pricing",
     overview: "Overview", data: "Data",
+    tab_tracker: "Signals",
+    tracker_title: "Signal tracker",
+    tracker_warn: "Replayed from closed bars. Unvalidated and not scored for long enough to trust. Not financial advice.",
+    tracker_insufficient: "Not enough scored trades yet — no win rate is stated.",
+    tracker_hold: "Hold",
+    tracker_winrate: "Win rate",
+    tracker_net: "Net (after spread)",
+    tracker_gross: "Gross R",
+    tracker_count: "Signals", tracker_wins: "Wins", tracker_losses: "Losses",
+    tracker_open: "live now",
+    tracker_empty: "No trade ideas in the current window.",
+    tracker_spread: "spread {c}/oz", tracker_horizon: "{h}h horizon",
+    trk_open: "Open", trk_target: "Target", trk_stop: "Stop", trk_timeout: "Timed out",
   },
   ar: {
     title_sub: "الذهب · وضع الظل",
@@ -125,6 +138,19 @@ const STRINGS = {
     apk: "حمّل تطبيق أندرويد (.apk)",
     plans: "الخطط والأسعار",
     overview: "نظرة عامة", data: "البيانات",
+    tab_tracker: "الإشارات",
+    tracker_title: "متتبّع الإشارات",
+    tracker_warn: "مُعاد تشغيله من الشموع المغلقة. غير مُتحقَّق منه ولم يُقيَّس زمنًا كافيًا. ليس نصيحة مالية.",
+    tracker_insufficient: "لا صفقات محسومة كافية بعد — لا تُذكر نسبة إصابة.",
+    tracker_hold: "قيد الاحتفاظ",
+    tracker_winrate: "نسبة الإصابة",
+    tracker_net: "الصافي (بعد السبريد)",
+    tracker_gross: "إجمالي R",
+    tracker_count: "الإشارات", tracker_wins: "أصابت", tracker_losses: "خسرت",
+    tracker_open: "مفتوحة الآن",
+    tracker_empty: "لا إشارات في النافذة الحالية.",
+    tracker_spread: "سبريد {c}/أونصة", tracker_horizon: "أفق {h} ساعة",
+    trk_open: "مفتوحة", trk_target: "هدف", trk_stop: "وقف", trk_timeout: "انتهت المدّة",
   },
 };
 
@@ -369,8 +395,77 @@ async function loadAdvisor(force) {
   }
 }
 
-/* ── market state ───────────────────────────────────────────────────── */
+/* ── signal tracker ─────────────────────────────────────────────────── */
 
+const TRK_OUTCOME_KEY = {
+  OPEN: "trk_open", TARGET: "trk_target", STOP: "trk_stop",
+  TIMEOUT: "trk_timeout",
+};
+
+function trkStat(label, value, cls) {
+  return `<div class="trk-stat"><span class="trk-stat-label">${label}</span>` +
+    `<span class="trk-stat-value ${cls || ""}">${value}</span></div>`;
+}
+
+function renderTracker(data) {
+  const statsEl = $("trk-stats");
+  const listEl = $("trk-list");
+  const noteEl = $("trk-note");
+  if (!data || typeof data !== "object") {
+    statsEl.innerHTML = "";
+    listEl.innerHTML = "";
+    noteEl.textContent = T("tracker_empty");
+    return;
+  }
+  const s = data.summary || {};
+  const netCls = (s.total_r_net || 0) > 0 ? "up" : (s.total_r_net || 0) < 0 ? "down" : "";
+  statsEl.innerHTML =
+    trkStat(T("tracker_count"), String(s.total_signals ?? 0)) +
+    trkStat(T("tracker_wins"), String(s.wins ?? 0), "up") +
+    trkStat(T("tracker_losses"), String(s.losses ?? 0), "down") +
+    trkStat(T("tracker_net"), fmt("{v}R", { v: num(s.total_r_net, 2) }), netCls) +
+    trkStat(T("tracker_gross"), fmt("{v}R", { v: num(s.total_r_gross, 2) })) +
+    trkStat(T("tracker_winrate"),
+      s.sufficient ? fmt("{p}%", { p: s.win_rate }) : "—");
+
+  const bits = [];
+  if (data.cost_usd != null) bits.push(T("tracker_spread").replace("{c}", num(data.cost_usd)));
+  if (data.horizon_bars != null) bits.push(
+    T("tracker_horizon").replace("{h}", num((data.horizon_bars * 15) / 60, 1)));
+  bits.push(s.sufficient ? "" : T("tracker_insufficient"));
+  noteEl.textContent = bits.filter(Boolean).join(" · ");
+
+  const rows = (data.signals || []).slice().reverse();
+  if (!rows.length) {
+    listEl.innerHTML = `<p class="panel-note">${T("tracker_empty")}</p>`;
+    return;
+  }
+  listEl.innerHTML = rows.map((r) => {
+    const dirCls = r.direction === "LONG" ? "up" : "down";
+    const oc = TRK_OUTCOME_KEY[r.outcome] || r.outcome;
+    const rCls = r.r_net == null ? "" : r.r_net >= 0 ? "up" : "down";
+    const rTxt = r.r_net == null ? "—" : `${r.r_net >= 0 ? "+" : ""}${num(r.r_net, 2)}R`;
+    return `<div class="trk-row">` +
+      `<span class="trk-dir ${dirCls}">${r.direction}</span>` +
+      `<span class="trk-levels">${T("entry")} ${num(r.entry)} · ` +
+      `${T("stop")} ${num(r.stop)} · ${T("target")} ${num(r.target)}</span>` +
+      `<span class="trk-meta">${r.regime || ""} · RSI ${num(r.rsi, 0)}</span>` +
+      `<span class="trk-oc ${rCls}">${T(oc)}</span>` +
+      `<span class="trk-r ${rCls}">${rTxt}</span>` +
+      `</div>`;
+  }).join("");
+}
+
+async function loadTracker() {
+  try {
+    const env = await getJson("tracker/v1/signals");
+    renderTracker(env && env.tracker);
+  } catch (err) {
+    renderTracker(null);
+  }
+}
+
+/* ── market state ───────────────────────────────────────────────────── */
 const DIR_LABEL = {
   en: { UP: "UP", DOWN: "DOWN", NONE: "FLAT" },
   ar: { UP: "صعود", DOWN: "هبوط", NONE: "محايد" },
@@ -781,6 +876,7 @@ function bindTabs() {
         (p.hidden = p.id !== `view-${view}`));
       if (view === "chart") loadChart();
       if (view === "conn") renderConn();
+      if (view === "tracker") loadTracker();
       if (view === "ai") loadAdvisor(false);
     });
   });
