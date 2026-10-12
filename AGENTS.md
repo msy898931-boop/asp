@@ -204,6 +204,13 @@ fetches the shell network-first. A stale shell is the failure mode to watch for
 whose panel markup had no renderer. When a UI change does not appear, suspect
 the cache before the code.
 
+A second failure mode looks the same from the browser: if the advisor process
+dies (e.g. it raises on boot), the mobile `/advisor` proxy answers 502 and the
+AI tab sits on placeholders with no error. Check `run/advisor.log` and
+`GET /advisor/v1/advisor` before blaming the shell. The advisor logs
+`provider=... configured=...` on startup, so a missing log line means it never
+came up.
+
 ### Android APK
 
 `android/` wraps the same web app in a WebView shell to produce a real,
