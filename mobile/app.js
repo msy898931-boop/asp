@@ -446,13 +446,15 @@ function renderTracker(data) {
     const rCls = r.r_net == null ? "" : r.r_net >= 0 ? "up" : "down";
     const rTxt = r.r_net == null ? "—" : `${r.r_net >= 0 ? "+" : ""}${num(r.r_net, 2)}R`;
     return `<div class="trk-row">` +
+      `<div class="trk-top">` +
       `<span class="trk-dir ${dirCls}">${r.direction}</span>` +
-      `<span class="trk-levels">${T("entry")} ${num(r.entry)} · ` +
-      `${T("stop")} ${num(r.stop)} · ${T("target")} ${num(r.target)}</span>` +
-      `<span class="trk-meta">${r.regime || ""} · RSI ${num(r.rsi, 0)}</span>` +
+      `<span class="trk-r ${rCls}">${rTxt}</span></div>` +
+      `<div class="trk-levels">${T("entry")} ${num(r.entry)} · ` +
+      `${T("stop")} ${num(r.stop)} · ${T("target")} ${num(r.target)}</div>` +
+      `<div class="trk-sub">` +
       `<span class="trk-oc ${rCls}">${T(oc)}</span>` +
-      `<span class="trk-r ${rCls}">${rTxt}</span>` +
-      `</div>`;
+      `<span class="trk-meta">${r.regime || ""} · RSI ${num(r.rsi, 0)}</span>` +
+      `</div></div>`;
   }).join("");
 }
 
