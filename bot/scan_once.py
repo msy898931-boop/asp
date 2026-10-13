@@ -55,6 +55,9 @@ HEARTBEAT = os.environ.get("ASTRA_HEARTBEAT", "1") not in ("0", "false", "no")
 # new, so by default it stays quiet instead of repeating the same line every
 # bar. Set ASTRA_HOLD_PING=1 to hear about every bar again.
 HOLD_PING = os.environ.get("ASTRA_HOLD_PING", "0") in ("1", "true", "yes")
+# Warn once, on the first bar a held trade gets close to its stop or target.
+# Set ASTRA_APPROACH_ALERT=0 to silence it.
+APPROACH_ALERT = os.environ.get("ASTRA_APPROACH_ALERT", "1") not in ("0", "false", "no")
 STATE_PATH = os.environ.get("ASTRA_SCAN_STATE",
                             os.path.join(ROOT, "run", "scan_state.json"))
 
@@ -234,6 +237,14 @@ def main(argv: list[str] | None = None) -> int:
                 tg.send(chat, bot.format_new(s.as_dict()))
             for s in fresh_results:
                 tg.send(chat, bot.format_result(s.as_dict(), ACCOUNT_USD))
+        # A held trade says nothing new, but a run toward its stop or target
+        # does: warn once, on the first bar that gets close.
+        if APPROACH_ALERT and bar_is_new:
+            held = status.get("open")
+            if held:
+                text = bot.format_approach(held, bars[-1])
+                if text:
+                    tg.send(chat, text)
         if due_daily_digest(state, datetime.now(timezone.utc), DIGEST_HOUR_UTC):
             tg.send(chat, digest_text(summary))
             digest_sent = True

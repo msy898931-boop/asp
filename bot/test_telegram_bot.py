@@ -155,6 +155,43 @@ class FormatTests(unittest.TestCase):
         self.assertIn("أصغر", text)
         self.assertIn("6.44", text)
 
+    def test_approach_is_silent_when_price_is_far(self):
+        live = {"direction": "LONG", "entry": 4150.0, "stop": 4140.0,
+                "target": 4170.0}
+        self.assertIsNone(bot.format_approach(
+            live, {"high": 4152.0, "low": 4148.0}))
+
+    def test_approach_warns_near_the_target(self):
+        live = {"direction": "LONG", "entry": 4150.0, "stop": 4140.0,
+                "target": 4170.0}
+        text = bot.format_approach(live, {"high": 4168.0, "low": 4155.0})
+        self.assertIn("قربت الهدف", text)
+        self.assertIn("4170.0", text)
+
+    def test_approach_warns_near_the_stop(self):
+        live = {"direction": "LONG", "entry": 4150.0, "stop": 4140.0,
+                "target": 4170.0}
+        text = bot.format_approach(live, {"high": 4149.0, "low": 4141.5})
+        self.assertIn("قربت الوقف", text)
+        self.assertIn("4140.0", text)
+
+    def test_approach_reports_the_nearer_side(self):
+        live = {"direction": "LONG", "entry": 4150.0, "stop": 4140.0,
+                "target": 4170.0}
+        text = bot.format_approach(live, {"high": 4169.5, "low": 4139.0})
+        self.assertIn("قربت الهدف", text)
+
+    def test_approach_handles_a_short_trade(self):
+        live = {"direction": "SHORT", "entry": 4150.0, "stop": 4160.0,
+                "target": 4130.0}
+        text = bot.format_approach(live, {"high": 4152.0, "low": 4131.5})
+        self.assertIn("قربت الهدف", text)
+        self.assertIn("4130.0", text)
+
+    def test_approach_is_inert_without_levels(self):
+        self.assertIsNone(bot.format_approach(
+            {"direction": "LONG", "entry": 4150.0}, {"high": 4150.0, "low": 4150.0}))
+
 
 if __name__ == "__main__":
     unittest.main()

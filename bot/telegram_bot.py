@@ -66,6 +66,10 @@ REGIME_AR = {"TRENDING_UP": "صعود", "TRENDING_DOWN": "هبوط",
 BIAS_AR = {"BULLISH": "صاعد", "BEARISH": "هابط", "RANGE": "عرضي",
            "INCOMPLETE": "غير مكتمل"}
 
+# A live trade counts as "near" a level when the price is within this fraction
+# of the stop-to-target span. 0.2 means the last 20% before a level.
+APPROACH_FRAC = float(os.environ.get("ASTRA_APPROACH_FRAC", "0.2"))
+
 
 def _get_json(url: str) -> dict | None:
     try:
@@ -206,6 +210,49 @@ def format_last_bar(status: dict, account_usd: float = 0.0,
             plan = account_plan(s["entry"], s["stop"], account_usd, risk_pct)
         return format_new(status["signal"], plan)
     return format_no_trade(status)
+
+
+def _approach(signal: dict, bar: dict) -> dict | None:
+    """How close a live trade is to its stop or target, or None if far.
+
+    Uses the bar's high/low, the honest "did the price get here" test, and
+    reports the nearer side so a single message names the real risk.
+    """
+    entry, stop, target = (signal.get("entry"), signal.get("stop"),
+                           signal.get("target"))
+    high, low = bar.get("high"), bar.get("low")
+    if None in (entry, stop, target) or high is None or low is None:
+        return None
+    span = abs(target - stop)
+    if span <= 0:
+        return None
+    # Distance to each level, from the side the price would have to travel.
+    to_target = abs(target - high) if target >= entry else abs(low - target)
+    to_stop = abs(low - stop) if stop <= entry else abs(high - stop)
+    side, distance = ("target", to_target) if to_target <= to_stop else ("stop", to_stop)
+    if distance > span * APPROACH_FRAC:
+        return None
+    pct = distance / span * 100.0
+    return {"side": side, "distance": round(distance, 2), "pct": round(pct)}
+
+
+def format_approach(signal: dict, bar: dict) -> str | None:
+    """A heads-up when a live trade nears its stop or target. None if far."""
+    near = _approach(signal, bar)
+    if near is None:
+        return None
+    side = near["side"]
+    head = "🎯 الصفقة قربت الهدف" if side == "target" else "⚠️ الصفقة قربت الوقف"
+    level = signal.get("target") if side == "target" else signal.get("stop")
+    return "\n".join([
+        head,
+        "%s من %s · %s→%s" % (signal.get("direction"), signal.get("entry"),
+                              signal.get("entry"),
+                              signal.get("target")),
+        "المستوى: %s · المسافة المتبقية %s$ (~%s%% من مدى الصفقة)"
+        % (level, near["distance"], near["pct"]),
+        "لا تتحرّك بسرعة — النظام بيسكّرها لحاله عند الوقف أو الهدف.",
+    ])
 
 
 def format_summary(summary: dict) -> str:
