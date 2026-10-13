@@ -582,6 +582,12 @@ cooldown), so holding a trade no longer repeats the same line every M15 bar.
 `ASTRA_HOLD_PING=1` restores the old behaviour; trades, resolutions and genuine
 no-edge reads always speak.
 
+But a held trade running toward a level is worth saying. On the first bar a
+live trade gets within `ASTRA_APPROACH_FRAC` (default 0.2) of its stop-to-target
+span, `scan_once` sends one heads-up (`telegram_bot.format_approach`) naming the
+nearer side and the distance left. It fires once per bar, so it cannot spam;
+`ASTRA_APPROACH_ALERT=0` silences it.
+
 ### News for free: keyless RSS, no provider quota
 
 The advisor grounds its read in real headlines via **Google News RSS** — no API
