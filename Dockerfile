@@ -65,6 +65,7 @@ COPY mobile  /app/mobile
 # reverse-proxied at /tracker by the phone app. It has its own tiny HTTP server,
 # so the entrypoint starts it as a loopback sidecar (see docker_entrypoint.sh).
 COPY tracker /app/tracker
+COPY advisor /app/advisor
 COPY scripts/docker_entrypoint.sh /app/docker_entrypoint.sh
 RUN chmod +x /app/docker_entrypoint.sh
 

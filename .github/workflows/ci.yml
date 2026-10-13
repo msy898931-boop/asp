@@ -46,6 +46,9 @@ jobs:
       - name: Test the signal engine and its honesty guarantees
         run: python3 -m unittest discover -s tracker -p "test_*.py"
 
+      - name: Test the AI advisor's parsing and not-configured degradation
+        run: python3 -m unittest discover -s advisor -p "test_*.py"
+
       - name: Test the paid-tool layer (tiers + price levels)
         run: |
           python3 bridge/telegram_bot/test_entitlements.py

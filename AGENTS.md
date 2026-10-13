@@ -487,3 +487,25 @@ Two always-on pieces, and they are independent:
 on the free plan — hence the keep-alive. If the service is ever upgraded, the
 keep-alive is harmless and can stay. The health path is `/api/v1/health`; the
 bare `/health` and `/api/health` both 404.
+
+### The AI advisor must be started, not just built
+
+The advisor (`advisor/ai_advisor.py`) is an isolated second opinion behind the
+app's "AI advisor" tab, reverse-proxied at `/advisor` (port 8792). It shipped in
+the repo but was **never wired into the container**: the Dockerfile did not
+`COPY advisor` and `scripts/docker_entrypoint.sh` did not launch it, so the app
+always reported "backend unreachable". Both are now fixed; the proxy already
+mapped `/advisor` to 8792 via `--advisor-port`.
+
+Two keys to remember:
+* It **always starts**, even with no key. With no key it answers
+  `configured: false` and a note, and the app shows "not configured" — never an
+  error. So an empty `GROQ_API_KEY` is a valid state, not a failure.
+* To make it speak, set `GROQ_API_KEY` (provider default `groq`, model
+  `openai/gpt-oss-120b`) on the **host** (Render dashboard; the blueprint marks
+  it `sync: false`). `.env` holds a working key for local runs but is gitignored
+  — never commit it, the repo is public.
+
+Verify a deployment with `curl https://<host>/advisor/v1/advisor` and check
+`configured` and `opinion`. The advisor test suite runs in CI and covers parsing
+and the not-configured degradation without any network.

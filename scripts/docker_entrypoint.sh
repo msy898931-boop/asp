@@ -13,6 +13,7 @@ PORT="${PORT:-8080}"
 API_PORT="${API_PORT:-8790}"
 BRIDGE_PORT="${BRIDGE_PORT:-8791}"
 TRACKER_PORT="${TRACKER_PORT:-8793}"
+ADVISOR_PORT="${ADVISOR_PORT:-8792}"
 
 echo "[entry] backend host starting (api=${API_PORT})"
 /app/aura_backend_host --api-port "${API_PORT}" --interval-ms 5000 &
@@ -34,10 +35,17 @@ done
 echo "[entry] signal tracker starting (tracker=${TRACKER_PORT})"
 python3 /app/tracker/signal_tracker.py --host 127.0.0.1 --port "${TRACKER_PORT}" &
 
+# The AI advisor is an isolated second opinion behind the app's own tab. It
+# always starts, and answers "not configured" until GROQ_API_KEY (or the Gemini
+# equivalent) is set on the host — the app degrades instead of erroring.
+echo "[entry] AI advisor starting (advisor=${ADVISOR_PORT})"
+python3 /app/advisor/ai_advisor.py --port "${ADVISOR_PORT}" &
+
 echo "[entry] serving phone app on 0.0.0.0:${PORT}"
 exec python3 /app/mobile/serve_mobile.py \
     --host 0.0.0.0 \
     --port "${PORT}" \
     --api-port "${API_PORT}" \
     --bridge-port "${BRIDGE_PORT}" \
-    --tracker-port "${TRACKER_PORT}"
+    --tracker-port "${TRACKER_PORT}" \
+    --advisor-port "${ADVISOR_PORT}"
