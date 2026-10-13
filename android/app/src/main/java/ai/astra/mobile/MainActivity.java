@@ -89,11 +89,14 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT));
         setContentView(root);
 
-        // First launch has no server address yet, so a baked-in default would
-        // just fail on someone else's phone. Ask for the address once, up
-        // front, instead of making the user wait for an error and retry.
+        // A saved address wins. Otherwise, if a reachable server is baked in,
+        // go straight to it: the point of the app is to show the signals, not
+        // to make the user type a URL first. If that server is down, the error
+        // screen still lets them point somewhere else.
         if (hasSavedUrl()) {
             web.loadUrl(serverUrl());
+        } else if (!DEFAULT_URL.isEmpty()) {
+            web.loadUrl(DEFAULT_URL);
         } else {
             showSetup();
         }
