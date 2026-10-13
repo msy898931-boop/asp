@@ -70,5 +70,23 @@ class FetchReviewTests(unittest.TestCase):
             urllib.request.urlopen = orig
 
 
+class DefaultUrlTests(unittest.TestCase):
+    def test_empty_env_falls_back_to_the_public_deployment(self):
+        # A GitHub Actions `vars.X` that is unset arrives as an empty string,
+        # which must not override the default (that shipped a blank URL once).
+        import importlib
+        old = os.environ.get("ASTRA_REVIEW_URL")
+        os.environ["ASTRA_REVIEW_URL"] = ""
+        try:
+            mod = importlib.reload(rd)
+            self.assertTrue(mod.ADVISOR_URL.startswith("https://"))
+        finally:
+            if old is None:
+                os.environ.pop("ASTRA_REVIEW_URL", None)
+            else:
+                os.environ["ASTRA_REVIEW_URL"] = old
+            importlib.reload(rd)
+
+
 if __name__ == "__main__":
     unittest.main()
