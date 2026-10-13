@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -44,6 +45,7 @@ COOLDOWN_BARS = int(os.environ.get("ASTRA_TRACKER_COOLDOWN",
                                    str(replay.DEFAULT_COOLDOWN_BARS)))
 MIN_SCORED = int(os.environ.get("ASTRA_TRACKER_MIN_SCORED",
                                 str(replay.DEFAULT_MIN_SCORED)))
+DIGEST_HOUR_UTC = int(os.environ.get("ASTRA_DIGEST_HOUR_UTC", "7"))
 STATE_PATH = os.environ.get("ASTRA_SCAN_STATE",
                             os.path.join(ROOT, "run", "scan_state.json"))
 
@@ -108,6 +110,40 @@ def select_events(signals: list, newest: int) -> tuple[list, list]:
     return ideas, results
 
 
+def due_daily_digest(state: dict, now: datetime, hour: int) -> bool:
+    """True once per UTC day, on the first run at or after `hour`.
+
+    A cron that runs every 15 minutes will hit the hour many times; the state
+    mark keeps it to one message, and a missed hour still sends on the next run
+    rather than skipping the day.
+    """
+    if now.hour < hour:
+        return False
+    return state.get("last_digest_day") != now.strftime("%Y-%m-%d")
+
+
+def digest_text(summary: dict) -> str:
+    """The tracker scoreboard, in the same honest voice as the app.
+
+    A win rate is only stated once there are enough scored trades to mean
+    anything; until then it says so, instead of dressing up a small sample.
+    """
+    wins, losses = summary.get("wins", 0), summary.get("losses", 0)
+    lines = [
+        "📊 ملخّص ASTRA اليومي",
+        "الإشارات: %s" % summary.get("total_signals", 0),
+        "أصابت: %s · خسرت: %s" % (wins, losses),
+        "صافي: %+.2fR · إجمالي: %+.2fR" % (
+            summary.get("total_r_net") or 0.0, summary.get("total_r_gross") or 0.0),
+    ]
+    if summary.get("sufficient"):
+        lines.append("نسبة الإصابة: %s%%" % summary.get("win_rate"))
+    else:
+        lines.append("نسبة الإصابة: — (لا بيانات كافية، %s/%s)"
+                     % (wins + losses, summary.get("min_scored", 30)))
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ASTRA one-shot scanner")
     parser.add_argument("--test-message", action="store_true",
@@ -153,25 +189,30 @@ def main(argv: list[str] | None = None) -> int:
     for s in fresh_results:
         print("DONE " + json.dumps(s.as_dict(), ensure_ascii=False))
 
+    digest_sent = False
     if token and chat and not priming:
         tg = bot.Telegram(token)
         for s in new_ideas:
             tg.send(chat, bot.format_new(s.as_dict()))
         for s in fresh_results:
             tg.send(chat, bot.format_result(s.as_dict()))
+        if due_daily_digest(state, datetime.now(timezone.utc), DIGEST_HOUR_UTC):
+            tg.send(chat, digest_text(summary))
+            digest_sent = True
     elif priming:
         sys.stderr.write("[scan] priming run: no alerts sent\n")
     else:
         sys.stderr.write("[scan] no telegram credentials; dry run only\n")
 
-    save_state({
-        "primed": True,
-        # Advance each mark to the newest bar time we have seen. Both ideas and
-        # results are keyed on distinct signals, so shifting the result mark to
-        # the newest bar cannot hide a later result for an earlier idea.
-        "last_idea_bar": newest,
-        "last_result_bar": newest,
-    })
+    state["primed"] = True
+    # Advance each mark to the newest bar time we have seen. Both ideas and
+    # results are keyed on distinct signals, so shifting the result mark to the
+    # newest bar cannot hide a later result for an earlier idea.
+    state["last_idea_bar"] = newest
+    state["last_result_bar"] = newest
+    if digest_sent:
+        state["last_digest_day"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    save_state(state)
     return 0
 
 

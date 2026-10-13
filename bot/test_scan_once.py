@@ -74,5 +74,41 @@ class PendingTests(unittest.TestCase):
         self.assertEqual(results, [])
 
 
+class DailyDigestTests(unittest.TestCase):
+    def test_not_due_before_the_hour(self):
+        now = scan_once.datetime(2026, 10, 13, 6, 45, tzinfo=scan_once.timezone.utc)
+        self.assertFalse(scan_once.due_daily_digest({}, now, 7))
+
+    def test_due_on_first_run_at_or_after_the_hour(self):
+        now = scan_once.datetime(2026, 10, 13, 7, 0, tzinfo=scan_once.timezone.utc)
+        self.assertTrue(scan_once.due_daily_digest({}, now, 7))
+
+    def test_sent_once_per_day(self):
+        now = scan_once.datetime(2026, 10, 13, 7, 30, tzinfo=scan_once.timezone.utc)
+        state = {"last_digest_day": "2026-10-13"}
+        self.assertFalse(scan_once.due_daily_digest(state, now, 7))
+        tomorrow = scan_once.datetime(2026, 10, 14, 7, 0, tzinfo=scan_once.timezone.utc)
+        self.assertTrue(scan_once.due_daily_digest(state, tomorrow, 7))
+
+    def test_a_missed_hour_still_sends_later(self):
+        # No run at 07:xx (host asleep); the first run after must still send.
+        now = scan_once.datetime(2026, 10, 13, 11, 20, tzinfo=scan_once.timezone.utc)
+        self.assertTrue(scan_once.due_daily_digest({}, now, 7))
+
+    def test_digest_withholds_win_rate_on_small_sample(self):
+        text = scan_once.digest_text(
+            {"total_signals": 10, "wins": 2, "losses": 6, "min_scored": 30,
+             "total_r_net": -3.03, "total_r_gross": -2.5, "sufficient": False})
+        self.assertIn("—", text)
+        self.assertNotIn("%", text.split("نسبة الإصابة")[1].split("\n")[0])
+
+    def test_digest_states_win_rate_when_sufficient(self):
+        text = scan_once.digest_text(
+            {"total_signals": 40, "wins": 22, "losses": 18, "min_scored": 30,
+             "total_r_net": 4.0, "total_r_gross": 5.0, "sufficient": True,
+             "win_rate": 55.0})
+        self.assertIn("55.0%", text)
+
+
 if __name__ == "__main__":
     unittest.main()
