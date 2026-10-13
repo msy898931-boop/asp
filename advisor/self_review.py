@@ -116,6 +116,7 @@ def summarize(outcomes: list[dict]) -> dict:
         "hit_rate": round(correct / total, 3) if total else None,
         "by_stance": by_stance,
         "recent_wrong": recent_wrong,
+        "wrong": [o for o in outcomes if not o.get("correct")],
     }
 
 
@@ -147,6 +148,30 @@ def lessons_block(summary: dict, lang: str = "ar") -> str:
 
 
 _STANCE_AR = {"LONG": "شراء", "SHORT": "بيع", "NEUTRAL": "حياد"}
+
+
+def outcome_key(outcome: dict) -> str:
+    return "%s:%s" % (outcome.get("generated_at_utc"), outcome.get("symbol"))
+
+
+def new_misses(outcomes: list[dict], alerted: set[str]) -> list[dict]:
+    """Misses that have not been alerted yet, oldest first."""
+    fresh = [o for o in outcomes
+             if not o.get("correct") and outcome_key(o) not in alerted]
+    fresh.sort(key=lambda o: o.get("generated_at_utc") or 0)
+    return fresh
+
+
+def format_miss(outcome: dict) -> str:
+    """A one-off alert for a single mistake, with its lesson."""
+    return "\n".join([
+        "⚠️ خطأ جديد على المستشار الذكي",
+        "قلت %s عند %s → صار السعر %s (تحرّك %.2f%%)"
+        % (_STANCE_AR.get(outcome.get("stance"), outcome.get("stance")),
+           outcome.get("price"), outcome.get("price_after"),
+           outcome.get("move_pct") or 0.0),
+        "الدرس: لا تكرّر نفس الحكم بلا سبب جديد.",
+    ])
 
 
 def format_review(summary: dict) -> str:

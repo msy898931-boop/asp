@@ -508,7 +508,11 @@ class Advisor:
         return result
 
     def review(self) -> dict:
-        """The self-review scoreboard on its own, without calling the model."""
+        """The self-review scoreboard on its own, without calling the model.
+
+        The summary carries the full `wrong` list (not just the recent few), so
+        a caller can tell which mistakes it has already alerted on.
+        """
         snapshot = build_snapshot()
         summary = run_review(snapshot.get("price"))
         return {"summary": summary, "message": self_review.format_review(summary)}

@@ -314,6 +314,19 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(self_review.lessons_block(
             {"scored": 0, "correct": 0, "hit_rate": None, "recent_wrong": []}), "")
 
+    def test_summarize_exposes_every_wrong_not_just_recent(self):
+        outcomes = [
+            {"stance": "LONG", "correct": False, "generated_at_utc": 1},
+            {"stance": "SHORT", "correct": True, "generated_at_utc": 2},
+            {"stance": "SHORT", "correct": False, "generated_at_utc": 3},
+            {"stance": "NEUTRAL", "correct": False, "generated_at_utc": 4},
+            {"stance": "LONG", "correct": False, "generated_at_utc": 5},
+        ]
+        summary = self_review.summarize(outcomes)
+        self.assertEqual(len(summary["recent_wrong"]), 3)
+        self.assertEqual(len(summary["wrong"]), 4)
+        self.assertTrue(all(not o["correct"] for o in summary["wrong"]))
+
     def test_format_review_is_arabic_and_honest(self):
         empty = self_review.format_review(
             {"scored": 0, "correct": 0, "hit_rate": None, "recent_wrong": []})

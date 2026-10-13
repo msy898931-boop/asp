@@ -1,0 +1,71 @@
+# Alert the moment the advisor logs a mistake.
+#
+# Free, like the other jobs: GitHub runs it every 15 minutes, reads the advisor's
+# self-review endpoint, and sends one short Arabic message for each mistake it
+# has not alerted on yet. State (which mistakes were alerted) rides in the
+# Actions cache, so a late or skipped slot changes latency only. The first run
+# primes silently, so a lost cache never blasts the back-catalogue.
+#
+# Required repository secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+# Without them the job prints the alerts (dry mode) and exits zero.
+
+name: astra-miss
+
+on:
+  schedule:
+    # Every 15 minutes, offset by 9 so it does not collide with the other jobs.
+    - cron: "9,24,39,54 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the alerts instead of sending them"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-miss
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore miss-alert state
+        uses: actions/cache/restore@v4
+        with:
+          path: run/miss_alert_state.json
+          key: astra-miss-state-${{ github.run_id }}
+          restore-keys: |
+            astra-miss-state-
+
+      - name: Run the tests
+        run: python3 -m unittest discover -s bot -p "test_miss_alert.py"
+
+      - name: Alert on any new mistake
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ASTRA_REVIEW_URL: ${{ vars.ASTRA_REVIEW_URL }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python3 bot/miss_alert.py --dry-run
+          else
+            python3 bot/miss_alert.py
+          fi
+
+      - name: Save miss-alert state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: run/miss_alert_state.json
+          key: astra-miss-state-${{ github.run_id }}
