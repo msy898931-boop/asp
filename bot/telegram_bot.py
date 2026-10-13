@@ -236,6 +236,20 @@ def _approach(signal: dict, bar: dict) -> dict | None:
     return {"side": side, "distance": round(distance, 2), "pct": round(pct)}
 
 
+def format_stale(age_min: float) -> str:
+    """Said once when the feed goes quiet, so an old bar is never a signal."""
+    return "\n".join([
+        "⏳ وقفت بيانات السوق",
+        "آخر شمعة صار لها %d دقيقة. عادةً يعني السوق مسكّر أو الاتصال انقطع."
+        % int(age_min),
+        "لحد ما ترجع البيانات: ما رح أرسل إشارات، عشان ما أعطيك صفقة على شمعة قديمة.",
+    ])
+
+
+def format_resumed() -> str:
+    return "▶️ رجعت بيانات السوق — رجع الفحص الطبيعي."
+
+
 def format_approach(signal: dict, bar: dict) -> str | None:
     """A heads-up when a live trade nears its stop or target. None if far."""
     near = _approach(signal, bar)

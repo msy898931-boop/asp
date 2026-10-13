@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +59,10 @@ HOLD_PING = os.environ.get("ASTRA_HOLD_PING", "0") in ("1", "true", "yes")
 # Warn once, on the first bar a held trade gets close to its stop or target.
 # Set ASTRA_APPROACH_ALERT=0 to silence it.
 APPROACH_ALERT = os.environ.get("ASTRA_APPROACH_ALERT", "1") not in ("0", "false", "no")
+# A bar older than this means the feed is down or the market is closed. 45
+# minutes is three M15 bars; beyond that, an "idea" would be based on stale
+# price. Weekend gold closures (Fri 22:00 - Sun 23:00 UTC) trip this on purpose.
+STALE_AFTER_MIN = float(os.environ.get("ASTRA_STALE_AFTER_MIN", "45"))
 STATE_PATH = os.environ.get("ASTRA_SCAN_STATE",
                             os.path.join(ROOT, "run", "scan_state.json"))
 
@@ -77,6 +82,21 @@ def should_heartbeat(status: dict) -> bool:
     if status.get("decision") == "TRADE":
         return True
     return HOLD_PING or status.get("reason") not in QUIET_REASONS
+
+
+def staleness(newest_time: int, now: float,
+              threshold_min: float | None = None) -> float | None:
+    """Minutes past the threshold the newest bar is, or None if it is fresh.
+
+    The bar's timestamp is the *open* of the M15 candle, so a freshly closed bar
+    is already up to 15 minutes "old"; the threshold must clear that before it
+    means anything.
+    """
+    threshold = STALE_AFTER_MIN if threshold_min is None else threshold_min
+    if not newest_time:
+        return None
+    age_min = (now - newest_time) / 60.0
+    return age_min if age_min > threshold else None
 
 
 def load_state() -> dict:
@@ -170,7 +190,43 @@ def digest_text(summary: dict) -> str:
     else:
         lines.append("نسبة الإصابة: — (لا بيانات كافية، %s/%s)"
                      % (wins + losses, summary.get("min_scored", 30)))
+    lines.extend(_breakdown_lines(summary))
     return "\n".join(lines)
+
+
+REGIME_DIGEST_AR = {"TRENDING_UP": "صعود", "TRENDING_DOWN": "هبوط",
+                    "RANGING": "عرضي", "QUIET": "هادئ", "VOLATILE": "متذبذب",
+                    "UNKNOWN": "غير معروف"}
+DIRECTION_DIGEST_AR = {"LONG": "شراء", "SHORT": "بيع"}
+
+
+def _breakdown_lines(summary: dict) -> list[str]:
+    """Where the edge actually is, and how deep the losing runs get.
+
+    A bucket states a rate only once its sample is big enough; otherwise it
+    shows the raw win/loss split, so a lucky two-trade streak never reads as a
+    strategy.
+    """
+    lines: list[str] = []
+    for title, key, names in (("حسب نظام السوق", "by_regime", REGIME_DIGEST_AR),
+                              ("حسب الاتجاه", "by_direction", DIRECTION_DIGEST_AR)):
+        buckets = summary.get(key) or {}
+        if not buckets:
+            continue
+        parts = []
+        for name, g in sorted(buckets.items()):
+            label = names.get(name, name)
+            if "hit_rate" in g:
+                parts.append("%s %s%% (%s/%s)" % (label, g["hit_rate"],
+                                                  g["wins"], g["scored"]))
+            else:
+                parts.append("%s %s/%s" % (label, g["wins"], g["scored"]))
+        if parts:
+            lines.append("%s: %s" % (title, " · ".join(parts)))
+    streak = summary.get("max_loss_streak")
+    if streak:
+        lines.append("أطول سلسلة خسائر: %s متتالية" % streak)
+    return lines
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -216,18 +272,35 @@ def main(argv: list[str] | None = None) -> int:
     # One message per bar: the first time this bar is seen, the heartbeat
     # reports it (trade or no trade). A bar already reported is not repeated.
     bar_is_new = state.get("last_bar_time") != newest
+    stale_min = staleness(newest, time.time())
 
     print(json.dumps({"newest_bar": newest, "bars": len(bars), "priming": priming,
                       "new_ideas": len(new_ideas), "fresh_results": len(fresh_results),
+                      "stale_min": None if stale_min is None else round(stale_min),
                       "last_bar": status, "summary": summary}, ensure_ascii=False))
     for s in new_ideas:
         print("NEW  " + json.dumps(s.as_dict(), ensure_ascii=False))
     for s in fresh_results:
         print("DONE " + json.dumps(s.as_dict(), ensure_ascii=False))
 
+    if stale_min is not None:
+        # The feed is quiet (market closed, or the connection is down). Do not
+        # act on an old bar: no ideas, no results, no approach warnings. Say so
+        # once per episode, and confirm when it resumes.
+        if token and chat and not priming and not state.get("stale"):
+            bot.Telegram(token).send(chat, bot.format_stale(stale_min))
+        state["stale"] = True
+        state["primed"] = True
+        state["last_bar_time"] = newest
+        save_state(state)
+        sys.stderr.write("[scan] stale: newest bar %.0f min old\n" % stale_min)
+        return 0
+
     digest_sent = False
     if token and chat and not priming:
         tg = bot.Telegram(token)
+        if state.get("stale"):
+            tg.send(chat, bot.format_resumed())
         if HEARTBEAT and bar_is_new and should_heartbeat(status):
             tg.send(chat, bot.format_last_bar(status, ACCOUNT_USD, RISK_PCT))
         else:
@@ -254,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write("[scan] no telegram credentials; dry run only\n")
 
     state["primed"] = True
+    state["stale"] = False
     # Advance each mark to the newest bar time we have seen. Both ideas and
     # results are keyed on distinct signals, so shifting the result mark to the
     # newest bar cannot hide a later result for an earlier idea.

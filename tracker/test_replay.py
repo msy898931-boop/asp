@@ -173,6 +173,42 @@ class SummarizeTests(unittest.TestCase):
         self.assertAlmostEqual(summary["win_rate"], 50.0)
         self.assertIn("avg_r_net", summary)
 
+    def test_buckets_split_hit_rate_by_regime_and_direction(self):
+        signals = []
+        for i in range(20):
+            trending = i < 10
+            s = replay.Signal(index=i, time=i,
+                              direction="LONG" if trending else "SHORT",
+                              entry=100.0, stop=99.0, target=102.0,
+                              bias="BULLISH",
+                              regime="TRENDING_UP" if trending else "RANGING",
+                              rsi=55.0)
+            s.resolved = True
+            # First ten (LONG, trending) win; the rest lose.
+            s.outcome = "TARGET" if trending else "STOP"
+            signals.append(s)
+        summary = replay.summarize(signals, min_scored=30)
+        self.assertEqual(summary["by_regime"]["TRENDING_UP"]["scored"], 10)
+        self.assertEqual(summary["by_direction"]["LONG"]["wins"], 10)
+        self.assertEqual(summary["by_direction"]["SHORT"]["wins"], 0)
+        self.assertIn("hit_rate", summary["by_regime"]["TRENDING_UP"])
+
+    def test_a_small_bucket_states_no_rate(self):
+        summary = replay.summarize(self._scored(6, 4), min_scored=30)
+        self.assertNotIn("hit_rate", summary["by_regime"]["QUIET"])
+        self.assertEqual(summary["by_regime"]["QUIET"]["scored"], 6)
+
+    def test_max_loss_streak_counts_consecutive_losses(self):
+        out = []
+        outcomes = ["TARGET", "STOP", "STOP", "STOP", "TARGET", "STOP"]
+        for i, o in enumerate(outcomes):
+            s = replay.Signal(index=i, time=i, direction="LONG", entry=100.0,
+                              stop=99.0, target=102.0, bias="BULLISH",
+                              regime="QUIET", rsi=55.0)
+            s.resolved, s.outcome, s.resolved_time = True, o, i
+            out.append(s)
+        self.assertEqual(replay.max_loss_streak(out), 3)
+
 
 class ExplainLastBarTests(unittest.TestCase):
     """Every bar gets an answer, including the quiet ones."""

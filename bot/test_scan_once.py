@@ -96,6 +96,23 @@ class HeartbeatTests(unittest.TestCase):
             {"decision": "NO_TRADE", "reason": "JUST_RESOLVED", "resolved": {}}))
 
 
+class StaleFeedTests(unittest.TestCase):
+    def test_a_fresh_bar_is_not_stale(self):
+        # A just-closed M15 bar opens up to 15 minutes ago: never stale.
+        self.assertIsNone(scan_once.staleness(1000, now=1000 + 14 * 60))
+
+    def test_a_quiet_feed_is_stale_and_reports_the_age(self):
+        age = scan_once.staleness(1000, now=1000 + 90 * 60, threshold_min=45)
+        self.assertAlmostEqual(age, 90.0, places=1)
+
+    def test_missing_timestamp_is_not_stale(self):
+        self.assertIsNone(scan_once.staleness(0, now=10_000_000))
+
+    def test_threshold_is_configurable(self):
+        self.assertIsNone(scan_once.staleness(1000, now=1000 + 40 * 60, threshold_min=45))
+        self.assertIsNotNone(scan_once.staleness(1000, now=1000 + 40 * 60, threshold_min=10))
+
+
 class DailyDigestTests(unittest.TestCase):
     def test_not_due_before_the_hour(self):
         now = scan_once.datetime(2026, 10, 13, 6, 45, tzinfo=scan_once.timezone.utc)

@@ -47,6 +47,7 @@ DEFAULT_COST_USD = 0.30      # round-trip spread charged per trade, in USD/oz
 DEFAULT_HORIZON_BARS = 32    # M15 * 32 = 8 hours
 DEFAULT_COOLDOWN_BARS = 4    # bars to wait after a resolution before re-entering
 DEFAULT_MIN_SCORED = 30      # below this, no rate is stated
+MIN_BUCKET = 8               # below this, a per-regime/per-side rate is noise
 
 RR = TARGET_ATR_MULT / STOP_ATR_MULT  # 1.6667
 
@@ -430,6 +431,41 @@ def account_plan(entry: float, stop: float, account_usd: float,
     }
 
 
+def _bucket(scored: list[Signal], key: str) -> dict:
+    """Hit rate for each value of ``key``, but only where the sample means it.
+
+    A rate over two trades is noise dressed as knowledge, so a bucket under
+    MIN_BUCKET stays a raw count with no rate attached.
+    """
+    groups: dict[str, dict] = {}
+    for s in scored:
+        name = getattr(s, key, None) or "UNKNOWN"
+        g = groups.setdefault(name, {"wins": 0, "losses": 0})
+        g["wins" if s.outcome == "TARGET" else "losses"] += 1
+    for name, g in groups.items():
+        n = g["wins"] + g["losses"]
+        g["scored"] = n
+        if n >= MIN_BUCKET:
+            g["hit_rate"] = round(100.0 * g["wins"] / n, 1)
+    return groups
+
+
+def max_loss_streak(signals: list[Signal]) -> int:
+    """The longest run of consecutive losses, in time order.
+
+    The number that tells you how much pain to expect, which a win rate hides.
+    """
+    ordered = sorted((s for s in signals if s.resolved), key=lambda s: s.resolved_time or 0)
+    worst = run = 0
+    for s in ordered:
+        if s.outcome == "STOP":
+            run += 1
+            worst = max(worst, run)
+        elif s.outcome == "TARGET":
+            run = 0
+    return worst
+
+
 def summarize(signals: list[Signal], min_scored: int = DEFAULT_MIN_SCORED) -> dict:
     """Aggregate resolved ideas. States no rate below ``min_scored``."""
     resolved = [s for s in signals if s.resolved]
@@ -455,6 +491,9 @@ def summarize(signals: list[Signal], min_scored: int = DEFAULT_MIN_SCORED) -> di
         "verdict": "SCORED" if enough else "INSUFFICIENT_DATA",
         "total_r_net": round(total_net, 2),
         "total_r_gross": round(total_gross, 2),
+        "max_loss_streak": max_loss_streak(signals),
+        "by_regime": _bucket(scored, "regime"),
+        "by_direction": _bucket(scored, "direction"),
     }
     if enough:
         summary["win_rate"] = round(100.0 * len(wins) / len(scored), 1)
