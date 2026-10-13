@@ -567,13 +567,20 @@ invents numbers. `ASTRA_REVIEW_URL` overrides the endpoint (an unset Actions
 `vars.` arrives empty and is treated as unset).
 
 `bot/miss_alert.py` (the `astra-miss` cron, every 15 minutes) is the instant
-version: it reads the same endpoint, and for each mistake the advisor has not
-already been alerted on it sends one short Arabic message. Dedup rides in
-`run/miss_alert_state.json`; the first run primes silently, so a lost cache
-never blasts the back-catalogue. This is why `/v1/review` exposes the full
-`wrong` list and not just `recent_wrong`. A brief price outage stops new scoring
-but still summarizes what is already on file, so a missed alert is only delayed,
-never lost.
+version: it reads the same endpoint, and for each scored call the advisor has
+not already been alerted on it sends one short Arabic message — a hit
+(`format_hit`) or a miss with its lesson (`format_miss`). `--misses-only` keeps
+it to the mistakes. Dedup rides in `run/miss_alert_state.json`; the first run
+primes silently, so a lost cache never blasts the back-catalogue. This is why
+`/v1/review` exposes the full `outcomes` list, not just `recent_wrong`. A brief
+price outage stops new scoring but still summarizes what is already on file, so
+a missed alert is only delayed, never lost.
+
+Routine bars stay quiet: `scan_once.should_heartbeat` suppresses the heartbeat
+for `IN_POSITION` and `COOLDOWN` (an open trade just being held, or its
+cooldown), so holding a trade no longer repeats the same line every M15 bar.
+`ASTRA_HOLD_PING=1` restores the old behaviour; trades, resolutions and genuine
+no-edge reads always speak.
 
 ### News for free: keyless RSS, no provider quota
 

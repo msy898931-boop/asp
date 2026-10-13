@@ -74,6 +74,28 @@ class PendingTests(unittest.TestCase):
         self.assertEqual(results, [])
 
 
+class HeartbeatTests(unittest.TestCase):
+    def test_a_trade_always_speaks(self):
+        self.assertTrue(scan_once.should_heartbeat(
+            {"decision": "TRADE", "signal": {}}))
+
+    def test_holding_an_open_trade_stays_quiet(self):
+        self.assertFalse(scan_once.should_heartbeat(
+            {"decision": "NO_TRADE", "reason": "IN_POSITION", "open": {}}))
+
+    def test_cooldown_stays_quiet(self):
+        self.assertFalse(scan_once.should_heartbeat(
+            {"decision": "NO_TRADE", "reason": "COOLDOWN"}))
+
+    def test_a_real_no_edge_read_still_speaks(self):
+        self.assertTrue(scan_once.should_heartbeat(
+            {"decision": "NO_TRADE", "reason": "NO_EDGE"}))
+
+    def test_a_resolution_still_speaks(self):
+        self.assertTrue(scan_once.should_heartbeat(
+            {"decision": "NO_TRADE", "reason": "JUST_RESOLVED", "resolved": {}}))
+
+
 class DailyDigestTests(unittest.TestCase):
     def test_not_due_before_the_hour(self):
         now = scan_once.datetime(2026, 10, 13, 6, 45, tzinfo=scan_once.timezone.utc)

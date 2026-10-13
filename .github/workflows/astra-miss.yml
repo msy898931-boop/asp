@@ -1,13 +1,14 @@
-# Alert the moment the advisor logs a mistake.
+# Alert the moment the advisor is scored.
 #
 # Free, like the other jobs: GitHub runs it every 15 minutes, reads the advisor's
-# self-review endpoint, and sends one short Arabic message for each mistake it
-# has not alerted on yet. State (which mistakes were alerted) rides in the
-# Actions cache, so a late or skipped slot changes latency only. The first run
-# primes silently, so a lost cache never blasts the back-catalogue.
+# self-review endpoint, and sends one short Arabic message for each scored call
+# (hit or miss) it has not alerted on yet. State (which calls were alerted) rides
+# in the Actions cache, so a late or skipped slot changes latency only. The first
+# run primes silently, so a lost cache never blasts the back-catalogue.
 #
 # Required repository secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
 # Without them the job prints the alerts (dry mode) and exits zero.
+# Run with `--misses-only` to skip the hits and hear about mistakes alone.
 
 name: astra-miss
 

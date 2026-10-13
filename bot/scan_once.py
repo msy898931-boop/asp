@@ -51,8 +51,29 @@ RISK_PCT = float(os.environ.get("ASTRA_RISK_PCT", "1.0"))
 # A message for every closed bar, trade or not, is the default. Set
 # ASTRA_HEARTBEAT=0 to go back to alerting only on trades.
 HEARTBEAT = os.environ.get("ASTRA_HEARTBEAT", "1") not in ("0", "false", "no")
+# A bar that only holds an open trade (or sits in its cooldown) says nothing
+# new, so by default it stays quiet instead of repeating the same line every
+# bar. Set ASTRA_HOLD_PING=1 to hear about every bar again.
+HOLD_PING = os.environ.get("ASTRA_HOLD_PING", "0") in ("1", "true", "yes")
 STATE_PATH = os.environ.get("ASTRA_SCAN_STATE",
                             os.path.join(ROOT, "run", "scan_state.json"))
+
+
+# Reasons that mean "nothing happened, the routine is just working": an open
+# trade being held, or the cooldown after one resolved.
+QUIET_REASONS = {"IN_POSITION", "COOLDOWN"}
+
+
+def should_heartbeat(status: dict) -> bool:
+    """Whether this bar's status is worth a message of its own.
+
+    A trade, a resolution, or a genuine no-edge read all say something new.
+    Merely holding an open trade (or sitting out its cooldown) does not — that
+    would repeat the same line every bar until the trade closes.
+    """
+    if status.get("decision") == "TRADE":
+        return True
+    return HOLD_PING or status.get("reason") not in QUIET_REASONS
 
 
 def load_state() -> dict:
@@ -204,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     digest_sent = False
     if token and chat and not priming:
         tg = bot.Telegram(token)
-        if HEARTBEAT and bar_is_new:
+        if HEARTBEAT and bar_is_new and should_heartbeat(status):
             tg.send(chat, bot.format_last_bar(status, ACCOUNT_USD, RISK_PCT))
         else:
             # Heartbeat off (or the bar was already reported): still alert on a

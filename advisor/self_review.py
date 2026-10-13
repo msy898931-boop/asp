@@ -117,6 +117,9 @@ def summarize(outcomes: list[dict]) -> dict:
         "by_stance": by_stance,
         "recent_wrong": recent_wrong,
         "wrong": [o for o in outcomes if not o.get("correct")],
+        # The full scored record, so a caller can alert on hits as well as
+        # misses without re-reading the log.
+        "outcomes": outcomes,
     }
 
 
@@ -162,6 +165,20 @@ def new_misses(outcomes: list[dict], alerted: set[str]) -> list[dict]:
     return fresh
 
 
+def new_outcomes(outcomes: list[dict], alerted: set[str],
+                 hits: bool = True) -> list[dict]:
+    """Scored calls that have not been alerted yet, oldest first.
+
+    `hits=False` keeps only the misses, which is what the miss alert wants;
+    `hits=True` covers every scored call, so a caller can also tell the user
+    when the advisor got it right.
+    """
+    fresh = [o for o in outcomes
+             if (hits or not o.get("correct")) and outcome_key(o) not in alerted]
+    fresh.sort(key=lambda o: o.get("generated_at_utc") or 0)
+    return fresh
+
+
 def format_miss(outcome: dict) -> str:
     """A one-off alert for a single mistake, with its lesson."""
     return "\n".join([
@@ -172,6 +189,22 @@ def format_miss(outcome: dict) -> str:
            outcome.get("move_pct") or 0.0),
         "الدرس: لا تكرّر نفس الحكم بلا سبب جديد.",
     ])
+
+
+def format_hit(outcome: dict) -> str:
+    """A one-off alert for a call that turned out right."""
+    return "\n".join([
+        "✅ إصابة على المستشار الذكي",
+        "قلت %s عند %s → صار السعر %s (تحرّك %.2f%%)"
+        % (_STANCE_AR.get(outcome.get("stance"), outcome.get("stance")),
+           outcome.get("price"), outcome.get("price_after"),
+           outcome.get("move_pct") or 0.0),
+    ])
+
+
+def format_outcome(outcome: dict) -> str:
+    """The right one-off message for a scored call: hit or miss."""
+    return format_hit(outcome) if outcome.get("correct") else format_miss(outcome)
 
 
 def format_review(summary: dict) -> str:

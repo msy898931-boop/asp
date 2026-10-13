@@ -44,17 +44,65 @@ class NewMissTests(unittest.TestCase):
         self.assertEqual(self_review.outcome_key(m), self_review.outcome_key(dict(m)))
 
 
-class FormatMissTests(unittest.TestCase):
-    def test_message_is_arabic_and_names_the_lesson(self):
+class NewOutcomeTests(unittest.TestCase):
+    def test_hits_and_misses_when_asked(self):
+        good = dict(miss(), correct=True)
+        bad = miss()
+        both = self_review.new_outcomes([good, bad], set(), hits=True)
+        self.assertEqual(len(both), 2)
+        only_miss = self_review.new_outcomes([good, bad], set(), hits=False)
+        self.assertEqual(only_miss, [bad])
+
+    def test_alerted_are_skipped(self):
+        good = dict(miss(), correct=True)
+        key = self_review.outcome_key(good)
+        self.assertEqual(self_review.new_outcomes([good], {key}), [])
+
+
+class FormatOutcomeTests(unittest.TestCase):
+    def test_miss_names_the_lesson(self):
         text = self_review.format_miss(miss())
         self.assertIn("خطأ جديد", text)
         self.assertIn("قلت بيع", text)
         self.assertIn("4130.0", text)
         self.assertIn("لا تكرّر", text)
 
+    def test_hit_celebrates_without_a_lesson(self):
+        text = self_review.format_hit(dict(miss(), correct=True))
+        self.assertIn("إصابة", text)
+        self.assertIn("قلت بيع", text)
+        self.assertNotIn("لا تكرّر", text)
 
-class FetchWrongTests(unittest.TestCase):
-    def test_shapes_the_wrong_list(self):
+    def test_dispatch_picks_the_right_message(self):
+        self.assertIn("إصابة", self_review.format_outcome(dict(miss(), correct=True)))
+        self.assertIn("خطأ", self_review.format_outcome(miss()))
+
+
+class FetchOutcomesTests(unittest.TestCase):
+    def test_shapes_the_full_outcome_list(self):
+        import urllib.request
+
+        class Fake:
+            def __enter__(self_):
+                return self_
+
+            def __exit__(self_, *a):
+                return False
+
+            def read(self_):
+                return (b'{"review": {"summary": {"outcomes": '
+                        b'[{"stance": "LONG", "correct": true}]}}}')
+
+        orig = urllib.request.urlopen
+        urllib.request.urlopen = lambda req, timeout=None: Fake()
+        try:
+            got = ma.fetch_outcomes("http://example/v1/review")
+        finally:
+            urllib.request.urlopen = orig
+        self.assertEqual(len(got), 1)
+        self.assertTrue(got[0]["correct"])
+
+    def test_falls_back_to_wrong_for_older_advisor(self):
         import urllib.request
 
         class Fake:
@@ -66,16 +114,16 @@ class FetchWrongTests(unittest.TestCase):
 
             def read(self_):
                 return (b'{"review": {"summary": {"wrong": '
-                        b'[{"stance": "LONG", "correct": false}]}}}')
+                        b'[{"stance": "SHORT", "correct": false}]}}}')
 
         orig = urllib.request.urlopen
         urllib.request.urlopen = lambda req, timeout=None: Fake()
         try:
-            wrong = ma.fetch_wrong("http://example/v1/review")
+            got = ma.fetch_outcomes("http://example/v1/review")
         finally:
             urllib.request.urlopen = orig
-        self.assertEqual(len(wrong), 1)
-        self.assertEqual(wrong[0]["stance"], "LONG")
+        self.assertEqual(len(got), 1)
+        self.assertFalse(got[0]["correct"])
 
     def test_unreachable_returns_none(self):
         import urllib.request
@@ -86,11 +134,11 @@ class FetchWrongTests(unittest.TestCase):
 
         urllib.request.urlopen = boom
         try:
-            self.assertIsNone(ma.fetch_wrong("http://example/v1/review"))
+            self.assertIsNone(ma.fetch_outcomes("http://example/v1/review"))
         finally:
             urllib.request.urlopen = orig
 
-    def test_missing_wrong_key_is_empty_list(self):
+    def test_missing_keys_is_empty_list(self):
         import urllib.request
 
         class Fake:
@@ -106,7 +154,7 @@ class FetchWrongTests(unittest.TestCase):
         orig = urllib.request.urlopen
         urllib.request.urlopen = lambda req, timeout=None: Fake()
         try:
-            self.assertEqual(ma.fetch_wrong("http://example/v1/review"), [])
+            self.assertEqual(ma.fetch_outcomes("http://example/v1/review"), [])
         finally:
             urllib.request.urlopen = orig
 
