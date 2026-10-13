@@ -61,6 +61,10 @@ ENV ASTRA_DATA_SOURCE=live \
 # image deployable as ONE always-on service on a container host: the phone app
 # and the Telegram bot share a single port.
 COPY mobile  /app/mobile
+# The signal tracker replays the closed bars the bridge already serves and is
+# reverse-proxied at /tracker by the phone app. It has its own tiny HTTP server,
+# so the entrypoint starts it as a loopback sidecar (see docker_entrypoint.sh).
+COPY tracker /app/tracker
 COPY scripts/docker_entrypoint.sh /app/docker_entrypoint.sh
 RUN chmod +x /app/docker_entrypoint.sh
 

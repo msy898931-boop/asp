@@ -12,6 +12,7 @@ set -e
 PORT="${PORT:-8080}"
 API_PORT="${API_PORT:-8790}"
 BRIDGE_PORT="${BRIDGE_PORT:-8791}"
+TRACKER_PORT="${TRACKER_PORT:-8793}"
 
 echo "[entry] backend host starting (api=${API_PORT})"
 /app/aura_backend_host --api-port "${API_PORT}" --interval-ms 5000 &
@@ -28,9 +29,14 @@ while [ "$i" -lt 30 ]; do
     sleep 1
 done
 
+# The signal tracker is core to the phone app's Signals tab, so it always runs.
+echo "[entry] signal tracker starting (tracker=${TRACKER_PORT})"
+python3 /app/tracker/signal_tracker.py --host 127.0.0.1 --port "${TRACKER_PORT}" &
+
 echo "[entry] serving phone app on 0.0.0.0:${PORT}"
 exec python3 /app/mobile/serve_mobile.py \
     --host 0.0.0.0 \
     --port "${PORT}" \
     --api-port "${API_PORT}" \
-    --bridge-port "${BRIDGE_PORT}"
+    --bridge-port "${BRIDGE_PORT}" \
+    --tracker-port "${TRACKER_PORT}"
