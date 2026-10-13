@@ -478,17 +478,18 @@ def run_review(price_now: float | None) -> dict:
     Reads the advisor's own advisory log, appends any newly-due outcomes, and
     returns the running summary. Entirely best-effort: a missing price or file
     yields an empty summary rather than an error.
+
+    A missing price only stops *new* scoring; the outcomes already on file are
+    still summarized, so a brief feed outage never blanks the scoreboard.
     """
-    empty = {"scored": 0, "correct": 0, "hit_rate": None,
-             "by_stance": {}, "recent_wrong": []}
-    if price_now is None:
-        return empty
-    advisories = self_review.read_jsonl(LOG_PATH)
     outcomes = self_review.read_jsonl(OUTCOME_PATH)
-    new = self_review.score_due(advisories, outcomes,
-                                price_now, time.time(), REVIEW_HORIZON_S)
-    for record in new:
-        self_review.append_jsonl(OUTCOME_PATH, record)
+    new: list[dict] = []
+    if price_now is not None:
+        advisories = self_review.read_jsonl(LOG_PATH)
+        new = self_review.score_due(advisories, outcomes,
+                                    price_now, time.time(), REVIEW_HORIZON_S)
+        for record in new:
+            self_review.append_jsonl(OUTCOME_PATH, record)
     return self_review.summarize(outcomes + new)
 
 

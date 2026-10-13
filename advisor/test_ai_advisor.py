@@ -314,6 +314,24 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(self_review.lessons_block(
             {"scored": 0, "correct": 0, "hit_rate": None, "recent_wrong": []}), "")
 
+    def test_run_review_still_summarizes_when_price_is_missing(self):
+        # A brief feed outage must not blank a scoreboard that already has
+        # scored outcomes; it only stops *new* scoring.
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "outcomes.jsonl")
+            with open(out, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps({"generated_at_utc": 1, "symbol": "XAUUSD",
+                                     "stance": "LONG", "correct": False}) + "\n")
+            old = advisor.OUTCOME_PATH
+            advisor.OUTCOME_PATH = out
+            try:
+                summary = advisor.run_review(None)
+            finally:
+                advisor.OUTCOME_PATH = old
+        self.assertEqual(summary["scored"], 1)
+        self.assertEqual(len(summary["wrong"]), 1)
+
     def test_summarize_exposes_every_wrong_not_just_recent(self):
         outcomes = [
             {"stance": "LONG", "correct": False, "generated_at_utc": 1},

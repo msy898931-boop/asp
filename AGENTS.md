@@ -566,6 +566,15 @@ prints. If the advisor is unreachable it says so and exits non-zero — it never
 invents numbers. `ASTRA_REVIEW_URL` overrides the endpoint (an unset Actions
 `vars.` arrives empty and is treated as unset).
 
+`bot/miss_alert.py` (the `astra-miss` cron, every 15 minutes) is the instant
+version: it reads the same endpoint, and for each mistake the advisor has not
+already been alerted on it sends one short Arabic message. Dedup rides in
+`run/miss_alert_state.json`; the first run primes silently, so a lost cache
+never blasts the back-catalogue. This is why `/v1/review` exposes the full
+`wrong` list and not just `recent_wrong`. A brief price outage stops new scoring
+but still summarizes what is already on file, so a missed alert is only delayed,
+never lost.
+
 ### News for free: keyless RSS, no provider quota
 
 The advisor grounds its read in real headlines via **Google News RSS** — no API
