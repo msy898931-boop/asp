@@ -530,6 +530,31 @@ Verify a deployment with `curl https://<host>/advisor/v1/advisor` and check
 in CI and covers parsing, the RSS/XML parsing (offline, stubbed), the calendar
 filters and backoff, and the not-configured degradation without any network.
 
+### Learning from its own mistakes (self-review)
+
+A model is stateless, so it cannot remember a bad call on its own. `self_review`
+gives it a memory the honest way: every advisory is appended to
+`run/advisor_advisories.jsonl`, and on each later request `run_review()` reads
+that log, and once a call is `ASTRA_ADVISOR_REVIEW_HORIZON` old it compares the
+stance with where price actually went and writes a scored outcome to
+`run/advisor_outcomes.jsonl`. LONG is right if price rose, SHORT if it fell,
+NEUTRAL if it moved less than `ASTRA_ADVISOR_NEUTRAL_BAND` percent. The misses
+become a short Arabic `lessons_block()` injected into the next prompt ("do not
+repeat this call without a new reason"), and the running scoreboard is returned
+as `review` and shown in the app. `ASTRA_ADVISOR_LESSONS=0` disables the
+injection. This never touches the validated ledger — it only reads and writes
+the advisor's own files, and every number is best-effort.
+
+### Alert before a high-impact release
+
+`bot/news_alert.py` runs on the `astra-news` GitHub Actions cron (every 15
+minutes, state cached). It reads the same calendar the advisor does, and when an
+event is inside `ASTRA_NEWS_LEAD_HOURS` (default 1h) it sends one Arabic
+Telegram alert per event (dedup key `country:title:at_utc`, kept in
+`run/news_alert_state.json`), naming the event and telling the reader not to
+trade into it. `--dry-run` prints instead of sending. Tests in
+`bot/test_news_alert.py`.
+
 ### News for free: keyless RSS, no provider quota
 
 The advisor grounds its read in real headlines via **Google News RSS** — no API

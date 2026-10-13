@@ -1,0 +1,71 @@
+# The always-on news watchdog: ping Telegram shortly before a high-impact
+# release (CPI, NFP, FOMC...) so you never trade blind into it.
+#
+# Free, like the signal bot: GitHub runs the job on a cron, reads the same
+# keyless economic calendar the advisor uses, and sends at most one alert per
+# event. State (which events were already alerted) rides in the Actions cache,
+# so a late or skipped slot changes latency only, never whether the alert goes
+# out.
+#
+# Required repository secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+# Without them the job prints the alerts (dry mode) and exits zero.
+
+name: astra-news
+
+on:
+  schedule:
+    # Every 15 minutes, offset by 4 so it does not collide with the signal scan.
+    - cron: "4,19,34,49 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the alerts instead of sending them"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-news
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore alert state
+        uses: actions/cache/restore@v4
+        with:
+          path: run/news_alert_state.json
+          key: astra-news-state-${{ github.run_id }}
+          restore-keys: |
+            astra-news-state-
+
+      - name: Run the tests
+        run: python3 -m unittest discover -s bot -p "test_news_alert.py"
+
+      - name: Alert on the next high-impact release
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python3 bot/news_alert.py --dry-run
+          else
+            python3 bot/news_alert.py
+          fi
+
+      - name: Save alert state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: run/news_alert_state.json
+          key: astra-news-state-${{ github.run_id }}

@@ -37,6 +37,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import self_review
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
@@ -65,6 +67,14 @@ HTTP_TIMEOUT = float(os.environ.get("ASTRA_ADVISOR_TIMEOUT", "20"))
 CACHE_TTL = float(os.environ.get("ASTRA_ADVISOR_TTL", "120"))
 LOG_PATH = os.environ.get("ASTRA_ADVISOR_LOG",
                           os.path.join(ROOT, "run", "advisor_advisories.jsonl"))
+
+# Self-review: how long to wait before judging a call, and where the scored
+# outcomes live. The advisor reads its own record back and injects the misses
+# into the next prompt so it does not silently repeat them.
+REVIEW_HORIZON_S = float(os.environ.get("ASTRA_ADVISOR_REVIEW_HORIZON", "3600"))
+OUTCOME_PATH = os.environ.get("ASTRA_ADVISOR_OUTCOMES",
+                              os.path.join(ROOT, "run", "advisor_outcomes.jsonl"))
+REVIEW_LESSONS = os.environ.get("ASTRA_ADVISOR_LESSONS", "1").strip() != "0"
 
 # Headlines are pulled from a keyless, free RSS search so the advisor can ground
 # its read in the day's actual news instead of guessing. Google News RSS needs
@@ -329,9 +339,11 @@ def build_snapshot() -> dict:
     return snapshot
 
 
-def build_prompt(snapshot: dict) -> str:
-    return (_SYSTEM_PROMPT + "\n\nSnapshot:\n"
-            + json.dumps(snapshot, indent=2, sort_keys=True))
+def build_prompt(snapshot: dict, lessons: str = "") -> str:
+    prompt = _SYSTEM_PROMPT
+    if lessons:
+        prompt += "\n\n" + lessons
+    return prompt + "\n\nSnapshot:\n" + json.dumps(snapshot, indent=2, sort_keys=True)
 
 
 def parse_advisory(text: str) -> dict | None:
@@ -460,6 +472,26 @@ def append_log(record: dict) -> None:
         pass  # Logging is best-effort; it must never break the response.
 
 
+def run_review(price_now: float | None) -> dict:
+    """Score past calls that are past the horizon, and summarize the record.
+
+    Reads the advisor's own advisory log, appends any newly-due outcomes, and
+    returns the running summary. Entirely best-effort: a missing price or file
+    yields an empty summary rather than an error.
+    """
+    empty = {"scored": 0, "correct": 0, "hit_rate": None,
+             "by_stance": {}, "recent_wrong": []}
+    if price_now is None:
+        return empty
+    advisories = self_review.read_jsonl(LOG_PATH)
+    outcomes = self_review.read_jsonl(OUTCOME_PATH)
+    new = self_review.score_due(advisories, outcomes,
+                                price_now, time.time(), REVIEW_HORIZON_S)
+    for record in new:
+        self_review.append_jsonl(OUTCOME_PATH, record)
+    return self_review.summarize(outcomes + new)
+
+
 class Advisor:
     """Builds and caches advisories. Pure logic lives in the module functions."""
 
@@ -497,7 +529,14 @@ class Advisor:
                                 "provider key"))
             return advisory
 
-        reply = call_model(build_prompt(snapshot), api_key)
+        # Learn from the past before answering: score any call that is now due
+        # and hand the misses to the model, so a mistake is visible next time.
+        review = run_review(snapshot.get("price"))
+        advisory["review"] = review
+        lessons = (self_review.lessons_block(review)
+                   if REVIEW_LESSONS else "")
+
+        reply = call_model(build_prompt(snapshot, lessons), api_key)
         opinion = parse_advisory(reply) if reply else None
         if opinion is None:
             advisory["note"] = "AI advisor unavailable: no usable reply."
@@ -515,6 +554,7 @@ class Advisor:
             "stance": opinion["stance"],
             "confidence": opinion["confidence"],
             "news_used": opinion["news_used"],
+            "event": opinion.get("event") or "",
             "provider": PROVIDER,
             "model": active_model(),
         })

@@ -28,6 +28,7 @@ const STRINGS = {
     ai_plan_bias: "Bias", ai_plan_trigger: "Trigger", ai_plan_entry: "Entry",
     ai_plan_stop: "Stop", ai_plan_target: "Target", ai_plan_note: "Note",
     ai_headlines: "Headlines", ai_events: "High-impact events ahead",
+    ai_review: "Self-review", ai_review_none: "no scored calls yet",
     ai_refresh: "Ask again",
     ai_stance_long: "AI leans long", ai_stance_short: "AI leans short",
     ai_stance_neutral: "AI is neutral", ai_stance_none: "No opinion yet",
@@ -109,6 +110,7 @@ const STRINGS = {
     ai_plan_bias: "الاتجاه", ai_plan_trigger: "الشرط", ai_plan_entry: "الدخول",
     ai_plan_stop: "الوقف", ai_plan_target: "الهدف", ai_plan_note: "ملاحظة",
     ai_headlines: "العناوين", ai_events: "أخبار عالية التأثير قادمة",
+    ai_review: "المراجعة الذاتية", ai_review_none: "ما في نتائج مُقيَّمة بعد",
     ai_refresh: "اسأل من جديد",
     ai_stance_long: "الذكاء يميل للشراء", ai_stance_short: "الذكاء يميل للبيع",
     ai_stance_neutral: "الذكاء محايد", ai_stance_none: "لا رأي بعد",
@@ -447,6 +449,17 @@ async function loadAdvisor(force) {
       planEl.hidden = true;
     }
 
+    const rv = $("ai-review");
+    const review = a.review || {};
+    if (review.scored) {
+      rv.hidden = false;
+      const hit = Math.round((review.hit_rate || 0) * 100);
+      rv.textContent = `${T("ai_review")}: ${review.correct}/${review.scored} (${hit}%)`;
+    } else {
+      rv.hidden = false;
+      rv.textContent = `${T("ai_review")}: ${T("ai_review_none")}`;
+    }
+
     stanceEl.className = "ai-stance";
     if (op) {
       stanceEl.textContent = T(AI_STANCE_KEY[op.stance] || "ai_stance_neutral");
@@ -478,7 +491,7 @@ async function loadAdvisor(force) {
     $("ai-thesis").textContent = "";
     $("ai-risks").textContent = "";
     for (const id of ["ai-headlines", "ai-events", "ai-plan", "ai-event",
-                      "ai-headlines-title", "ai-events-title"]) {
+                      "ai-review", "ai-headlines-title", "ai-events-title"]) {
       const el = $(id);
       el.hidden = true;
       if (el.tagName === "UL" || el.tagName === "DIV") el.innerHTML = "";

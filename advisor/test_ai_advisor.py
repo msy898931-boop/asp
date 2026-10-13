@@ -23,6 +23,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import ai_advisor as advisor  # noqa: E402
+import self_review  # noqa: E402
 
 
 class ParseAdvisoryTests(unittest.TestCase):
@@ -267,6 +268,67 @@ class CalendarTests(unittest.TestCase):
         self.assertEqual(calls["n"], 1)
 
 
+class ReviewTests(unittest.TestCase):
+    def test_score_due_waits_for_horizon_and_scores_once(self):
+        now = 10_000_000.0
+        advs = [
+            {"generated_at_utc": int(now - 7200), "symbol": "XAUUSD",
+             "stance": "LONG", "price": 4100.0},
+            {"generated_at_utc": int(now - 60), "symbol": "XAUUSD",
+             "stance": "LONG", "price": 4100.0},
+        ]
+        new = self_review.score_due(advs, [], price_now=4130.0,
+                                    now=now, horizon_s=3600)
+        self.assertEqual(len(new), 1)
+        self.assertTrue(new[0]["correct"])
+        # Already-scored calls are not scored again.
+        again = self_review.score_due(advs, new, price_now=4130.0,
+                                      now=now, horizon_s=3600)
+        self.assertEqual(again, [])
+
+    def test_stance_verdicts(self):
+        up = {"price": 100.0}
+        self.assertTrue(self_review.evaluate({**up, "stance": "LONG"}, 101.0)["correct"])
+        self.assertFalse(self_review.evaluate({**up, "stance": "SHORT"}, 101.0)["correct"])
+        self.assertTrue(self_review.evaluate({**up, "stance": "NEUTRAL"}, 100.05)["correct"])
+        self.assertFalse(self_review.evaluate({**up, "stance": "NEUTRAL"}, 101.0)["correct"])
+        self.assertIsNone(self_review.evaluate({"stance": "LONG"}, 101.0))
+
+    def test_summarize_and_lessons(self):
+        outcomes = [
+            {"stance": "LONG", "correct": True, "price": 1, "price_after": 2,
+             "move_pct": 1.0},
+            {"stance": "SHORT", "correct": False, "price": 2, "price_after": 3,
+             "move_pct": 1.0},
+        ]
+        summary = self_review.summarize(outcomes)
+        self.assertEqual(summary["scored"], 2)
+        self.assertEqual(summary["correct"], 1)
+        self.assertEqual(summary["hit_rate"], 0.5)
+        self.assertEqual(len(summary["recent_wrong"]), 1)
+        block = self_review.lessons_block(summary)
+        self.assertIn("SHORT", block)
+        self.assertIn("50%", block)
+        # No outcomes -> no block, so an empty history adds nothing.
+        self.assertEqual(self_review.lessons_block(
+            {"scored": 0, "correct": 0, "hit_rate": None, "recent_wrong": []}), "")
+
+    def test_read_jsonl_skips_bad_lines(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl",
+                                         delete=False) as fh:
+            fh.write('{"a": 1}\n')
+            fh.write("not json\n")
+            fh.write('{"a": 2}\n')
+            path = fh.name
+        try:
+            records = self_review.read_jsonl(path)
+        finally:
+            os.unlink(path)
+        self.assertEqual([r["a"] for r in records], [1, 2])
+        self.assertEqual(self_review.read_jsonl("/no/such/file"), [])
+
+
 class BuildTests(unittest.TestCase):
     def setUp(self):
         self._orig_get = advisor._get_json
@@ -274,10 +336,14 @@ class BuildTests(unittest.TestCase):
         self._orig_log = advisor.append_log
         self._orig_news = advisor.recent_news
         self._orig_events = advisor.upcoming_events
+        self._orig_review = advisor.run_review
         self._orig_key = os.environ.get("GROQ_API_KEY")
         advisor.append_log = lambda record: None
         advisor.recent_news = lambda: []
         advisor.upcoming_events = lambda: []
+        advisor.run_review = lambda price: {
+            "scored": 0, "correct": 0, "hit_rate": None,
+            "by_stance": {}, "recent_wrong": []}
         advisor._get_json = lambda url: (
             {"payload": {"last": 4185.9}} if "/v1/tick" in url
             else {"data": {"available": False, "reason": "none"}})
@@ -288,6 +354,7 @@ class BuildTests(unittest.TestCase):
         advisor.append_log = self._orig_log
         advisor.recent_news = self._orig_news
         advisor.upcoming_events = self._orig_events
+        advisor.run_review = self._orig_review
         if self._orig_key is None:
             os.environ.pop("GROQ_API_KEY", None)
         else:
@@ -324,6 +391,14 @@ class BuildTests(unittest.TestCase):
         self.assertIn("4185.9", prompt)
         self.assertIn("JSON only", prompt)
         self.assertIn("news_used", prompt)
+        self.assertIn("Arabic", prompt)
+
+    def test_prompt_injects_lessons_when_present(self):
+        plain = advisor.build_prompt({"symbol": "XAUUSD"})
+        with_lessons = advisor.build_prompt(
+            {"symbol": "XAUUSD"}, "مراجعة ذاتية: خطأ سابق")
+        self.assertNotIn("مراجعة ذاتية", plain)
+        self.assertIn("مراجعة ذاتية", with_lessons)
 
 
 class ProviderTests(unittest.TestCase):

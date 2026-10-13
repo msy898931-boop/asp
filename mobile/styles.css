@@ -603,6 +603,11 @@ html[dir="rtl"] .ai-events li::before { left: auto; right: 0; }
   flex: 0 0 5.5rem; font-size: .82rem; color: var(--muted, #6b7280);
 }
 .ai-plan dd { margin: 0; font-size: .9rem; }
+.ai-review {
+  margin: .5rem 0 0; padding-top: .45rem; font-size: .82rem;
+  color: var(--muted, #6b7280);
+  border-top: 1px solid rgba(148, 163, 184, .18);
+}
 #ai-refresh { margin-top: .8rem; }
 
 /* ── signal tracker ─────────────────────────────────────────────────── */
