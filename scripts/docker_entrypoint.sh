@@ -29,7 +29,8 @@ while [ "$i" -lt 30 ]; do
     sleep 1
 done
 
-# The signal tracker is core to the phone app's Signals tab, so it always runs.
+# The signal tracker is core to the phone app's Signals tab and matches what the
+# local stack starts, so it runs unconditionally as a loopback sidecar.
 echo "[entry] signal tracker starting (tracker=${TRACKER_PORT})"
 python3 /app/tracker/signal_tracker.py --host 127.0.0.1 --port "${TRACKER_PORT}" &
 
