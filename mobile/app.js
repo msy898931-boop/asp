@@ -197,6 +197,7 @@ const yn = (v) => (v ? T("yes") : T("no"));
 
 let activeTf = "M15";
 let alertsOn = false;
+let swReg = null;   // the service worker registration, used to show notifications
 let lastSignalKey = null;
 let lastPrice = null;
 let priceLevels = []; // { value, crossed }
@@ -879,8 +880,7 @@ function maybeAlert(analysis) {
   toast(text);
 
   if ("Notification" in window && Notification.permission === "granted") {
-    try { new Notification("ASTRA", { body: text, tag: "astra-signal" }); }
-    catch (e) { /* notification constructor can throw on some browsers */ }
+    showNotification("ASTRA", text, "astra-signal");
   }
   if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
 }
@@ -950,10 +950,23 @@ function addLevel(value) {
 
 function notify(title, body) {
   if ("Notification" in window && Notification.permission === "granted") {
-    try { new Notification(title, { body, tag: "astra-level" }); }
-    catch (e) { /* some browsers throw */ }
+    showNotification(title, body, "astra-level");
   }
   if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
+}
+
+/* Android Chrome throws when a page builds a Notification directly, so route
+   the message through the service worker: `showNotification` is the one path
+   that works on both desktop and Android, and it survives the page being
+   backgrounded. Fall back to the constructor where there is no worker. */
+function showNotification(title, body, tag) {
+  try {
+    if (swReg && swReg.active && swReg.active.postMessage) {
+      swReg.active.postMessage({ type: "notify", title, body, tag });
+      return;
+    }
+  } catch (e) { /* fall through to the constructor */ }
+  try { new Notification(title, { body, tag }); } catch (e) { /* some browsers throw */ }
 }
 
 function checkLevels(price) {
@@ -1124,7 +1137,9 @@ function init() {
   setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    navigator.serviceWorker.register("sw.js")
+      .then((reg) => { swReg = reg; })
+      .catch(() => {});
   }
 }
 

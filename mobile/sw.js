@@ -4,7 +4,7 @@
    up on the next load instead of the load after next, and the app still opens
    offline. */
 
-const SHELL = "astra-shell-v18";
+const SHELL = "astra-shell-v19";
 const ASSETS = [
   "./",
   "./index.html",
@@ -45,5 +45,50 @@ self.addEventListener("fetch", (event) => {
         return res;
       })
       .catch(() => caches.match(event.request))
+  );
+});
+
+/* ── notifications ────────────────────────────────────────────────────
+   Two jobs, one handler. Android Chrome throws when a page calls
+   `new Notification()` directly, so the page posts the message to this worker
+   and the worker shows it — that path works everywhere the app runs. The same
+   handler serves real Web Push payloads when the server sends one. */
+
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type !== "notify") return;
+  event.waitUntil(self.registration.showNotification(data.title || "ASTRA", {
+    body: data.body || "",
+    tag: data.tag || "astra",
+    icon: "./icons/icon-192.png",
+    badge: "./icons/icon-192.png",
+    renotify: true,
+    vibrate: [40, 60, 40],
+  }));
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch (e) { /* plain text */ }
+  const title = payload.title || "ASTRA";
+  const body = payload.body || (event.data ? event.data.text() : "");
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    tag: payload.tag || "astra-push",
+    icon: "./icons/icon-192.png",
+    badge: "./icons/icon-192.png",
+    vibrate: [40, 60, 40],
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) return client.focus();
+      }
+      return self.clients.openWindow("./");
+    })
   );
 });
