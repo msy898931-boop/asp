@@ -36,28 +36,52 @@ HTTP_TIMEOUT = float(os.environ.get("ASTRA_REVIEW_TIMEOUT", "30"))
 _USER_AGENT = "ASTRA-review/1.0"
 
 
-def fetch_review(url: str = ADVISOR_URL) -> dict | None:
+def _get_json(url: str):
     try:
         req = urllib.request.Request(
             url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
+            return json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError):
         return None
+
+
+def fetch_review(url: str = ADVISOR_URL) -> dict | None:
+    payload = _get_json(url)
     if not isinstance(payload, dict):
         return None
     return payload.get("review") or None
+
+
+def poke(url: str = ADVISOR_URL) -> bool:
+    """Ask the advisor for a fresh call so today lands in the review log.
+
+    The advisor only logs a call when someone asks for one, and the app is the
+    only other caller. Nudging it once a day keeps the learning loop fed even
+    when the app is never opened. Best-effort: a failure never blocks the digest.
+    """
+    base = url.rsplit("/review", 1)[0]
+    return _get_json(base + "/advisor?refresh=1") is not None
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ASTRA self-review digest")
     parser.add_argument("--dry-run", action="store_true",
                         help="print the digest instead of sending it")
+    parser.add_argument("--no-poke", action="store_true",
+                        help="do not ask the advisor for a fresh call first")
     args = parser.parse_args(argv)
 
     review = fetch_review()
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+    poked = False
+    if not args.no_poke:
+        poked = poke()
+    if poked:
+        # A fresh call just landed in the log, so re-read for the newest numbers.
+        review = fetch_review() or review
 
     if review is None:
         sys.stderr.write("[review] advisor unreachable at %s\n" % ADVISOR_URL)

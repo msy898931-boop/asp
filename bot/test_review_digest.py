@@ -70,6 +70,36 @@ class FetchReviewTests(unittest.TestCase):
             urllib.request.urlopen = orig
 
 
+class PokeTests(unittest.TestCase):
+    def test_poke_hits_the_advisor_endpoint(self):
+        import urllib.request
+        seen = {}
+
+        class Fake:
+            def __enter__(self_):
+                return self_
+
+            def __exit__(self_, *a):
+                return False
+
+            def read(self_):
+                return b'{"advisor": {"opinion": null}}'
+
+        def fake_urlopen(req, timeout=None):
+            seen["url"] = req.full_url
+            return Fake()
+
+        orig = urllib.request.urlopen
+        urllib.request.urlopen = fake_urlopen
+        try:
+            ok = rd.poke("https://host/advisor/v1/review")
+        finally:
+            urllib.request.urlopen = orig
+        self.assertTrue(ok)
+        self.assertEqual(seen["url"],
+                         "https://host/advisor/v1/advisor?refresh=1")
+
+
 class DefaultUrlTests(unittest.TestCase):
     def test_empty_env_falls_back_to_the_public_deployment(self):
         # A GitHub Actions `vars.X` that is unset arrives as an empty string,
