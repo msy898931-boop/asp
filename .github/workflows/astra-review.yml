@@ -1,0 +1,55 @@
+# The daily self-review digest: how accurate the advisor was, on Telegram.
+#
+# Free, like the other jobs: GitHub runs it once a day, reads the advisor's own
+# self-review endpoint (the same scoreboard the app shows), and sends the Arabic
+# summary — hit rate overall and per stance, plus the recent misses and the
+# lesson injected into the next analysis.
+#
+# Required repository secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+# Without them the job prints the digest (dry mode) and exits zero.
+
+name: astra-review
+
+on:
+  schedule:
+    # Once a day at 07:00 UTC (10:00 in Damascus/Riyadh).
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the digest instead of sending it"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-review
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the tests
+        run: python3 -m unittest discover -s bot -p "test_review_digest.py"
+
+      - name: Send the self-review digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ASTRA_REVIEW_URL: ${{ vars.ASTRA_REVIEW_URL }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python3 bot/review_digest.py --dry-run
+          else
+            python3 bot/review_digest.py
+          fi

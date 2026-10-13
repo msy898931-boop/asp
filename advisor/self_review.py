@@ -144,3 +144,41 @@ def lessons_block(summary: dict, lang: str = "ar") -> str:
                      % (o.get("stance"), o.get("price"), o.get("price_after"),
                         o.get("move_pct") or 0.0))
     return "\n".join(lines)
+
+
+_STANCE_AR = {"LONG": "شراء", "SHORT": "بيع", "NEUTRAL": "حياد"}
+
+
+def format_review(summary: dict) -> str:
+    """A daily Telegram scoreboard of the advisor's own accuracy."""
+    scored = summary.get("scored") or 0
+    if not scored:
+        return ("📋 المراجعة الذاتية للمستشار الذكي\n"
+                "ما في نتائج مُقيَّمة بعد. كل رأي يُقيَّم بعد ساعة من صدوره، "
+                "وبعدها يبدأ السجل يبان هنا.")
+    correct = summary.get("correct") or 0
+    hit = round((summary.get("hit_rate") or 0.0) * 100)
+    lines = [
+        "📋 المراجعة الذاتية للمستشار الذكي",
+        "الدقّة: %d من %d (%d%%)" % (correct, scored, hit),
+    ]
+    by_stance = summary.get("by_stance") or {}
+    for stance in ("LONG", "SHORT", "NEUTRAL"):
+        bucket = by_stance.get(stance)
+        if not bucket or not bucket.get("n"):
+            continue
+        lines.append("• %s: %d من %d"
+                     % (_STANCE_AR.get(stance, stance),
+                        bucket.get("correct", 0), bucket["n"]))
+    wrong = summary.get("recent_wrong") or []
+    if wrong:
+        lines.append("آخر الأخطاء (ودروسها):")
+        for o in wrong:
+            lines.append("• قلت %s عند %s → السعر %s (%.2f%%)"
+                         % (_STANCE_AR.get(o.get("stance"), o.get("stance")),
+                            o.get("price"), o.get("price_after"),
+                            o.get("move_pct") or 0.0))
+        lines.append("الدرس مُحقَن في التحليل الجاي: لا يكرّر الحكم بلا سبب جديد.")
+    else:
+        lines.append("ما في أخطاء مسجّلة حتى الآن. 👏")
+    return "\n".join(lines)

@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import unittest
 import urllib.error
 import urllib.request
@@ -313,8 +314,25 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(self_review.lessons_block(
             {"scored": 0, "correct": 0, "hit_rate": None, "recent_wrong": []}), "")
 
+    def test_format_review_is_arabic_and_honest(self):
+        empty = self_review.format_review(
+            {"scored": 0, "correct": 0, "hit_rate": None, "recent_wrong": []})
+        self.assertIn("ما في نتائج", empty)
+        summary = {
+            "scored": 4, "correct": 3, "hit_rate": 0.75,
+            "by_stance": {"LONG": {"n": 2, "correct": 2},
+                          "SHORT": {"n": 2, "correct": 1}},
+            "recent_wrong": [{"stance": "SHORT", "price": 4100, "price_after": 4130,
+                              "move_pct": 0.73}],
+        }
+        text = self_review.format_review(summary)
+        self.assertIn("3 من 4 (75%)", text)
+        self.assertIn("شراء", text)
+        self.assertIn("بيع", text)
+        self.assertIn("قلت بيع", text)
+        self.assertIn("الدرس مُحقَن", text)
+
     def test_read_jsonl_skips_bad_lines(self):
-        import tempfile
         with tempfile.NamedTemporaryFile("w", suffix=".jsonl",
                                          delete=False) as fh:
             fh.write('{"a": 1}\n')

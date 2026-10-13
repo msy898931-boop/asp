@@ -507,6 +507,12 @@ class Advisor:
         self._cached, self._cached_at = result, now
         return result
 
+    def review(self) -> dict:
+        """The self-review scoreboard on its own, without calling the model."""
+        snapshot = build_snapshot()
+        summary = run_review(snapshot.get("price"))
+        return {"summary": summary, "message": self_review.format_review(summary)}
+
     def _build(self) -> dict:
         snapshot = build_snapshot()
         api_key = provider_key()
@@ -572,6 +578,8 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/v1/advisor", "/advisor"):
             force = "refresh=1" in query
             self._json(200, {"advisor": self.advisor.current(force=force)})
+        elif path in ("/v1/review", "/review"):
+            self._json(200, {"review": self.advisor.review()})
         elif path in ("/health", "/v1/health"):
             self._json(200, {"service": "ai-advisor", "status": "OK",
                              "provider": PROVIDER,
