@@ -467,3 +467,23 @@ both the bot (`_plan_line`) and the app (`now_plan_warn`) say it out loud rather
 than quoting a position that cannot be traded. Money figures use the minimum
 1 oz position (`_result_usd`), the honest baseline. Config: `ASTRA_ACCOUNT_USD`
 (default 200), `ASTRA_RISK_PCT` (default 1.0).
+
+### Never let the server sleep
+
+Two always-on pieces, and they are independent:
+
+* **The bot** runs on GitHub Actions (`.github/workflows/astra-bot.yml`) and
+  reads candles straight from the upstream via `LiveMt5Client` — it does **not**
+  touch the Render server, so it is always on with nothing to keep warm. Do not
+  add a Render dependency to `bot/scan_once.py`; that would couple the never-
+  sleeping half to the one that naps.
+* **The phone app** points at the live Render server, and Render's free plan
+  spins a service down after ~15 minutes idle, so a request paid a 30-60s cold
+  start. `.github/workflows/astra-keepalive.yml` pings `/api/v1/health` every 5
+  minutes (well inside the window) to keep it awake. The repo is public, so the
+  Actions minutes are free.
+
+`render.yaml` says `plan: starter` (paid, never sleeps), but the live service is
+on the free plan — hence the keep-alive. If the service is ever upgraded, the
+keep-alive is harmless and can stay. The health path is `/api/v1/health`; the
+bare `/health` and `/api/health` both 404.
