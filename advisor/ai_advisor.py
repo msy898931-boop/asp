@@ -31,7 +31,9 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -63,18 +65,34 @@ CACHE_TTL = float(os.environ.get("ASTRA_ADVISOR_TTL", "120"))
 LOG_PATH = os.environ.get("ASTRA_ADVISOR_LOG",
                           os.path.join(ROOT, "run", "advisor_advisories.jsonl"))
 
+# Headlines are pulled from a keyless, free RSS search so the advisor can ground
+# its read in the day's actual news instead of guessing. Google News RSS needs
+# no key and no quota; set ASTRA_ADVISOR_NEWS=0 to turn the fetch off (the
+# advisor then honestly reports news_used=false).
+NEWS_ENABLED = os.environ.get("ASTRA_ADVISOR_NEWS", "1").strip() != "0"
+NEWS_URL = os.environ.get(
+    "ASTRA_ADVISOR_NEWS_URL",
+    "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en")
+NEWS_QUERY = os.environ.get("ASTRA_ADVISOR_NEWS_QUERY",
+                            "gold price XAUUSD when:1d")
+NEWS_LIMIT = int(os.environ.get("ASTRA_ADVISOR_NEWS_LIMIT", "8"))
+NEWS_TTL = float(os.environ.get("ASTRA_ADVISOR_NEWS_TTL", "900"))
+
 # The response contract. Stable so the app and any later scorer can rely on it.
 SCHEMA_VERSION = "1.0"
 
 _SYSTEM_PROMPT = (
     "You are a gold (XAUUSD) market commentator embedded in a research tool. "
     "You are given a factual snapshot of one instrument produced by a rule "
-    "engine. Give a short, concrete read of the market and a stance.\n"
+    "engine, plus a list of recent headlines when available. Give a short, "
+    "concrete read of the market and a stance.\n"
     "Rules:\n"
-    "- Base your answer only on the snapshot and on news you can actually "
-    "recall or verify. Do not invent prices, events or dates.\n"
-    "- If you cannot verify current news, set news_used to false and say so "
+    "- Base your answer only on the snapshot and on the headlines provided. Do "
+    "not invent prices, events or dates.\n"
+    "- If the snapshot has no headlines, set news_used to false and say so "
     "plainly in the thesis. Never imply you saw live news you did not.\n"
+    "- When headlines are present and you lean on them, set news_used to true "
+    "and name the theme, not the outlet.\n"
     "- This is commentary, not advice. Do not promise returns.\n"
     "Reply with JSON only, keys: stance (one of LONG, SHORT, NEUTRAL), "
     "confidence (0..1, your own, not the engine's), thesis (one or two "
@@ -89,6 +107,44 @@ def _get_json(url: str) -> dict | None:
             return json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError):
         return None
+
+
+def fetch_news() -> list[dict]:
+    """Recent gold headlines from a keyless RSS search. Never raises."""
+    if not NEWS_ENABLED:
+        return []
+    url = NEWS_URL.format(query=urllib.parse.quote(NEWS_QUERY))
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            root = ET.fromstring(resp.read())
+    except (urllib.error.URLError, OSError, ValueError, ET.ParseError):
+        return []
+    out: list[dict] = []
+    for item in root.findall(".//item")[:NEWS_LIMIT]:
+        title = (item.findtext("title") or "").strip()
+        if not title:
+            continue
+        out.append({
+            "title": title,
+            "published": (item.findtext("pubDate") or "").strip(),
+            "source": ((item.findtext("source") or "").strip()),
+        })
+    return out
+
+
+_news_cache: dict = {"at": 0.0, "items": []}
+
+
+def recent_news() -> list[dict]:
+    """Headlines with a long TTL: the feed changes slowly and is best-effort."""
+    now = time.time()
+    if _news_cache["items"] and now - _news_cache["at"] < NEWS_TTL:
+        return _news_cache["items"]
+    items = fetch_news()
+    if items:
+        _news_cache["items"], _news_cache["at"] = items, now
+    return _news_cache["items"]
 
 
 def build_snapshot() -> dict:
@@ -124,6 +180,10 @@ def build_snapshot() -> dict:
                 "signal": data.get("signal"),
                 "levels": data.get("levels"),
             }
+
+    headlines = recent_news()
+    snapshot["news"] = headlines
+    snapshot["news_available"] = bool(headlines)
     return snapshot
 
 

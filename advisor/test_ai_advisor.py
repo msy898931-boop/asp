@@ -72,9 +72,12 @@ class ParseAdvisoryTests(unittest.TestCase):
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
         self._orig = advisor._get_json
+        self._orig_news = advisor.recent_news
+        advisor.recent_news = lambda: []
 
     def tearDown(self):
         advisor._get_json = self._orig
+        advisor.recent_news = self._orig_news
 
     def test_snapshot_collects_tick_and_analysis(self):
         def fake(url):
@@ -105,6 +108,74 @@ class SnapshotTests(unittest.TestCase):
         snap = advisor.build_snapshot()
         self.assertIsNone(snap["price"])
         self.assertFalse(snap["analysis_available"])
+        self.assertFalse(snap["news_available"])
+        self.assertEqual(snap["news"], [])
+
+    def test_snapshot_carries_headlines_when_present(self):
+        advisor._get_json = lambda url: {"payload": {"last": 4185.9}}
+        advisor.recent_news = lambda: [
+            {"title": "Gold steadies ahead of CPI", "published": "x",
+             "source": "TestWire"}]
+        snap = advisor.build_snapshot()
+        self.assertTrue(snap["news_available"])
+        self.assertEqual(snap["news"][0]["title"], "Gold steadies ahead of CPI")
+
+
+class NewsTests(unittest.TestCase):
+    def setUp(self):
+        self._orig = advisor.fetch_news
+        self._orig_cache = dict(advisor._news_cache)
+
+    def tearDown(self):
+        advisor.fetch_news = self._orig
+        advisor._news_cache.update(self._orig_cache)
+
+    def test_fetch_news_parses_rss_without_network(self):
+        rss = (b"<rss><channel>"
+               b"<item><title>Gold up on softer yields</title>"
+               b"<pubDate>Mon, 13 Oct 2026 10:00:00 GMT</pubDate>"
+               b"<source>Wire</source></item>"
+               b"<item><title></title></item>"
+               b"</channel></rss>")
+        orig = urllib.request.urlopen
+
+        class Fake:
+            def __enter__(self_):
+                return self_
+            def __exit__(self_, *a):
+                return False
+            def read(self_):
+                return rss
+
+        urllib.request.urlopen = lambda req, timeout=None: Fake()
+        try:
+            items = advisor.fetch_news()
+        finally:
+            urllib.request.urlopen = orig
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "Gold up on softer yields")
+        self.assertEqual(items[0]["source"], "Wire")
+
+    def test_fetch_news_is_inert_when_disabled(self):
+        original = advisor.NEWS_ENABLED
+        advisor.NEWS_ENABLED = False
+        try:
+            self.assertEqual(advisor.fetch_news(), [])
+        finally:
+            advisor.NEWS_ENABLED = original
+
+    def test_recent_news_caches(self):
+        calls = {"n": 0}
+
+        def fake():
+            calls["n"] += 1
+            return [{"title": "t", "published": "", "source": ""}]
+
+        advisor.fetch_news = fake
+        advisor._news_cache.update({"at": 0.0, "items": []})
+        advisor.recent_news()
+        advisor.recent_news()
+        self.assertEqual(calls["n"], 1)
 
 
 class BuildTests(unittest.TestCase):
@@ -112,8 +183,10 @@ class BuildTests(unittest.TestCase):
         self._orig_get = advisor._get_json
         self._orig_call = advisor.call_model
         self._orig_log = advisor.append_log
+        self._orig_news = advisor.recent_news
         self._orig_key = os.environ.get("GROQ_API_KEY")
         advisor.append_log = lambda record: None
+        advisor.recent_news = lambda: []
         advisor._get_json = lambda url: (
             {"payload": {"last": 4185.9}} if "/v1/tick" in url
             else {"data": {"available": False, "reason": "none"}})
@@ -122,6 +195,7 @@ class BuildTests(unittest.TestCase):
         advisor._get_json = self._orig_get
         advisor.call_model = self._orig_call
         advisor.append_log = self._orig_log
+        advisor.recent_news = self._orig_news
         if self._orig_key is None:
             os.environ.pop("GROQ_API_KEY", None)
         else:

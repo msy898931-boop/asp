@@ -509,3 +509,16 @@ Two keys to remember:
 Verify a deployment with `curl https://<host>/advisor/v1/advisor` and check
 `configured` and `opinion`. The advisor test suite runs in CI and covers parsing
 and the not-configured degradation without any network.
+
+### News for free: keyless RSS, no provider quota
+
+The advisor grounds its read in real headlines via **Google News RSS** — no API
+key, no quota, no billing. `fetch_news()` parses `news.google.com/rss/search`
+for `gold price XAUUSD when:1d`, and `recent_news()` caches the result for
+`ASTRA_ADVISOR_NEWS_TTL` (900s) because the feed barely moves. Headlines land in
+the snapshot as `news`, `news_available`; the model sets `news_used` and the app
+shows it ("استخدم الأخبار"). Knobs: `ASTRA_ADVISOR_NEWS=0` disables it,
+`ASTRA_ADVISOR_NEWS_QUERY` / `_LIMIT` / `_TTL` tune it, `ASTRA_ADVISOR_NEWS_URL`
+repoints it. Every fetch is best-effort: a dead feed yields no headlines and the
+advisor honestly reports `news_used: false` rather than inventing news. (Kitco
+and FXStreet RSS both 404/403 from a datacenter IP; Google News does not.)

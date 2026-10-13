@@ -553,6 +553,20 @@ html[dir="rtl"] .ai-warn {
 .ai-conf { font-size: .85rem; color: var(--muted, #6b7280); }
 .ai-thesis { margin: .3rem 0; line-height: 1.5; }
 .ai-risks { margin: .3rem 0; font-size: .9rem; color: var(--muted, #6b7280); }
+.ai-headlines {
+  margin: .4rem 0 .2rem; padding: 0; list-style: none;
+  font-size: .82rem; color: var(--muted, #6b7280); line-height: 1.45;
+}
+.ai-headlines li {
+  padding: .25rem 0 .25rem .7rem; position: relative;
+  border-bottom: 1px solid rgba(148, 163, 184, .18);
+}
+.ai-headlines li:last-child { border-bottom: 0; }
+.ai-headlines li::before {
+  content: "•"; position: absolute; left: 0; color: var(--gold, #d4af37);
+}
+html[dir="rtl"] .ai-headlines li { padding-left: 0; padding-right: .7rem; }
+html[dir="rtl"] .ai-headlines li::before { left: auto; right: 0; }
 #ai-refresh { margin-top: .8rem; }
 
 /* ── signal tracker ─────────────────────────────────────────────────── */

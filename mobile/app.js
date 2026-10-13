@@ -379,6 +379,20 @@ async function loadAdvisor(force) {
     $("ai-model").textContent = a.model || "--";
     $("ai-news").textContent = op ? yn(op.news_used) : "--";
 
+    const hl = $("ai-headlines");
+    const headlines = (snap.news || []).slice(0, 5);
+    hl.innerHTML = "";
+    if (headlines.length) {
+      hl.hidden = false;
+      for (const h of headlines) {
+        const li = document.createElement("li");
+        li.textContent = h.title;
+        hl.appendChild(li);
+      }
+    } else {
+      hl.hidden = true;
+    }
+
     stanceEl.className = "ai-stance";
     if (op) {
       stanceEl.textContent = T(AI_STANCE_KEY[op.stance] || "ai_stance_neutral");
