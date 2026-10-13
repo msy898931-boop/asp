@@ -1,0 +1,53 @@
+# Keeps the free Render instance awake.
+#
+# Render's free plan spins an idle web service down after ~15 minutes of no
+# traffic. The bot itself does not need this — it runs on GitHub Actions, which
+# never sleeps — but the phone app points at the live server, and a request to a
+# spun-down instance pays a 30-60s cold start. Pinging well under that window
+# keeps the server warm, so the app opens instantly.
+#
+# This is the free way to do it: GitHub Actions cron costs nothing on a public
+# repo, and a single curl every 5 minutes is far below the free instance's
+# monthly hours cap. A paid Render instance is the other way; this avoids it.
+#
+# Note: GitHub's cron is best-effort and can lag at busy times. A late ping is
+# still useful (it only has to arrive inside the 15-minute window), and a
+# skipped one is harmless because the next ping re-warms the instance.
+
+name: astra-keepalive
+
+on:
+  schedule:
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the live server
+        env:
+          ASTRA_URL: ${{ vars.ASTRA_URL || 'https://astra-xlp9.onrender.com' }}
+        run: |
+          set -u
+          # Retry so a genuinely cold instance (or a brief blip) still succeeds
+          # within the run, rather than reporting a false failure.
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -m 60 "$ASTRA_URL/api/v1/health" || echo "000")
+            echo "attempt $attempt: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "server is awake"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "server did not answer 200 after retries" >&2
+          exit 1
