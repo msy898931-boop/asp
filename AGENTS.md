@@ -431,3 +431,39 @@ permanently, launch the watchdog with the token unset
 (`env -u TELEGRAM_BOT_TOKEN -u ASTRA_ENABLE_BOT scripts/watch_stack.sh`).
 Confirm with `getWebhookInfo` (empty URL) and by watching the 409 counter in
 `run/host.log` while making no external Telegram calls.
+
+### Per-bar answers: the heartbeat contract
+
+The user wants an answer on **every** closed M15 bar, not only when the engine
+trades. That is the heartbeat, and it is the default (`ASTRA_HEARTBEAT=1`;
+set it to `0` to go back to trade-only alerts).
+
+* `tracker/replay.py::explain_last_bar` returns the newest bar's decision from
+  the same loop that opens trades, so it can never disagree with the ledger.
+  A no-trade status carries a `reason` (`NO_EDGE`, `VOLATILE`, `IN_POSITION`,
+  `COOLDOWN`, `JUST_RESOLVED`, `STRUCTURE_INCOMPLETE`, `NO_DATA`) plus the
+  engine's `read` (regime, bias, rsi, atr, close). Never blank.
+* `bot/scan_once.py` sends one message per bar and dedups on the bar's own
+  `time` (`state["last_bar_time"]`), so running the cron more often than 15 min
+  only buys reliability, never duplicates. The bot cron is every 5 minutes for
+  exactly this reason.
+* `bot/telegram_bot.py::format_last_bar` renders either a trade (levels + the
+  reason + the money) or an explained no-trade. `REASON_AR`/`REGIME_AR`/`BIAS_AR`
+  hold the Arabic labels; keep them in sync with the app's `NOW_REASON` etc.
+* `mobile/app.js::renderNow` draws the same status at the top of the tracker
+  tab (`#trk-now`). The `/tracker/` route is network-only in `sw.js`.
+
+**Do not force a trade every bar.** Measured on 200 M15 bars: the strict engine
+produced 9 ideas, while trading every bar produced 146 at a 34% win rate and
+-13.6R net. The silence is the edge, not a bug. This was shown to the user, who
+chose the heartbeat (option A) over forced trades.
+
+### $200 account and gold's minimum lot
+
+Gold's smallest tradable size is 0.01 lot = 1 oz, so at a ~6.4 USD/oz stop the
+minimum position risks ~6.4 USD = ~3.2% of a 200 USD account, regardless of the
+1% asked for. `replay.account_plan` computes this and sets `below_min_lot`;
+both the bot (`_plan_line`) and the app (`now_plan_warn`) say it out loud rather
+than quoting a position that cannot be traded. Money figures use the minimum
+1 oz position (`_result_usd`), the honest baseline. Config: `ASTRA_ACCOUNT_USD`
+(default 200), `ASTRA_RISK_PCT` (default 1.0).

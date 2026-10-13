@@ -56,6 +56,7 @@ from replay import (  # noqa: E402
     DEFAULT_MIN_SCORED,
     Signal,
     build_signals,
+    explain_last_bar,
     summarize,
 )
 
@@ -70,6 +71,8 @@ COST_USD = float(os.environ.get("ASTRA_TRACKER_SPREAD", str(DEFAULT_COST_USD)))
 HORIZON_BARS = int(os.environ.get("ASTRA_TRACKER_HORIZON", str(DEFAULT_HORIZON_BARS)))
 COOLDOWN_BARS = int(os.environ.get("ASTRA_TRACKER_COOLDOWN", str(DEFAULT_COOLDOWN_BARS)))
 MIN_SCORED = int(os.environ.get("ASTRA_TRACKER_MIN_SCORED", str(DEFAULT_MIN_SCORED)))
+ACCOUNT_USD = float(os.environ.get("ASTRA_ACCOUNT_USD", "200"))
+RISK_PCT = float(os.environ.get("ASTRA_RISK_PCT", "1.0"))
 LOG_PATH = os.environ.get("ASTRA_TRACKER_LOG",
                           os.path.join(ROOT, "run", "signal_trades.jsonl"))
 _USER_AGENT = os.environ.get("ASTRA_TRACKER_USER_AGENT", "ASTRA-tracker/1.0")
@@ -140,6 +143,10 @@ class Tracker:
             cooldown_bars=COOLDOWN_BARS)
         payload = [s.as_dict() for s in signals]
         summary = summarize(signals, MIN_SCORED)
+        status = explain_last_bar(
+            bars, cost_usd=COST_USD, horizon_bars=HORIZON_BARS,
+            cooldown_bars=COOLDOWN_BARS, account_usd=ACCOUNT_USD,
+            risk_pct=RISK_PCT)
         with self._lock:
             self._result = {
                 "schema_version": SCHEMA_VERSION,
@@ -150,8 +157,11 @@ class Tracker:
                 "cost_usd": COST_USD,
                 "horizon_bars": HORIZON_BARS,
                 "cooldown_bars": COOLDOWN_BARS,
+                "account_usd": ACCOUNT_USD,
+                "risk_pct": RISK_PCT,
                 "signals": payload,
                 "summary": summary,
+                "last_bar": status,
                 "note": ("Trade ideas replayed from closed bars. Unvalidated, "
                          "not financial advice."),
             }

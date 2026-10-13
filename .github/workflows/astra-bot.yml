@@ -21,8 +21,12 @@ name: astra-bot
 
 on:
   schedule:
-    # Every 15 minutes. Offset by 5 so the newest M15 bar has closed when we read.
-    - cron: "5,20,35,50 * * * *"
+    # Every 5 minutes. An M15 bar closes at :00/:15/:30/:45; the scanner reports
+    # each closed bar exactly once (it dedups on the bar's own timestamp), so
+    # the extra runs only buy reliability: if GitHub's best-effort cron drops or
+    # delays a slot, the bar still goes out on a neighbouring run instead of
+    # being missed. Offset by 3 so the newest bar has closed when we read.
+    - cron: "3,8,13,18,23,28,33,38,43,48,53,58 * * * *"
   workflow_dispatch:
     inputs:
       test_ping:

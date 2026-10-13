@@ -291,33 +291,68 @@ def build_signals(bars: list[dict], cost_usd: float = DEFAULT_COST_USD,
     re-votes every bar and a single move is counted many times, which inflates
     any rate built on the count.
     """
+    return _replay(bars, cost_usd, horizon_bars, cooldown_bars)[0]
+
+
+def _replay(bars: list[dict], cost_usd: float, horizon_bars: int,
+            cooldown_bars: int) -> tuple[list[Signal], dict]:
+    """The chain replay. Also reports what the *last* bar decided, and why.
+
+    The last-bar status is what lets the bot and the app answer every bar,
+    including the quiet ones: 'no trade, and here is the reason'. It is derived
+    from the same loop that opens trades, so it can never disagree with the
+    ledger.
+    """
     signals: list[Signal] = []
     live: Signal | None = None
     ready_at = -1                  # first bar a new idea may open on
+    last = len(bars) - 1
+    status: dict = {"decision": "NO_TRADE", "reason": "NO_DATA"}
 
     for i in range(MIN_BARS - 1, len(bars)):
+        is_last = (i == last)
         # 1. Let any live idea meet this bar first.
         if live is not None:
             if _advance(live, bars[i], cost_usd, horizon_bars):
+                if is_last:
+                    status = {"decision": "NO_TRADE", "reason": "JUST_RESOLVED",
+                              "resolved": live.as_dict()}
                 live = None
                 ready_at = i + cooldown_bars
             else:
+                if is_last:
+                    status = {"decision": "NO_TRADE", "reason": "IN_POSITION",
+                              "open": live.as_dict()}
                 continue  # still open: no new idea may take its place
         if i < ready_at:
+            if is_last:
+                status = {"decision": "NO_TRADE", "reason": "COOLDOWN",
+                          "cooldown_left": ready_at - i}
             continue      # cooling down after the last resolution
 
         # 2. Read the engine's view of the bars up to and including this one.
         features = _features(bars[:i + 1])
         if features is None:
+            if is_last:
+                status = {"decision": "NO_TRADE", "reason": "NO_DATA"}
             continue
         bias = _structure(bars[:i + 1])
         if bias == "INCOMPLETE":
+            if is_last:
+                status = {"decision": "NO_TRADE", "reason": "STRUCTURE_INCOMPLETE",
+                          "read": _read(features, bias, "UNKNOWN")}
             continue
         regime = _regime(features, bias)
         if regime == "VOLATILE":       # eligibility: volatile not permitted
+            if is_last:
+                status = {"decision": "NO_TRADE", "reason": "VOLATILE",
+                          "read": _read(features, bias, regime)}
             continue
         direction = _direction(features, bias, regime)
         if direction == "NONE":
+            if is_last:
+                status = {"decision": "NO_TRADE", "reason": "NO_EDGE",
+                          "read": _read(features, bias, regime)}
             continue
 
         # 3. Open exactly one idea at this bar's close.
@@ -326,8 +361,73 @@ def build_signals(bars: list[dict], cost_usd: float = DEFAULT_COST_USD,
                       entry=features["close"], stop=stop, target=target,
                       bias=bias, regime=regime, rsi=features["rsi"])
         signals.append(live)
+        if is_last:
+            status = {"decision": "TRADE", "signal": live.as_dict(),
+                      "read": _read(features, bias, regime)}
 
-    return signals
+    return signals, status
+
+
+def _read(features: dict, bias: str, regime: str) -> dict:
+    """The engine's descriptive view of the newest bar. Never a forecast."""
+    return {
+        "close": round(features["close"], 2),
+        "atr": round(features["atr"], 2),
+        "rsi": round(features["rsi"], 1),
+        "bias": bias,
+        "regime": regime,
+        "slope": round(features["slope"], 6),
+    }
+
+
+def explain_last_bar(bars: list[dict], cost_usd: float = DEFAULT_COST_USD,
+                     horizon_bars: int = DEFAULT_HORIZON_BARS,
+                     cooldown_bars: int = DEFAULT_COOLDOWN_BARS,
+                     account_usd: float = 0.0,
+                     risk_pct: float = 0.0) -> dict:
+    """What the newest closed bar decided, and why.
+
+    Returns a status the caller can render verbatim: a trade (with levels, the
+    reason it was taken, and the money at stake on a given account) or a
+    no-trade verdict carrying the engine's read of the market. It always says
+    something, so 'no signal' is never a blank.
+    """
+    signals, status = _replay(bars, cost_usd, horizon_bars, cooldown_bars)
+    out = dict(status)
+    out["bar_time"] = bars[-1]["time"] if bars else None
+    out["bars"] = len(bars)
+    if out.get("decision") == "TRADE" and account_usd > 0 and risk_pct > 0:
+        s = out["signal"]
+        out["plan"] = account_plan(s["entry"], s["stop"], account_usd, risk_pct)
+    return out
+
+
+def account_plan(entry: float, stop: float, account_usd: float,
+                 risk_pct: float) -> dict:
+    """Turn a stop distance and an account into a concrete, honest position.
+
+    Gold's smallest tradable size is 0.01 lot = 1 oz, so a stop wider than the
+    risk budget cannot be honoured: the minimum position risks more than the
+    percentage asked for. That is reported rather than hidden, because it is
+    the difference between a plan and a hope.
+    """
+    risk_usd = account_usd * risk_pct / 100.0
+    stop_distance = abs(entry - stop)
+    position_oz = (risk_usd / stop_distance) if stop_distance > 0 else 0.0
+    min_oz = 1.0                       # 0.01 lot on gold
+    min_risk_usd = min_oz * stop_distance
+    return {
+        "account_usd": round(account_usd, 2),
+        "risk_pct": risk_pct,
+        "risk_usd": round(risk_usd, 2),
+        "stop_distance": round(stop_distance, 2),
+        "position_oz": round(position_oz, 3),
+        "min_position_oz": min_oz,
+        "min_risk_usd": round(min_risk_usd, 2),
+        "min_risk_pct": round(100.0 * min_risk_usd / account_usd, 2)
+        if account_usd else 0.0,
+        "below_min_lot": position_oz < min_oz,
+    }
 
 
 def summarize(signals: list[Signal], min_scored: int = DEFAULT_MIN_SCORED) -> dict:

@@ -121,6 +121,40 @@ class FormatTests(unittest.TestCase):
         self.assertIn("لا بيانات كافية", text)
         self.assertNotIn("نسبة الإصابة: 25", text)
 
+    def test_no_trade_always_states_a_reason(self):
+        for reason, phrase in (("NO_EDGE", "حافة"),
+                               ("VOLATILE", "تقلّب"),
+                               ("COOLDOWN", "تهدئة")):
+            text = bot.format_no_trade({"decision": "NO_TRADE", "reason": reason})
+            self.assertIn(phrase, text)
+
+    def test_no_trade_includes_the_market_read(self):
+        text = bot.format_no_trade({
+            "decision": "NO_TRADE", "reason": "NO_EDGE",
+            "read": {"regime": "RANGING", "bias": "RANGE", "rsi": 49.5,
+                     "atr": 4.3, "close": 4185.0}})
+        self.assertIn("عرضي", text)
+        self.assertIn("4185.0", text)
+
+    def test_last_bar_picks_trade_or_no_trade(self):
+        trade = bot.format_last_bar(
+            {"decision": "TRADE", "signal": signal(1, "LONG")})
+        self.assertIn("صفقة جديدة", trade)
+        flat = bot.format_last_bar({"decision": "NO_TRADE", "reason": "NO_EDGE"})
+        self.assertIn("لا صفقة", flat)
+
+    def test_result_states_dollars_on_the_account(self):
+        # 10 USD stop distance, -1.0R net, minimum 1 oz => -10.00 on the account.
+        text = bot.format_result(signal(1, "LONG", "STOP"), account_usd=200.0)
+        self.assertIn("10.00", text)
+
+    def test_plan_line_flags_the_minimum_lot_floor(self):
+        plan = {"account_usd": 200.0, "risk_usd": 2.0, "position_oz": 0.31,
+                "below_min_lot": True, "min_risk_usd": 6.44, "min_risk_pct": 3.22}
+        text = bot._plan_line(plan)
+        self.assertIn("أصغر", text)
+        self.assertIn("6.44", text)
+
 
 if __name__ == "__main__":
     unittest.main()

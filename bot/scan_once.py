@@ -46,6 +46,11 @@ COOLDOWN_BARS = int(os.environ.get("ASTRA_TRACKER_COOLDOWN",
 MIN_SCORED = int(os.environ.get("ASTRA_TRACKER_MIN_SCORED",
                                 str(replay.DEFAULT_MIN_SCORED)))
 DIGEST_HOUR_UTC = int(os.environ.get("ASTRA_DIGEST_HOUR_UTC", "7"))
+ACCOUNT_USD = float(os.environ.get("ASTRA_ACCOUNT_USD", "200"))
+RISK_PCT = float(os.environ.get("ASTRA_RISK_PCT", "1.0"))
+# A message for every closed bar, trade or not, is the default. Set
+# ASTRA_HEARTBEAT=0 to go back to alerting only on trades.
+HEARTBEAT = os.environ.get("ASTRA_HEARTBEAT", "1") not in ("0", "false", "no")
 STATE_PATH = os.environ.get("ASTRA_SCAN_STATE",
                             os.path.join(ROOT, "run", "scan_state.json"))
 
@@ -176,14 +181,21 @@ def main(argv: list[str] | None = None) -> int:
                                    horizon_bars=HORIZON_BARS,
                                    cooldown_bars=COOLDOWN_BARS)
     summary = replay.summarize(signals, MIN_SCORED)
+    status = replay.explain_last_bar(bars, cost_usd=COST_USD,
+                                     horizon_bars=HORIZON_BARS,
+                                     cooldown_bars=COOLDOWN_BARS,
+                                     account_usd=ACCOUNT_USD, risk_pct=RISK_PCT)
 
     state = load_state()
     new_ideas, fresh_results, priming = pending(signals, state)
     newest = bars[-1]["time"]
+    # One message per bar: the first time this bar is seen, the heartbeat
+    # reports it (trade or no trade). A bar already reported is not repeated.
+    bar_is_new = state.get("last_bar_time") != newest
 
     print(json.dumps({"newest_bar": newest, "bars": len(bars), "priming": priming,
                       "new_ideas": len(new_ideas), "fresh_results": len(fresh_results),
-                      "summary": summary}, ensure_ascii=False))
+                      "last_bar": status, "summary": summary}, ensure_ascii=False))
     for s in new_ideas:
         print("NEW  " + json.dumps(s.as_dict(), ensure_ascii=False))
     for s in fresh_results:
@@ -192,10 +204,15 @@ def main(argv: list[str] | None = None) -> int:
     digest_sent = False
     if token and chat and not priming:
         tg = bot.Telegram(token)
-        for s in new_ideas:
-            tg.send(chat, bot.format_new(s.as_dict()))
-        for s in fresh_results:
-            tg.send(chat, bot.format_result(s.as_dict()))
+        if HEARTBEAT and bar_is_new:
+            tg.send(chat, bot.format_last_bar(status, ACCOUNT_USD, RISK_PCT))
+        else:
+            # Heartbeat off (or the bar was already reported): still alert on a
+            # genuinely new idea or a fresh result, so nothing is ever missed.
+            for s in new_ideas:
+                tg.send(chat, bot.format_new(s.as_dict()))
+            for s in fresh_results:
+                tg.send(chat, bot.format_result(s.as_dict(), ACCOUNT_USD))
         if due_daily_digest(state, datetime.now(timezone.utc), DIGEST_HOUR_UTC):
             tg.send(chat, digest_text(summary))
             digest_sent = True
@@ -210,6 +227,7 @@ def main(argv: list[str] | None = None) -> int:
     # newest bar cannot hide a later result for an earlier idea.
     state["last_idea_bar"] = newest
     state["last_result_bar"] = newest
+    state["last_bar_time"] = newest
     if digest_sent:
         state["last_digest_day"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     save_state(state)

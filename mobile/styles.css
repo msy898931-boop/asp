@@ -618,3 +618,34 @@ html[dir="rtl"] .ai-warn {
   font-variant-numeric: tabular-nums;
 }
 
+/* This bar's decision: a trade (with its reason) or an explained no-trade. */
+.trk-now {
+  margin-top: 10px;
+  padding: 12px 13px;
+  background: var(--ink);
+  border: 1px solid var(--edge);
+  border-left: 3px solid var(--muted);
+  border-radius: 12px;
+}
+.trk-now:empty { display: none; }
+.trk-now.trade { border-left-color: var(--accent, var(--up)); }
+.trk-now.up { border-left-color: var(--up); }
+.trk-now.down { border-left-color: var(--down); }
+.trk-now-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  font-weight: 700; font-size: 13px;
+}
+.trk-now-head .trk-dir { font-size: 14px; }
+.trk-now-body {
+  margin-top: 6px; font-size: 12px; color: var(--paper);
+  font-variant-numeric: tabular-nums; line-height: 1.5;
+}
+.trk-now-reason {
+  margin-top: 6px; font-size: 11px; color: var(--muted); line-height: 1.5;
+}
+.trk-now-plan {
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--edge);
+  font-size: 11px; color: var(--muted); line-height: 1.5;
+}
+.trk-now-plan.warn { color: var(--down); }
+

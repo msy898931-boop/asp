@@ -82,6 +82,14 @@ const STRINGS = {
     tracker_open: "live now",
     tracker_empty: "No trade ideas in the current window.",
     tracker_warming: "Connecting to the signal tracker…",
+    now_trade: "Trade on this bar",
+    now_no_trade: "No trade on this bar",
+    now_reason: "Reason",
+    now_read: "Market read",
+    now_plan: "On your account",
+    now_plan_warn: "Requested risk is below gold's smallest lot (1 oz). Smallest possible position: 1 oz = {r} ({p}% of the account).",
+    now_plan_ok: "Size {oz} oz · risk {r} ({p}%).",
+    now_open: "Open now",
     tracker_spread: "spread {c}/oz", tracker_horizon: "{h}h horizon",
     trk_open: "Open", trk_target: "Target", trk_stop: "Stop", trk_timeout: "Timed out",
   },
@@ -151,6 +159,14 @@ const STRINGS = {
     tracker_open: "مفتوحة الآن",
     tracker_empty: "لا إشارات في النافذة الحالية.",
     tracker_warming: "جارٍ الاتصال بمتتبّع الإشارات…",
+    now_trade: "صفقة على هذه الشمعة",
+    now_no_trade: "لا صفقة على هذه الشمعة",
+    now_reason: "السبب",
+    now_read: "قراءة السوق",
+    now_plan: "على حسابك",
+    now_plan_warn: "المخاطرة المطلوبة أقل من أصغر حجم للذهب (1 أونصة). أصغر صفقة ممكنة: 1 أونصة = {r} ({p}% من الحساب).",
+    now_plan_ok: "الحجم {oz} أونصة · مخاطرة {r} ({p}%).",
+    now_open: "مفتوحة الآن",
     tracker_spread: "سبريد {c}/أونصة", tracker_horizon: "أفق {h} ساعة",
     trk_open: "مفتوحة", trk_target: "هدف", trk_stop: "وقف", trk_timeout: "انتهت المدّة",
   },
@@ -409,16 +425,102 @@ function trkStat(label, value, cls) {
     `<span class="trk-stat-value ${cls || ""}">${value}</span></div>`;
 }
 
+const NOW_REASON = {
+  en: {
+    NO_DATA: "not enough bars yet",
+    STRUCTURE_INCOMPLETE: "price structure is not complete",
+    VOLATILE: "volatility is too high — excluded from trading",
+    NO_EDGE: "no clear edge (the votes disagree)",
+    IN_POSITION: "an idea is already open",
+    COOLDOWN: "cooling down after the last trade",
+    JUST_RESOLVED: "the previous trade just closed",
+  },
+  ar: {
+    NO_DATA: "ما في شموع كافية بعد",
+    STRUCTURE_INCOMPLETE: "الهيكل السعري غير مكتمل",
+    VOLATILE: "التقلّب عالٍ — مستثنى من التداول",
+    NO_EDGE: "ما في حافة واضحة (الإشارات متعارضة)",
+    IN_POSITION: "في صفقة مفتوحة أصلاً",
+    COOLDOWN: "فترة تهدئة بعد آخر صفقة",
+    JUST_RESOLVED: "الصفقة السابقة انتهت للتوّ",
+  },
+};
+
+const NOW_REGIME = {
+  en: { TRENDING_UP: "uptrend", TRENDING_DOWN: "downtrend", RANGING: "ranging",
+        QUIET: "quiet", VOLATILE: "volatile", UNKNOWN: "unknown" },
+  ar: { TRENDING_UP: "صعود", TRENDING_DOWN: "هبوط", RANGING: "عرضي",
+        QUIET: "هادئ", VOLATILE: "متذبذب", UNKNOWN: "غير معروف" },
+};
+
+const NOW_BIAS = {
+  en: { BULLISH: "bullish", BEARISH: "bearish", RANGE: "range",
+        INCOMPLETE: "incomplete" },
+  ar: { BULLISH: "صاعد", BEARISH: "هابط", RANGE: "عرضي",
+        INCOMPLETE: "غير مكتمل" },
+};
+
+function renderNow(status) {
+  const el = $("trk-now");
+  if (!el) return;
+  if (!status || !status.decision) { el.innerHTML = ""; el.className = "trk-now"; return; }
+  const map = (m, k) => (m[lang] || m.en)[k] || k;
+  if (status.decision === "TRADE") {
+    const s = status.signal || {};
+    const cls = s.direction === "LONG" ? "up" : "down";
+    const read = status.read || {};
+    const plan = status.plan;
+    let planHtml = "";
+    if (plan) {
+      planHtml = plan.below_min_lot
+        ? `<div class="trk-now-plan warn">${fmt(T("now_plan_warn"),
+            { r: "$" + num(plan.min_risk_usd), p: num(plan.min_risk_pct) })}</div>`
+        : `<div class="trk-now-plan">${fmt(T("now_plan_ok"),
+            { oz: num(plan.position_oz, 2), r: "$" + num(plan.risk_usd),
+              p: num(plan.risk_pct) })}</div>`;
+    }
+    el.className = "trk-now trade " + cls;
+    el.innerHTML =
+      `<div class="trk-now-head"><span class="trk-dir ${cls}">${T("now_trade")} · ${s.direction}</span>` +
+      `<span class="trk-r">${num(s.entry)}</span></div>` +
+      `<div class="trk-now-body">${T("entry")} ${num(s.entry)} · ${T("stop")} ${num(s.stop)} · ${T("target")} ${num(s.target)}</div>` +
+      `<div class="trk-now-reason">${T("now_reason")}: ${map(NOW_REGIME, read.regime)} · ${map(NOW_BIAS, read.bias)} · RSI ${num(read.rsi, 1)}</div>` +
+      planHtml;
+    return;
+  }
+  const read = status.read || {};
+  const held = status.open;
+  let body = "";
+  if (read.close != null) {
+    body = `<div class="trk-now-body">${T("now_read")}: ${map(NOW_REGIME, read.regime)} · ` +
+      `${map(NOW_BIAS, read.bias)} · RSI ${num(read.rsi, 1)} · ${num(read.close)}</div>`;
+  }
+  let heldHtml = "";
+  if (held) {
+    const hcls = held.direction === "LONG" ? "up" : "down";
+    heldHtml = `<div class="trk-now-body">${T("now_open")}: ` +
+      `<span class="trk-dir ${hcls}">${held.direction}</span> ${num(held.entry)} · ` +
+      `${T("stop")} ${num(held.stop)} · ${T("target")} ${num(held.target)}</div>`;
+  }
+  el.className = "trk-now";
+  el.innerHTML =
+    `<div class="trk-now-head"><span>${T("now_no_trade")}</span></div>` +
+    `<div class="trk-now-reason">${T("now_reason")}: ${map(NOW_REASON, status.reason)}</div>` +
+    body + heldHtml;
+}
+
 function renderTracker(data, warming) {
   const statsEl = $("trk-stats");
   const listEl = $("trk-list");
   const noteEl = $("trk-note");
   if (warming) {
+    $("trk-now").innerHTML = "";
     statsEl.innerHTML = "";
     listEl.innerHTML = `<p class="panel-note">${T("tracker_warming")}</p>`;
     noteEl.textContent = "";
     return;
   }
+  renderNow(data && data.last_bar);
   if (!data || typeof data !== "object") {
     statsEl.innerHTML = "";
     listEl.innerHTML = "";

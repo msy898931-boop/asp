@@ -47,6 +47,25 @@ _USER_AGENT = os.environ.get("ASTRA_BOT_USER_AGENT", "ASTRA-bot/1.0")
 OUTCOME_AR = {"TARGET": "✅ أصابت الهدف", "STOP": "❌ ضربت الوقف",
               "TIMEOUT": "⌛ انتهت المدّة", "OPEN": "… مفتوحة"}
 
+# Why the engine did not open a trade on a bar. Named so a quiet bar is
+# explained, never left blank.
+REASON_AR = {
+    "NO_DATA": "ما في بيانات كافية بعد",
+    "STRUCTURE_INCOMPLETE": "الهيكل السعري غير مكتمل",
+    "VOLATILE": "تقلّب عالٍ — مستثنى من التداول",
+    "NO_EDGE": "ما في حافة واضحة (الإشارات متعارضة)",
+    "IN_POSITION": "في صفقة مفتوحة أصلاً",
+    "COOLDOWN": "فترة تهدئة بعد آخر صفقة",
+    "JUST_RESOLVED": "الصفقة السابقة انتهت للتوّ",
+}
+
+REGIME_AR = {"TRENDING_UP": "صعود", "TRENDING_DOWN": "هبوط",
+             "RANGING": "عرضي", "QUIET": "هادئ", "VOLATILE": "متذبذب",
+             "UNKNOWN": "غير معروف"}
+
+BIAS_AR = {"BULLISH": "صاعد", "BEARISH": "هابط", "RANGE": "عرضي",
+           "INCOMPLETE": "غير مكتمل"}
+
 
 def _get_json(url: str) -> dict | None:
     try:
@@ -91,24 +110,102 @@ def signal_key(signal: dict) -> str:
     return "%s:%s" % (signal.get("time"), signal.get("direction"))
 
 
-def format_new(signal: dict) -> str:
-    return ("🔔 إشارة جديدة\n"
-            "الاتجاه: %s\n"
-            "الدخول: %s\n"
-            "الوقف: %s\n"
-            "الهدف: %s\n"
-            "R:R 1.67 · النظام %s · RSI %s"
-            % (signal.get("direction"), signal.get("entry"), signal.get("stop"),
-               signal.get("target"), signal.get("regime"), signal.get("rsi")))
+def format_new(signal: dict, plan: dict | None = None) -> str:
+    entry, stop, target = (signal.get("entry"), signal.get("stop"),
+                           signal.get("target"))
+    stop_dist = abs((entry or 0) - (stop or 0))
+    lines = [
+        "🔔 صفقة جديدة — %s" % signal.get("direction"),
+        "الدخول: %s" % entry,
+        "الوقف: %s  (مسافة %s$/أونصة)" % (stop, round(stop_dist, 2)),
+        "الهدف: %s" % target,
+        "المخاطرة/العائد: 1.67",
+        "السبب: النظام %s · الميل %s · RSI %s"
+        % (REGIME_AR.get(signal.get("regime"), signal.get("regime")),
+           BIAS_AR.get(signal.get("bias"), signal.get("bias")),
+           signal.get("rsi")),
+    ]
+    if plan:
+        lines.append(_plan_line(plan))
+    return "\n".join(lines)
 
 
-def format_result(signal: dict) -> str:
+def _plan_line(plan: dict) -> str:
+    """The money side of a trade, including gold's minimum-lot reality."""
+    if plan.get("below_min_lot"):
+        return ("⚠️ على حساب %s$: المخاطرة المطلوبة %s$ تحتاج %s أونصة، "
+                "وهذا أقل من أصغر حجم (1 أونصة).\n"
+                "أصغر صفقة ممكنة = 1 أونصة → مخاطرة %s$ (%s%% من الحساب)."
+                % (_money(plan.get("account_usd")), _money(plan.get("risk_usd")),
+                   plan.get("position_oz"), _money(plan.get("min_risk_usd")),
+                   plan.get("min_risk_pct")))
+    return ("💵 على حساب %s$: الحجم %s أونصة · مخاطرة %s$ (%s%%)."
+            % (_money(plan.get("account_usd")), plan.get("position_oz"),
+               _money(plan.get("risk_usd")), plan.get("risk_pct")))
+
+
+def _money(value) -> str:
+    return "—" if value is None else "%.2f" % float(value)
+
+
+def format_result(signal: dict, account_usd: float = 0.0) -> str:
     head = OUTCOME_AR.get(signal.get("outcome"), signal.get("outcome"))
     r = signal.get("r_net")
     r_txt = "—" if r is None else "%+.2fR" % r
-    return ("%s\n%s  %s → %s\nصافي %s"
-            % (head, signal.get("direction"), signal.get("entry"),
-               signal.get("exit_price"), r_txt))
+    lines = ["%s\n%s  %s → %s\nصافي %s"
+             % (head, signal.get("direction"), signal.get("entry"),
+                signal.get("exit_price"), r_txt)]
+    usd = _result_usd(signal, account_usd)
+    if usd is not None:
+        lines.append("💵 على حساب %s$ (أصغر حجم 1 أونصة): %s%s"
+                     % (_money(account_usd), "+" if usd >= 0 else "",
+                        _money(usd)))
+    return "\n".join(lines)
+
+
+def _result_usd(signal: dict, account_usd: float) -> float | None:
+    """The dollar result of the minimum position, the honest baseline."""
+    r = signal.get("r_net")
+    entry, stop = signal.get("entry"), signal.get("stop")
+    if r is None or entry is None or stop is None:
+        return None
+    stop_dist = abs(entry - stop)
+    return round(r * stop_dist, 2)      # 1 oz = 1 USD per $1/oz move
+
+
+def format_no_trade(status: dict) -> str:
+    reason = REASON_AR.get(status.get("reason"), status.get("reason"))
+    lines = ["⏸️ لا صفقة على هذه الشمعة (M15)",
+             "السبب: %s" % reason]
+    read = status.get("read")
+    if read:
+        lines.append("قراءة السوق: %s · الميل %s · RSI %s · ATR %s"
+                     % (REGIME_AR.get(read.get("regime"), read.get("regime")),
+                        BIAS_AR.get(read.get("bias"), read.get("bias")),
+                        read.get("rsi"), read.get("atr")))
+        lines.append("السعر: %s" % read.get("close"))
+    held = status.get("open")
+    if held:
+        lines.append("مفتوحة الآن: %s من %s (وقف %s · هدف %s)"
+                     % (held.get("direction"), held.get("entry"),
+                        held.get("stop"), held.get("target")))
+    resolved = status.get("resolved")
+    if resolved:
+        lines.append(format_result(resolved))
+    return "\n".join(lines)
+
+
+def format_last_bar(status: dict, account_usd: float = 0.0,
+                    risk_pct: float = 0.0) -> str:
+    """One message per bar, whether or not it carried a trade."""
+    if status.get("decision") == "TRADE":
+        plan = status.get("plan")
+        if plan is None and account_usd > 0 and risk_pct > 0:
+            from replay import account_plan  # local import: optional dep
+            s = status["signal"]
+            plan = account_plan(s["entry"], s["stop"], account_usd, risk_pct)
+        return format_new(status["signal"], plan)
+    return format_no_trade(status)
 
 
 def format_summary(summary: dict) -> str:

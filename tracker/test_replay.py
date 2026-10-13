@@ -174,5 +174,52 @@ class SummarizeTests(unittest.TestCase):
         self.assertIn("avg_r_net", summary)
 
 
+class ExplainLastBarTests(unittest.TestCase):
+    """Every bar gets an answer, including the quiet ones."""
+
+    def test_always_states_a_decision(self):
+        status = replay.explain_last_bar(oscillate_then_trend())
+        self.assertIn(status["decision"], ("TRADE", "NO_TRADE"))
+        self.assertIn("reason", status)
+        self.assertEqual(status["bar_time"], oscillate_then_trend()[-1]["time"])
+
+    def test_no_data_on_a_short_series(self):
+        status = replay.explain_last_bar(oscillate_then_trend(30))
+        self.assertEqual(status["decision"], "NO_TRADE")
+        self.assertEqual(status["reason"], "NO_DATA")
+
+    def test_a_trade_carries_its_reason(self):
+        # Scan the series until a bar actually opens an idea, then check the
+        # status names the read behind it.
+        bars = oscillate_then_trend()
+        seen_trade = False
+        for end in range(60, len(bars) + 1):
+            status = replay.explain_last_bar(bars[:end])
+            if status["decision"] == "TRADE":
+                seen_trade = True
+                self.assertIn("read", status)
+                self.assertIn(status["read"]["regime"],
+                              ("TRENDING_UP", "TRENDING_DOWN", "RANGING", "QUIET"))
+                self.assertEqual(status["signal"]["time"], bars[end - 1]["time"])
+                break
+        self.assertTrue(seen_trade, "synthetic series never produced a trade")
+
+    def test_account_plan_reports_the_minimum_lot_reality(self):
+        # A 6.44 stop on a $200 account: 1% ($2) buys 0.31 oz, below gold's
+        # 1 oz minimum, so the floor is what would actually be traded.
+        plan = replay.account_plan(entry=4185.0, stop=4178.56,
+                                   account_usd=200.0, risk_pct=1.0)
+        self.assertTrue(plan["below_min_lot"])
+        self.assertAlmostEqual(plan["risk_usd"], 2.0, places=2)
+        self.assertAlmostEqual(plan["min_risk_usd"], 6.44, places=2)
+        self.assertGreater(plan["min_risk_pct"], plan["risk_pct"])
+
+    def test_account_plan_honours_the_budget_when_lot_is_large_enough(self):
+        plan = replay.account_plan(entry=4000.0, stop=3900.0,
+                                   account_usd=10000.0, risk_pct=1.0)
+        self.assertFalse(plan["below_min_lot"])
+        self.assertAlmostEqual(plan["position_oz"], 1.0, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()
