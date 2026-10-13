@@ -4,7 +4,7 @@
    up on the next load instead of the load after next, and the app still opens
    offline. */
 
-const SHELL = "astra-shell-v13";
+const SHELL = "astra-shell-v14";
 const ASSETS = [
   "./",
   "./index.html",
@@ -33,6 +33,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   const live = url.pathname.includes("/api/") ||
                url.pathname.includes("/bridge/") ||
+               url.pathname.includes("/tracker/") ||
                url.pathname.includes("/advisor/");
   if (live || event.request.method !== "GET") return; // network only
 

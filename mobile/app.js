@@ -81,6 +81,7 @@ const STRINGS = {
     tracker_count: "Signals", tracker_wins: "Wins", tracker_losses: "Losses",
     tracker_open: "live now",
     tracker_empty: "No trade ideas in the current window.",
+    tracker_warming: "Connecting to the signal tracker…",
     tracker_spread: "spread {c}/oz", tracker_horizon: "{h}h horizon",
     trk_open: "Open", trk_target: "Target", trk_stop: "Stop", trk_timeout: "Timed out",
   },
@@ -149,6 +150,7 @@ const STRINGS = {
     tracker_count: "الإشارات", tracker_wins: "أصابت", tracker_losses: "خسرت",
     tracker_open: "مفتوحة الآن",
     tracker_empty: "لا إشارات في النافذة الحالية.",
+    tracker_warming: "جارٍ الاتصال بمتتبّع الإشارات…",
     tracker_spread: "سبريد {c}/أونصة", tracker_horizon: "أفق {h} ساعة",
     trk_open: "مفتوحة", trk_target: "هدف", trk_stop: "وقف", trk_timeout: "انتهت المدّة",
   },
@@ -407,10 +409,16 @@ function trkStat(label, value, cls) {
     `<span class="trk-stat-value ${cls || ""}">${value}</span></div>`;
 }
 
-function renderTracker(data) {
+function renderTracker(data, warming) {
   const statsEl = $("trk-stats");
   const listEl = $("trk-list");
   const noteEl = $("trk-note");
+  if (warming) {
+    statsEl.innerHTML = "";
+    listEl.innerHTML = `<p class="panel-note">${T("tracker_warming")}</p>`;
+    noteEl.textContent = "";
+    return;
+  }
   if (!data || typeof data !== "object") {
     statsEl.innerHTML = "";
     listEl.innerHTML = "";
@@ -458,11 +466,19 @@ function renderTracker(data) {
   }).join("");
 }
 
-async function loadTracker() {
+async function loadTracker(attempt = 0) {
   try {
     const env = await getJson("tracker/v1/signals");
     renderTracker(env && env.tracker);
   } catch (err) {
+    // The tracker runs as a sidecar that comes up a few seconds after the
+    // container. Retry briefly before falling back to the empty state, so a
+    // cold start reads as "connecting", not "no signals".
+    if (attempt < 3) {
+      renderTracker(null, true);
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      return loadTracker(attempt + 1);
+    }
     renderTracker(null);
   }
 }
