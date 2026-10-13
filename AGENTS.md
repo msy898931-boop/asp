@@ -506,9 +506,29 @@ Two keys to remember:
   it `sync: false`). `.env` holds a working key for local runs but is gitignored
   — never commit it, the repo is public.
 
+### The economic calendar and the Arabic trade plan
+
+The advisor also reads a keyless economic calendar so it can name the scheduled
+release that will actually move gold and build a pre-trade plan around it.
+`fetch_calendar()` parses FairEconomy's XML mirror of the Forex Factory calendar
+(`ff_calendar_thisweek.xml`; the JSON twin 429s datacenter IPs fast, the XML does
+not), keeps only high-impact USD/EUR rows inside
+`ASTRA_ADVISOR_CALENDAR_HORIZON` hours, and `upcoming_events()` caches them for
+`ASTRA_ADVISOR_CALENDAR_TTL`. A failed fetch sets `failed_at` and is retried only
+after `ASTRA_ADVISOR_CALENDAR_RETRY`, so the feed is never hammered. Events land
+in the snapshot as `events`, `events_available`, each with an Arabic `title_ar`
+from `arabic_event_name()` (CPI, NFP, FOMC, PCE...).
+
+Every human-readable field the model returns is Arabic (keys stay English): the
+thesis, the risks, `event`, and a `plan` object
+(`bias/trigger/entry/stop/target/note`). The app renders the headlines, the
+upcoming high-impact events, and the plan table in the advisor card. Knobs:
+`ASTRA_ADVISOR_CALENDAR=0` off, `_CCY` / `_HORIZON` / `_LIMIT` / `_TTL` / `_RETRY`.
+
 Verify a deployment with `curl https://<host>/advisor/v1/advisor` and check
-`configured` and `opinion`. The advisor test suite runs in CI and covers parsing
-and the not-configured degradation without any network.
+`configured`, `snapshot.events`, and `opinion.plan`. The advisor test suite runs
+in CI and covers parsing, the RSS/XML parsing (offline, stubbed), the calendar
+filters and backoff, and the not-configured degradation without any network.
 
 ### News for free: keyless RSS, no provider quota
 

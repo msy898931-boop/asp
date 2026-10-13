@@ -15,6 +15,8 @@ import os
 import sys
 import unittest
 import urllib.error
+import urllib.request
+from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -73,11 +75,14 @@ class SnapshotTests(unittest.TestCase):
     def setUp(self):
         self._orig = advisor._get_json
         self._orig_news = advisor.recent_news
+        self._orig_events = advisor.upcoming_events
         advisor.recent_news = lambda: []
+        advisor.upcoming_events = lambda: []
 
     def tearDown(self):
         advisor._get_json = self._orig
         advisor.recent_news = self._orig_news
+        advisor.upcoming_events = self._orig_events
 
     def test_snapshot_collects_tick_and_analysis(self):
         def fake(url):
@@ -119,6 +124,16 @@ class SnapshotTests(unittest.TestCase):
         snap = advisor.build_snapshot()
         self.assertTrue(snap["news_available"])
         self.assertEqual(snap["news"][0]["title"], "Gold steadies ahead of CPI")
+
+    def test_snapshot_carries_events_when_present(self):
+        advisor._get_json = lambda url: {"payload": {"last": 4185.9}}
+        advisor.upcoming_events = lambda: [
+            {"title": "CPI m/m", "title_ar": "مؤشر أسعار المستهلك (CPI)",
+             "country": "USD", "impact": "high", "at_utc": 1, "in_hours": 15.0,
+             "forecast": "0.6%", "previous": "0.4%"}]
+        snap = advisor.build_snapshot()
+        self.assertTrue(snap["events_available"])
+        self.assertEqual(snap["events"][0]["title_ar"], "مؤشر أسعار المستهلك (CPI)")
 
 
 class NewsTests(unittest.TestCase):
@@ -178,15 +193,91 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(calls["n"], 1)
 
 
+class CalendarTests(unittest.TestCase):
+    def setUp(self):
+        self._orig = advisor.fetch_calendar
+        self._orig_cache = dict(advisor._calendar_cache)
+
+    def tearDown(self):
+        advisor.fetch_calendar = self._orig
+        advisor._calendar_cache.update(self._orig_cache)
+
+    def test_arabic_names_for_gold_movers(self):
+        self.assertEqual(advisor.arabic_event_name("Core CPI m/m"),
+                         "مؤشر أسعار المستهلك الأساسي (Core CPI)")
+        self.assertEqual(advisor.arabic_event_name("Non-Farm Employment Change"),
+                         "التغيّر في الوظائف غير الزراعية (NFP)")
+        self.assertEqual(advisor.arabic_event_name("FOMC Statement"),
+                         "قرار الفائدة الفيدرالي (FOMC)")
+        self.assertEqual(advisor.arabic_event_name("Something Unmapped"),
+                         "Something Unmapped")
+
+    def test_stamp_is_utc(self):
+        at = advisor._parse_calendar_stamp("10-14-2026", "12:30pm")
+        self.assertIsNotNone(at)
+        dt = datetime.fromtimestamp(at, timezone.utc)
+        self.assertEqual((dt.hour, dt.minute, dt.day, dt.month), (12, 30, 14, 10))
+        self.assertIsNone(advisor._parse_calendar_stamp("", "12:30pm"))
+        self.assertIsNone(advisor._parse_calendar_stamp("bad", "nope"))
+
+    def test_fetch_calendar_filters_high_impact_usd_only(self):
+        import time as _t
+        soon = _t.gmtime(_t.time() + 6 * 3600)
+        stamp = "%02d-%02d-%04d" % (soon.tm_mon, soon.tm_mday, soon.tm_year)
+        xml = ("<weeklyevents>"
+               "<event><title>CPI m/m</title><country>USD</country>"
+               "<date>%s</date><time>12:30pm</time><impact>High</impact>"
+               "<forecast>0.6%%</forecast><previous>0.4%%</previous></event>"
+               "<event><title>Low thing</title><country>USD</country>"
+               "<date>%s</date><time>12:30pm</time><impact>Low</impact></event>"
+               "<event><title>JPY thing</title><country>JPY</country>"
+               "<date>%s</date><time>12:30pm</time><impact>High</impact></event>"
+               "</weeklyevents>" % (stamp, stamp, stamp)).encode()
+        orig = urllib.request.urlopen
+
+        class Fake:
+            def __enter__(self_):
+                return self_
+            def __exit__(self_, *a):
+                return False
+            def read(self_):
+                return xml
+
+        urllib.request.urlopen = lambda req, timeout=None: Fake()
+        try:
+            events = advisor.fetch_calendar()
+        finally:
+            urllib.request.urlopen = orig
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["title_ar"], "مؤشر أسعار المستهلك (CPI)")
+        self.assertEqual(events[0]["country"], "USD")
+
+    def test_upcoming_events_backs_off_after_failure(self):
+        calls = {"n": 0}
+
+        def boom():
+            calls["n"] += 1
+            return []
+
+        advisor.fetch_calendar = boom
+        advisor._calendar_cache.update({"at": 0.0, "items": [], "failed_at": 0.0})
+        advisor.upcoming_events()
+        advisor.upcoming_events()
+        advisor.upcoming_events()
+        self.assertEqual(calls["n"], 1)
+
+
 class BuildTests(unittest.TestCase):
     def setUp(self):
         self._orig_get = advisor._get_json
         self._orig_call = advisor.call_model
         self._orig_log = advisor.append_log
         self._orig_news = advisor.recent_news
+        self._orig_events = advisor.upcoming_events
         self._orig_key = os.environ.get("GROQ_API_KEY")
         advisor.append_log = lambda record: None
         advisor.recent_news = lambda: []
+        advisor.upcoming_events = lambda: []
         advisor._get_json = lambda url: (
             {"payload": {"last": 4185.9}} if "/v1/tick" in url
             else {"data": {"available": False, "reason": "none"}})
@@ -196,6 +287,7 @@ class BuildTests(unittest.TestCase):
         advisor.call_model = self._orig_call
         advisor.append_log = self._orig_log
         advisor.recent_news = self._orig_news
+        advisor.upcoming_events = self._orig_events
         if self._orig_key is None:
             os.environ.pop("GROQ_API_KEY", None)
         else:

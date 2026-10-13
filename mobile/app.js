@@ -24,6 +24,10 @@ const STRINGS = {
     ai_warn: "Second opinion from an external model. Outside the validated system, not scored. Not financial advice.",
     ai_price: "Live price", ai_engine: "Engine read",
     ai_news: "Used news", ai_model: "Model", ai_status: "Status",
+    ai_event: "Key event", ai_plan: "Trade plan",
+    ai_plan_bias: "Bias", ai_plan_trigger: "Trigger", ai_plan_entry: "Entry",
+    ai_plan_stop: "Stop", ai_plan_target: "Target", ai_plan_note: "Note",
+    ai_headlines: "Headlines", ai_events: "High-impact events ahead",
     ai_refresh: "Ask again",
     ai_stance_long: "AI leans long", ai_stance_short: "AI leans short",
     ai_stance_neutral: "AI is neutral", ai_stance_none: "No opinion yet",
@@ -101,6 +105,10 @@ const STRINGS = {
     ai_warn: "رأي ثانٍ من نموذج خارجي. خارج النظام المُتحقَّق منه، وغير مُقيَّم. ليس نصيحة مالية.",
     ai_price: "السعر اللحظي", ai_engine: "قراءة المحرك",
     ai_news: "استخدم الأخبار", ai_model: "النموذج", ai_status: "الحالة",
+    ai_event: "الخبر المهم", ai_plan: "خطة الصفقة",
+    ai_plan_bias: "الاتجاه", ai_plan_trigger: "الشرط", ai_plan_entry: "الدخول",
+    ai_plan_stop: "الوقف", ai_plan_target: "الهدف", ai_plan_note: "ملاحظة",
+    ai_headlines: "العناوين", ai_events: "أخبار عالية التأثير قادمة",
     ai_refresh: "اسأل من جديد",
     ai_stance_long: "الذكاء يميل للشراء", ai_stance_short: "الذكاء يميل للبيع",
     ai_stance_neutral: "الذكاء محايد", ai_stance_none: "لا رأي بعد",
@@ -382,15 +390,61 @@ async function loadAdvisor(force) {
     const hl = $("ai-headlines");
     const headlines = (snap.news || []).slice(0, 5);
     hl.innerHTML = "";
-    if (headlines.length) {
-      hl.hidden = false;
-      for (const h of headlines) {
-        const li = document.createElement("li");
-        li.textContent = h.title;
-        hl.appendChild(li);
+    $("ai-headlines-title").hidden = !headlines.length;
+    hl.hidden = !headlines.length;
+    for (const h of headlines) {
+      const li = document.createElement("li");
+      li.textContent = h.title;
+      hl.appendChild(li);
+    }
+
+    const evs = $("ai-events");
+    const events = (snap.events || []).slice(0, 5);
+    evs.innerHTML = "";
+    $("ai-events-title").hidden = !events.length;
+    evs.hidden = !events.length;
+    for (const e of events) {
+      const li = document.createElement("li");
+      const when = e.in_hours != null ? ` · ${e.in_hours}h` : "";
+      const fc = e.forecast ? ` · ${T("ai_plan_note")}: ${e.forecast}` : "";
+      li.textContent = `${e.country} · ${e.title_ar || e.title}${when}${fc}`;
+      evs.appendChild(li);
+    }
+
+    const ev = $("ai-event");
+    if (op && op.event) {
+      ev.hidden = false;
+      ev.textContent = `${T("ai_event")}: ${op.event}`;
+    } else {
+      ev.hidden = true;
+    }
+
+    const planEl = $("ai-plan");
+    planEl.innerHTML = "";
+    if (op && op.plan) {
+      planEl.hidden = false;
+      const title = document.createElement("h3");
+      title.className = "ai-sub";
+      title.textContent = T("ai_plan");
+      planEl.appendChild(title);
+      const rows = [
+        ["ai_plan_bias", op.plan.bias], ["ai_plan_trigger", op.plan.trigger],
+        ["ai_plan_entry", op.plan.entry], ["ai_plan_stop", op.plan.stop],
+        ["ai_plan_target", op.plan.target], ["ai_plan_note", op.plan.note],
+      ];
+      for (const [k, v] of rows) {
+        if (!v) continue;
+        const div = document.createElement("div");
+        const dt = document.createElement("dt");
+        dt.textContent = T(k);
+        const dd = document.createElement("dd");
+        dd.textContent = v;
+        div.appendChild(dt);
+        div.appendChild(dd);
+        planEl.appendChild(div);
       }
     } else {
-      hl.hidden = true;
+      planEl.hidden = true;
     }
 
     stanceEl.className = "ai-stance";
@@ -423,6 +477,12 @@ async function loadAdvisor(force) {
     $("ai-conf").textContent = "";
     $("ai-thesis").textContent = "";
     $("ai-risks").textContent = "";
+    for (const id of ["ai-headlines", "ai-events", "ai-plan", "ai-event",
+                      "ai-headlines-title", "ai-events-title"]) {
+      const el = $(id);
+      el.hidden = true;
+      if (el.tagName === "UL" || el.tagName === "DIV") el.innerHTML = "";
+    }
     setStatus(T("ai_unavail"));
   }
 }

@@ -34,6 +34,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -78,25 +79,79 @@ NEWS_QUERY = os.environ.get("ASTRA_ADVISOR_NEWS_QUERY",
 NEWS_LIMIT = int(os.environ.get("ASTRA_ADVISOR_NEWS_LIMIT", "8"))
 NEWS_TTL = float(os.environ.get("ASTRA_ADVISOR_NEWS_TTL", "900"))
 
+# The economic calendar, so the advisor can warn about the scheduled release
+# that will actually move gold (CPI, NFP, FOMC...). Keyless XML from
+# FairEconomy's mirror of the Forex Factory calendar (the JSON twin 429s
+# quickly; the XML does not). Set ASTRA_ADVISOR_CALENDAR=0 to turn it off. Only
+# high-impact events for the currencies that drive gold are kept.
+CALENDAR_ENABLED = os.environ.get("ASTRA_ADVISOR_CALENDAR", "1").strip() != "0"
+CALENDAR_URL = os.environ.get(
+    "ASTRA_ADVISOR_CALENDAR_URL",
+    "https://nfs.faireconomy.media/ff_calendar_thisweek.xml")
+CALENDAR_CURRENCIES = tuple(
+    c.strip().upper() for c in
+    os.environ.get("ASTRA_ADVISOR_CALENDAR_CCY", "USD,EUR").split(",") if c.strip())
+CALENDAR_HORIZON_H = float(os.environ.get("ASTRA_ADVISOR_CALENDAR_HORIZON", "48"))
+CALENDAR_LIMIT = int(os.environ.get("ASTRA_ADVISOR_CALENDAR_LIMIT", "5"))
+CALENDAR_TTL = float(os.environ.get("ASTRA_ADVISOR_CALENDAR_TTL", "3600"))
+# After a failed fetch (the feed 429s datacenter IPs when hammered) wait before
+# trying again, so the server makes at most one request per retry window.
+CALENDAR_RETRY_TTL = float(os.environ.get("ASTRA_ADVISOR_CALENDAR_RETRY", "600"))
+
+# Arabic names for the indicators that move gold, so the event reads in Arabic
+# even before the model restates it. Matched as lowercase substrings.
+_EVENT_AR = (
+    ("core cpi", "مؤشر أسعار المستهلك الأساسي (Core CPI)"),
+    ("cpi", "مؤشر أسعار المستهلك (CPI)"),
+    ("core pce", "مؤشر أسعار نفقات الاستهلاك الأساسي (Core PCE)"),
+    ("pce", "مؤشر أسعار نفقات الاستهلاك (PCE)"),
+    ("non-farm", "التغيّر في الوظائف غير الزراعية (NFP)"),
+    ("nonfarm", "التغيّر في الوظائف غير الزراعية (NFP)"),
+    ("unemployment rate", "معدّل البطالة"),
+    ("unemployment claims", "طلبات إعانة البطالة"),
+    ("federal funds rate", "سعر الفائدة الفيدرالي"),
+    ("fomc", "قرار الفائدة الفيدرالي (FOMC)"),
+    ("fed", "الفيدرالي"),
+    ("interest rate", "قرار سعر الفائدة"),
+    ("gdp", "الناتج المحلي الإجمالي (GDP)"),
+    ("ppi", "مؤشر أسعار المنتجين (PPI)"),
+    ("retail sales", "مبيعات التجزئة"),
+    ("ism", "مؤشر ISM"),
+    ("pmi", "مؤشر مديري المشتريات (PMI)"),
+    ("adp", "تقرير ADP للوظائف"),
+    ("crude oil inventories", "مخزونات النفط الخام"),
+    ("jolts", "فرص العمل (JOLTS)"),
+    ("consumer confidence", "ثقة المستهلك"),
+    ("ecb", "قرار البنك المركزي الأوروبي (ECB)"),
+    ("speaks", "تصريحات"),
+)
+
 # The response contract. Stable so the app and any later scorer can rely on it.
 SCHEMA_VERSION = "1.0"
 
 _SYSTEM_PROMPT = (
     "You are a gold (XAUUSD) market commentator embedded in a research tool. "
     "You are given a factual snapshot of one instrument produced by a rule "
-    "engine, plus a list of recent headlines when available. Give a short, "
-    "concrete read of the market and a stance.\n"
+    "engine, recent headlines, and any high-impact economic events due soon. "
+    "Give a short, concrete read of the market and a stance.\n"
+    "Language: write every human-readable field in Arabic (the reader is an "
+    "Arabic speaker). Keep JSON keys and the stance value in English.\n"
     "Rules:\n"
-    "- Base your answer only on the snapshot and on the headlines provided. Do "
-    "not invent prices, events or dates.\n"
+    "- Base your answer only on the snapshot, the headlines and the events "
+    "provided. Do not invent prices, events or dates.\n"
     "- If the snapshot has no headlines, set news_used to false and say so "
     "plainly in the thesis. Never imply you saw live news you did not.\n"
-    "- When headlines are present and you lean on them, set news_used to true "
-    "and name the theme, not the outlet.\n"
+    "- When a high-impact event is listed in the snapshot, treat it as the day's "
+    "pivot: name it, say which outcome helps gold and which hurts it, and shape "
+    "the plan around it.\n"
     "- This is commentary, not advice. Do not promise returns.\n"
     "Reply with JSON only, keys: stance (one of LONG, SHORT, NEUTRAL), "
-    "confidence (0..1, your own, not the engine's), thesis (one or two "
-    "sentences), risks (one sentence), news_used (true or false)."
+    "confidence (0..1, your own, not the engine's), thesis (one or two Arabic "
+    "sentences), risks (one Arabic sentence), news_used (true or false), "
+    "event (the Arabic name of the key event you built the read around, or "
+    "empty string), plan (one object with Arabic text: bias, trigger, "
+    "entry, stop, target, note — a professional pre-trade plan keyed to the "
+    "event; use \"--\" for any number you cannot ground in the snapshot)."
 )
 
 
@@ -147,6 +202,90 @@ def recent_news() -> list[dict]:
     return _news_cache["items"]
 
 
+def arabic_event_name(title: str) -> str:
+    """Arabic label for a known indicator, else the original title."""
+    low = (title or "").lower()
+    for needle, arabic in _EVENT_AR:
+        if needle in low:
+            return arabic
+    return title
+
+
+def _parse_calendar_stamp(date: str, tm: str) -> float | None:
+    """Forex Factory rows carry '10-14-2026' plus a 12-hour 'time' in UTC."""
+    date, tm = (date or "").strip(), (tm or "").strip()
+    if not date or not tm:
+        return None
+    for fmt in ("%m-%d-%Y %I:%M%p", "%m-%d-%Y %I:%M %p"):
+        try:
+            dt = datetime.strptime(date + " " + tm, fmt).replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except ValueError:
+            continue
+    return None
+
+
+def fetch_calendar() -> list[dict]:
+    """High-impact USD/EUR events due soon, from the keyless XML feed."""
+    if not CALENDAR_ENABLED:
+        return []
+    try:
+        req = urllib.request.Request(CALENDAR_URL,
+                                     headers={"User-Agent": _USER_AGENT,
+                                              "Accept": "application/xml,text/xml,*/*"})
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            root = ET.fromstring(resp.read())
+    except (urllib.error.URLError, OSError, ValueError, ET.ParseError):
+        return []
+    now = time.time()
+    out: list[dict] = []
+    for event in root.findall(".//event"):
+        if (event.findtext("impact") or "").strip().lower() != "high":
+            continue
+        ccy = (event.findtext("country") or "").strip().upper()
+        if CALENDAR_CURRENCIES and ccy not in CALENDAR_CURRENCIES:
+            continue
+        at = _parse_calendar_stamp(event.findtext("date") or "",
+                                   event.findtext("time") or "")
+        if at is None:
+            continue
+        hours = (at - now) / 3600.0
+        if hours < -1.0 or hours > CALENDAR_HORIZON_H:
+            continue
+        title = (event.findtext("title") or "").strip()
+        out.append({
+            "title": title,
+            "title_ar": arabic_event_name(title),
+            "country": ccy,
+            "impact": "high",
+            "at_utc": int(at),
+            "in_hours": round(hours, 1),
+            "forecast": (event.findtext("forecast") or "").strip() or None,
+            "previous": (event.findtext("previous") or "").strip() or None,
+        })
+    out.sort(key=lambda e: e["at_utc"])
+    return out[:CALENDAR_LIMIT]
+
+
+_calendar_cache: dict = {"at": 0.0, "items": [], "failed_at": 0.0}
+
+
+def upcoming_events() -> list[dict]:
+    now = time.time()
+    if _calendar_cache["items"] and now - _calendar_cache["at"] < CALENDAR_TTL:
+        return _calendar_cache["items"]
+    # Hold off after a failure so a rate-limited feed is not hammered.
+    if now - _calendar_cache["failed_at"] < CALENDAR_RETRY_TTL:
+        return _calendar_cache["items"]
+    items = fetch_calendar()
+    if items:
+        _calendar_cache["items"], _calendar_cache["at"] = items, now
+        _calendar_cache["failed_at"] = 0.0
+    else:
+        _calendar_cache["failed_at"] = now
+    return _calendar_cache["items"]
+
+
 def build_snapshot() -> dict:
     """Collect the facts the advisor reasons over. No opinion is formed here."""
     snapshot: dict = {
@@ -184,6 +323,9 @@ def build_snapshot() -> dict:
     headlines = recent_news()
     snapshot["news"] = headlines
     snapshot["news_available"] = bool(headlines)
+    events = upcoming_events()
+    snapshot["events"] = events
+    snapshot["events_available"] = bool(events)
     return snapshot
 
 
@@ -218,12 +360,20 @@ def parse_advisory(text: str) -> dict | None:
         confidence = float(parsed.get("confidence", 0.0))
     except (TypeError, ValueError):
         confidence = 0.0
+    plan = parsed.get("plan")
+    if not isinstance(plan, dict):
+        plan = None
+    else:
+        plan = {k: str(plan.get(k, "")).strip()
+                for k in ("bias", "trigger", "entry", "stop", "target", "note")}
     return {
         "stance": stance,
         "confidence": max(0.0, min(1.0, confidence)),
         "thesis": str(parsed.get("thesis", "")).strip(),
         "risks": str(parsed.get("risks", "")).strip(),
         "news_used": bool(parsed.get("news_used", False)),
+        "event": str(parsed.get("event", "")).strip(),
+        "plan": plan,
     }
 
 
