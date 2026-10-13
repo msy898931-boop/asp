@@ -588,6 +588,53 @@ span, `scan_once` sends one heads-up (`telegram_bot.format_approach`) naming the
 nearer side and the distance left. It fires once per bar, so it cannot spam;
 `ASTRA_APPROACH_ALERT=0` silences it.
 
+### The three silent failures: watchdog and stale data
+
+`bot/watchdog.py` (the `astra-watchdog` cron, hourly) is a dead-man's switch
+over the failures the trading jobs cannot report on their own: the bot stopped
+running (`check_bot`, last successful `astra-bot` run older than
+`ASTRA_BOT_MAX_AGE_MIN`, 90 min), the web server is down (`check_server`, no 200
+from `/api/v1/health`), and the repository has gone idle long enough
+(`check_commit`, over `ASTRA_COMMIT_WARN_DAYS`, 55 days) that GitHub disables the
+scheduled workflows outright. It alerts on the transition into trouble,
+re-alerts every `ASTRA_WATCHDOG_REALERT_HOURS` (6) while the trouble lasts, and
+confirms recovery. `decide()` is pure over (verdict, state, now); the state
+rides in the Actions cache. An unreachable GitHub API never cries wolf — the
+check returns "unavailable" and stays quiet.
+
+`scan_once.staleness()` guards the other silent failure: a bar older than
+`ASTRA_STALE_AFTER_MIN` (45) means the feed is quiet or the market is closed
+(gold shuts Fri 22:00 – Sun 23:00 UTC). When stale, the scan sends no ideas, no
+results and no approach warnings; it says so once per episode
+(`format_stale`) and confirms when it resumes (`format_resumed`). The bar
+timestamp is the candle's *open*, so a just-closed M15 bar already reads up to
+15 minutes old — the threshold has to clear that before it means anything.
+
+### Where the edge is: the digest's breakdown
+
+`replay.summarize` carries `by_regime` and `by_direction` hit rates plus
+`max_loss_streak` (the longest run of consecutive losses, in resolution order —
+the pain a win rate hides). A bucket states a rate only once it holds
+`MIN_BUCKET` (8) scored trades; below that it shows the raw win/loss split, so a
+lucky two-trade streak never reads as a strategy. `scan_once.digest_text` prints
+them in the daily digest, so a quiet regime or side shows itself instead of
+hiding inside the overall rate.
+
+### Notifications on the phone
+
+`mobile/app.js` never calls `new Notification()` for its own alerts: Android
+Chrome throws on the constructor, so the alert silently did nothing on the
+phone. `showNotification()` posts the message to the service worker, whose
+`message` handler calls `self.registration.showNotification` — the one path
+that works on both desktop and Android, and it survives the page being
+backgrounded. The worker also has a `push` handler and a `notificationclick`
+handler that focuses the app. The page falls back to the constructor only where
+there is no worker. Bump the shell cache in `sw.js` whenever the worker changes,
+or the old one keeps being served.
+
+CI runs the `bot` suite too (alerts, watchdog, scanner); before, only tracker,
+advisor and the paid-tool layer were covered, so a broken alert could ship green.
+
 ### News for free: keyless RSS, no provider quota
 
 The advisor grounds its read in real headlines via **Google News RSS** — no API

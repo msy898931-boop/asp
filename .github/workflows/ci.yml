@@ -41,13 +41,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Syntax-check the phone app
-        run: node --check mobile/app.js
+        run: |
+          node --check mobile/app.js
+          node --check mobile/sw.js
 
       - name: Test the signal engine and its honesty guarantees
         run: python3 -m unittest discover -s tracker -p "test_*.py"
 
       - name: Test the AI advisor's parsing and not-configured degradation
         run: python3 -m unittest discover -s advisor -p "test_*.py"
+
+      - name: Test the bot's alerts, watchdog and one-shot scanner
+        run: python3 -m unittest discover -s bot -p "test_*.py"
 
       - name: Test the paid-tool layer (tiers + price levels)
         run: |
