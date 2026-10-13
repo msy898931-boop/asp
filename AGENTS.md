@@ -555,6 +555,17 @@ Telegram alert per event (dedup key `country:title:at_utc`, kept in
 trade into it. `--dry-run` prints instead of sending. Tests in
 `bot/test_news_alert.py`.
 
+### The self-review digest
+
+`bot/review_digest.py` runs on the `astra-review` cron (daily, 07:00 UTC). It
+nudges the advisor for one fresh call (`/v1/advisor?refresh=1`, so the loop is
+fed even when the app is never opened), then reads `/v1/review` and sends
+`self_review.format_review()` to Telegram: hit rate overall and per stance, the
+recent misses with their lesson. `--no-poke` skips the nudge; `--dry-run`
+prints. If the advisor is unreachable it says so and exits non-zero — it never
+invents numbers. `ASTRA_REVIEW_URL` overrides the endpoint (an unset Actions
+`vars.` arrives empty and is treated as unset).
+
 ### News for free: keyless RSS, no provider quota
 
 The advisor grounds its read in real headlines via **Google News RSS** — no API
