@@ -120,13 +120,29 @@ public class MainActivity extends Activity {
         t.setPadding(48, 48, 48, 48);
         t.setTextSize(16);
         t.setTextDirection(View.TEXT_DIRECTION_RTL);
-        t.setOnClickListener(v -> promptForUrl());
+        t.setOnClickListener(v -> onErrorTap());
         return t;
+    }
+
+    // A free host sleeps when idle, so the first open after a while can fail
+    // even though the address is right. Offer a retry before asking the user
+    // to retype anything.
+    private void onErrorTap() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("تعذّر الوصول إلى خادم ASTRA")
+                .setMessage(serverUrl())
+                .setPositiveButton("إعادة المحاولة", (d, w) -> {
+                    error.setVisibility(View.GONE);
+                    web.setVisibility(View.VISIBLE);
+                    web.loadUrl(serverUrl());
+                })
+                .setNegativeButton("تغيير العنوان", (d, w) -> promptForUrl())
+                .show();
     }
 
     private void showError() {
         web.setVisibility(View.GONE);
-        error.setText("تعذّر الوصول إلى خادم ASTRA.\n\nاضغط لتغيير العنوان.");
+        error.setText("تعذّر الوصول إلى خادم ASTRA.\n\nاضغط لإعادة المحاولة أو تغيير العنوان.");
         error.setVisibility(View.VISIBLE);
     }
 
