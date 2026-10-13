@@ -85,6 +85,9 @@ _TIMEOUT = 12.0
 # One upstream fetch serves many requests. Short enough to stay live, long
 # enough that a chart refresh does not hammer the upstream.
 _CACHE_TTL_SECONDS = 20.0
+# Kraken's public OHLC endpoint is rate-limited; a couple of backed-off retries
+# absorb a self-inflicted burst without masking a genuine outage.
+_OHLC_RETRIES = 3
 
 # Kraken's PAXGUSD tracks spot XAUUSD but carries its own premium/discount, so
 # the two quotes differ by a fraction of a percent (observed ~0.1%, ~$4 at
@@ -203,6 +206,25 @@ class LiveMt5Client:
                 self._spot_cache = (now + _CACHE_TTL_SECONDS, price)
         return price
 
+    def _fetch_ohlc(self, url: str) -> Any:
+        """GET the OHLC doc, retrying a rate-limit a couple of times.
+
+        Kraken's public API allows roughly one call a second and answers a
+        burst with ``EGeneral:Too many requests``. A 24/7 feed that polls
+        several timeframes per cycle will trip that on its own; a short backoff
+        rides it out instead of surfacing a transient error to the app.
+        """
+        delay = 1.0
+        doc: Any = {}
+        for attempt in range(_OHLC_RETRIES):
+            doc = _http_json(url)
+            if not (doc.get("error") or []):
+                return doc
+            if attempt < _OHLC_RETRIES - 1:
+                time.sleep(delay)
+                delay *= 2
+        return doc
+
     def _proxy_price(self) -> float:
         """Live tick for the candle pair (PAXGUSD), or 0.0 if unreachable.
 
@@ -243,7 +265,7 @@ class LiveMt5Client:
 
         url = _KRAKEN_URL.format(pair=self._candle_pair,
                                  interval=_TF_MINUTES[timeframe])
-        doc = _http_json(url)
+        doc = self._fetch_ohlc(url)
         errors = doc.get("error") or []
         if errors:
             raise RuntimeError(f"upstream error: {errors}")

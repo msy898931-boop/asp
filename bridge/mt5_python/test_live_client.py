@@ -18,6 +18,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from live_client import LiveMt5Client, _TF_MINUTES  # noqa: E402
+import live_client  # noqa: E402  (module handle, for stubbing the HTTP layer)
 from schemas import TIMEFRAMES  # noqa: E402
 
 _MAX_AGE_SECONDS = 399 * 24 * 60 * 60
@@ -110,6 +111,53 @@ class LiveClientNetworkTests(unittest.TestCase):
         health = self.client.health()
         self.assertTrue(health["candle_anchored_to_spot"])
         self.assertLess(abs(health["last_basis_fraction"]), 0.05)
+
+
+class OhlcRetryTests(unittest.TestCase):
+    """A rate-limited OHLC call is retried, not surfaced as a failure."""
+
+    def _client(self):
+        return LiveMt5Client(candle_pair="PAXGUSD", symbol="XAUUSD")
+
+    def test_retries_past_a_rate_limit(self) -> None:
+        client = self._client()
+        calls = {"n": 0}
+
+        def fake(url):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                return {"error": ["EGeneral:Too many requests"]}
+            return {"error": [], "result": {"PAXGUSD": [[0, "1", "1", "1", "1", "1", "1", 1]]}}
+
+        orig_json, orig_sleep = live_client._http_json, live_client.time.sleep
+        live_client._http_json = fake
+        live_client.time.sleep = lambda _s: None
+        try:
+            doc = client._fetch_ohlc("http://example.invalid")
+        finally:
+            live_client._http_json = orig_json
+            live_client.time.sleep = orig_sleep
+        self.assertEqual(doc.get("error"), [])
+        self.assertEqual(calls["n"], 3)
+
+    def test_gives_up_and_reports_after_the_last_try(self) -> None:
+        client = self._client()
+        calls = {"n": 0}
+
+        def fake(url):
+            calls["n"] += 1
+            return {"error": ["EGeneral:Too many requests"]}
+
+        orig_json, orig_sleep = live_client._http_json, live_client.time.sleep
+        live_client._http_json = fake
+        live_client.time.sleep = lambda _s: None
+        try:
+            doc = client._fetch_ohlc("http://example.invalid")
+        finally:
+            live_client._http_json = orig_json
+            live_client.time.sleep = orig_sleep
+        self.assertEqual(calls["n"], live_client._OHLC_RETRIES)
+        self.assertTrue(doc.get("error"))
 
 
 if __name__ == "__main__":
