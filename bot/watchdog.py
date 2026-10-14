@@ -33,9 +33,10 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import telegram_bot as bot  # noqa: E402
+import astra_env  # noqa: E402
 
-ASTRA_URL = os.environ.get("ASTRA_URL", "https://astra-xlp9.onrender.com")
-REPO = os.environ.get("GITHUB_REPOSITORY", "msy898931-boop/asp")
+ASTRA_URL = astra_env.URL
+REPO = astra_env.REPO
 GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_WATCHDOG_TIMEOUT", "90"))
 # The bot runs every 5 minutes; 90 minutes of silence means something is wrong.

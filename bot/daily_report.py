@@ -32,9 +32,10 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import telegram_bot as bot  # noqa: E402
+import astra_env  # noqa: E402
 
 TRACKER_URL = (os.environ.get("ASTRA_DAILY_URL") or
-               "https://astra-xlp9.onrender.com/tracker/v1/signals")
+               astra_env.URL + "/tracker/v1/signals")
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_DAILY_TIMEOUT", "30"))
 STATE_PATH = os.environ.get("ASTRA_DAILY_STATE",
                             os.path.join(ROOT, "run", "daily_report_state.json"))

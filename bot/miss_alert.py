@@ -31,9 +31,10 @@ for extra in (os.path.join(ROOT, "advisor"), HERE):
 
 import self_review  # noqa: E402
 import telegram_bot as bot  # noqa: E402
+import astra_env  # noqa: E402
 
 ADVISOR_URL = (os.environ.get("ASTRA_REVIEW_URL") or
-               "https://astra-xlp9.onrender.com/advisor/v1/review")
+               astra_env.URL + "/advisor/v1/review")
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_REVIEW_TIMEOUT", "30"))
 STATE_PATH = os.environ.get("ASTRA_MISS_STATE",
                             os.path.join(ROOT, "run", "miss_alert_state.json"))

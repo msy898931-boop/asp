@@ -32,9 +32,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 # Where /astra.apk points when no local build is staged: the rolling release
-# the Android workflow republishes on every mobile/android change.
+# the Android workflow republishes on every mobile/android change. Set
+# ASTRA_REPO (owner/repo) or ASTRA_APK_URL to point at a different fork.
+_APK_REPO = os.environ.get("ASTRA_REPO", "msy898931-boop/asp")
 APK_FALLBACK_URL = (
-    "https://github.com/msy898931-boop/asp/releases/download/android/astra.apk"
+    os.environ.get("ASTRA_APK_URL")
+    or f"https://github.com/{_APK_REPO}/releases/download/android/astra.apk"
 )
 
 _CONTENT_TYPES = {

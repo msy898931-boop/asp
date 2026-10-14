@@ -27,11 +27,12 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import telegram_bot as bot  # noqa: E402
+import astra_env  # noqa: E402
 
-# Where the advisor lives. Defaults to the public Render deployment; point it at
+# Where the advisor lives. Defaults to the deployed service; point it at
 # loopback for local runs with ASTRA_REVIEW_URL.
 ADVISOR_URL = (os.environ.get("ASTRA_REVIEW_URL") or
-               "https://astra-xlp9.onrender.com/advisor/v1/review")
+               astra_env.URL + "/advisor/v1/review")
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_REVIEW_TIMEOUT", "30"))
 _USER_AGENT = "ASTRA-review/1.0"
 

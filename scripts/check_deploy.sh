@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Verify a deployed ASTRA instance end to end.
 #
-#   scripts/check_deploy.sh https://astra-xlp9.onrender.com
+#   scripts/check_deploy.sh https://your-app.onrender.com
 #
 # Checks the phone app, the backend API, a live reading, and — when a bot token
 # is in the environment — whether the deployed bot is the one polling Telegram.
 # On the free plan the first request may take ~1 minute: the service cold-starts.
 set -u
 
-BASE="${1:-https://astra-xlp9.onrender.com}"
+BASE="${1:-${ASTRA_URL:-https://astra-xlp9.onrender.com}}"
 BASE="${BASE%/}"
 pass=0
 fail=0

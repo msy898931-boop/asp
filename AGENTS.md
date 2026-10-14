@@ -205,6 +205,21 @@ missed beats, `_BOT_STALE_AFTER` 180 s) so a dead poller alerts on Telegram.
 A missing file (`reason":"no heartbeat"`) means this host has no token, which is
 not an outage; a 404 means an older deploy, and neither cries wolf.
 
+### Where ASTRA lives (host + repo are configurable)
+
+The deployed host and the fork repo are read from the environment, not baked in,
+so a clone can move to a new deployment by setting two variables:
+
+- `ASTRA_URL` — the service root, trailing slash optional. Read by
+  `bot/astra_env.py` (used by `daily_report`, `miss_alert`, `review_digest`,
+  `watchdog`), the keepalive and watchdog workflows, and `check_deploy.sh`.
+- `ASTRA_REPO` — `owner/repo`, used by `serve_mobile.py` to build the
+  `/astra.apk` fallback link (or set `ASTRA_APK_URL` to override the link whole).
+
+The watchdog's repo comes from `GITHUB_REPOSITORY`, which GitHub sets in Actions
+automatically. Defaults remain the current Render host and fork, so nothing
+changes until the variables are set. `bot/test_astra_env.py` locks this down.
+
 ### Synthetic data source
 
 Without a Windows terminal the bridge reports MT5 as unavailable and the system

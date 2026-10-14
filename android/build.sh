@@ -32,7 +32,7 @@ SERVER_URL="http://127.0.0.1:12001/"
 APP_NAME="ASTRA"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --url) SERVER_URL="$2"; shift 2 ;;
+    --url) [ -n "$2" ] && SERVER_URL="$2"; shift 2 ;;
     --name) APP_NAME="$2"; shift 2 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac

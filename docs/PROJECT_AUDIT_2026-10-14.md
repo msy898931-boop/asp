@@ -204,9 +204,17 @@ separated from upstream with a written decision and a hard "never push upstream"
 constraint.
 
 **Weaknesses.** (a) The deployed host (`astra-xlp9.onrender.com`) and the fork
-owner (`msy898931-boop`) are **hardcoded in 13 lines (13 files) and 8 files**
-respectively (workflows, bot defaults, mobile README, `serve_mobile.py` APK
-fallback, LICENSE) — a clone-and-rename would need a sweep. (b) A second live
+owner (`msy898931-boop`) were hardcoded across workflows, bot defaults, the
+mobile README and the `serve_mobile.py` APK fallback. **Mostly fixed after this
+audit:** the bot scripts now read a single shared `bot/astra_env.py`
+(`ASTRA_URL`, `GITHUB_REPOSITORY`, with the current values as defaults), the
+watchdog takes `GITHUB_REPOSITORY` from Actions, `serve_mobile.py` builds the
+APK link from `ASTRA_REPO`, and the Android workflow resolves the server URL
+from `vars.ASTRA_URL`. What remains is the intended override-with-default
+pattern (`vars.ASTRA_URL || 'https://astra-xlp9.onrender.com'` in keepalive and
+watchdog; the same default in `check_deploy.sh`), which is exactly how a clone
+moves host without a code change. The rest is documentary (READMEs, the audit
+itself) and the `LICENSE` copyright line, which is correct as-is. (b) A second live
 poller location (Fly) would collide with Render's on the same token. (c) The
 free tier is a constraint the product design leans on.
 
