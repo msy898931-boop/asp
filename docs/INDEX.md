@@ -20,6 +20,7 @@ If you are new, read these four, in order:
 | Ops | `DEPLOY.md` | How the live service is deployed |
 | Ops | `docs/RUNBOOK.md` | Incident runbook |
 | Ops | `docs/FORK_UPSTREAM_DECISION.md` | Fork vs upstream: what to do, and the hard constraint |
+| Audit | `docs/PROJECT_AUDIT_2026-10-14.md` | Full-repo audit and 100-point score (84.5) |
 | Product | `docs/SELLING.md` | Pricing and what the tool honestly does |
 | Mobile | `mobile/README.md` | The PWA: routes, tabs, offline shell |
 | Bot | `bridge/telegram_bot/README.md` | Telegram bot, entitlements, watchdog |

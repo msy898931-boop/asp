@@ -10,12 +10,16 @@ dependencies.
 
 ## What it does
 
-- **Commands** (polled with `getUpdates`):
-  - `/status` — backend health, mode, startup stage, MT5 bridge
-  - `/health` — raw health payload
-  - `/analysis` — latest analysis (direction, regime, score, probability)
-  - `/signal` — latest signal
-  - `/bridge` — MT5 bridge status
+- **Commands** (polled with `getUpdates`; the live set is `BOT_COMMANDS` in
+  `astra_bot.py`, registered with Telegram via `setMyCommands`):
+  - `/start` — start and show the menu
+  - `/price` — live gold price
+  - `/level` — add a price level to watch
+  - `/levels` — list your levels and their state
+  - `/clearlevels` — delete all your levels
+  - `/status` — system state and mode
+  - `/plan` — your plan and limits (tier-aware)
+  - `/myid` — your chat id
   - `/subscribe` / `/unsubscribe` — push alerts on/off
   - `/help` — command list
 - **Push alerts** (checked every `--interval` seconds): health transitions,

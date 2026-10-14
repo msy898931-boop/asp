@@ -13,7 +13,7 @@ Five parts, one process tree on the server:
 |---|---|---|
 | Backend host | C++ | supervises the bridge and bot; serves the loopback API |
 | Bridge | Python | market data; live (gold-api.com + Kraken PAXGUSD) or replay/MT5 |
-| Telegram bot | Python | `/status` `/health` `/analysis` `/bridge` over the loopback API |
+| Telegram bot | Python | Arabic operator commands (`/price` `/levels` `/plan` `/status` …) over the loopback API |
 | Phone app | PWA (JS) | served on the public port; reverse-proxies `/api/v1` and `/bridge` |
 | Desktop UI | Qt | separate build; not shipped in the container image |
 
