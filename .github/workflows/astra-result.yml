@@ -1,0 +1,75 @@
+# The result half of the news pair: once a release prints, say what it did.
+#
+# astra-news warns *before* a release (Forex Factory mirror, forecast only).
+# This job reads the released value from the keyless TradingView calendar,
+# compares it to the forecast (or the previous, and says so), and reports
+# whether that made the currency stronger or weaker — and, for a US event only,
+# the usual gold pressure. Mechanical, and it names its baseline.
+#
+# Free, like the signal bot: a cron, a small state file in the Actions cache,
+# one message per event. A late or skipped slot changes latency only.
+#
+# Required repository secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+# Without them the job prints the messages (dry mode) and exits zero.
+
+name: astra-result
+
+on:
+  schedule:
+    # Every 15 minutes, offset by 9 so it does not collide with the news scan.
+    - cron: "9,24,39,54 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the messages instead of sending them"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-result
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore alert state
+        uses: actions/cache/restore@v4
+        with:
+          path: run/news_result_state.json
+          key: astra-result-state-${{ github.run_id }}
+          restore-keys: |
+            astra-result-state-
+
+      - name: Run the tests
+        run: |
+          python3 -m unittest discover -s advisor -p "test_calendar_feed.py"
+          python3 -m unittest discover -s bot -p "test_news_result.py"
+
+      - name: Report released events
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python3 bot/news_result.py --dry-run
+          else
+            python3 bot/news_result.py
+          fi
+
+      - name: Save alert state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: run/news_result_state.json
+          key: astra-result-state-${{ github.run_id }}
