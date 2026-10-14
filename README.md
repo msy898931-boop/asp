@@ -1,34 +1,35 @@
-# AURA / ASTRA — Backend-First Repository Build Pack
+# AURA / ASTRA
 
 ## Identity
 - Technical project: **AURA**
-- Product / desktop brand: **ASTRA**
+- Product brand: **ASTRA**
 - Asset: **XAUUSD only**
-- Primary operating mode: **SHADOW**
-- Backend implementation agent: **DeepSeek v4.1 Flash via OpenHands**
-- Frontend implementation agent: **Alpha**, after backend review and approval
+- Operating mode: **SHADOW** (signals and alerts; no live order execution)
 
-## What this pack does
-This repository pack defines the new clean build of AURA. It is designed to be extracted and pushed to a new GitHub repository before the first OpenHands run.
+## What it is
 
-The active architecture in V4 changes the market-data acquisition boundary from MQL5 adapters to a **bundled Python + MetaTrader5 bridge process** that AURA launches and supervises locally. The C++ runtime remains the core decision/runtime engine. The bridge is part of the application distribution but remains a separate child process.
+A shadow-mode gold decision tool. A C++ backend supervises a Python market-data
+bridge and a Telegram bot and serves a loopback API; a bilingual (English /
+العربية) phone PWA is the shipping surface. It deploys as one container — the
+phone app reverse-proxies the API and the bridge.
 
-## Required execution order
-1. DeepSeek completes the backend using `TASK-BOOTSTRAP-BACKEND-000.md` and `TASK_MANIFEST.yaml`.
-2. Backend is independently reviewed, built, tested, and accepted.
-3. Only after that, Alpha receives the frontend handoff and builds the ASTRA desktop interface.
+| Part | Where | Role |
+| --- | --- | --- |
+| Decision/runtime engine | `src/` | C++ core |
+| Market data + bot | `bridge/`, `bridge/telegram_bot/` | live (gold-api.com + Kraken PAXGUSD) or replay/MT5 |
+| Phone app | `mobile/` | the PWA; the shipping surface |
+| News statistics | `akoan/` | the news engine and its verdicts |
+| Advisor | `advisor/` | an external second-opinion model |
+| Desktop UI | `frontend/qt/` | separate build; not shipped in the container image |
 
-## Non-goals for the backend-first pass
-- No frontend UI implementation.
+## Non-goals
 - No live/real order execution.
-- No replacement of the evaluator by candidate code.
 - No MQL5 EA-based candle ingestion.
 
-## Startup target
-A final packaged ASTRA application must start by double-click without requiring CMD. The application must resolve its paths from its installation/executable location, start the bundled Python bridge automatically, supervise its health, and expose actionable startup errors instead of depending on the developer shell.
-
 ## Where things are
-This repository is a fork of `alimazna/asp` (never push upstream — see
+
+This repository is a fork of `alimazna/asp` — **never push upstream** (see
 `docs/FORK_UPSTREAM_DECISION.md`). For a map of the docs, current versus
-historical, see **`docs/INDEX.md`**. Build/test/ship instructions live in
+historical, see **`docs/INDEX.md`**. Build, test, and ship instructions live in
 `AGENTS.md`.
+

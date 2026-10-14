@@ -146,12 +146,15 @@ trade every bar", "never let the server sleep"). `docs/INDEX.md` cleanly
 separates current from historical. `RUNBOOK.md`, `DEPLOY.md`, `SELLING.md`, and
 per-module READMEs are real. Comments explain invariants, not syntax.
 
-**Weaknesses.** (a) **Drift:** `bridge/telegram_bot/README.md` and `RUNBOOK.md`
-§1 list the old command set (`/analysis /signal /bridge`) while the live menu is
-Arabic (`/price /level /levels /clearlevels /plan /myid /subscribe`). (b) 143
+**Weaknesses.** (a) **Drift — fixed.** `bridge/telegram_bot/README.md` and
+`RUNBOOK.md` §1 listed the old command set (`/analysis /signal /bridge`) while
+the live menu is Arabic; those were corrected in `32eeaae`, and the last
+offender, `AGENTS.md`, now matches the `setMyCommands` menu exactly. (b) 144
 Markdown files, most historical (`AUDIT_REPORTS/`, `coordination/`,
-`project-control/`) — well-indexed, but a lot of weight to carry. (c) Root
-README still frames the project as an extract-and-push "build pack".
+`project-control/`) — well-indexed by `docs/INDEX.md` and referenced by the
+tooling, so kept deliberately; a lot of weight to carry. (c) Root README framed
+the project as an extract-and-push "build pack" — **fixed:** it now describes the
+shipped system and points to `docs/INDEX.md`.
 
 ### 6. Code quality & maintainability — 9 / 11
 

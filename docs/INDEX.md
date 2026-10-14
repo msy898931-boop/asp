@@ -1,6 +1,6 @@
 # Documentation index
 
-The repository carries a lot of history (141 Markdown files). This index says
+The repository carries a lot of history (144 Markdown files). This index says
 what each area is, and which files are **current** versus **historical**. It
 adds nothing to the code and removes nothing: it is a map.
 

@@ -129,6 +129,50 @@ class SubscriptionTests(unittest.TestCase):
             self.assertEqual(reloaded.all(), ["222"])
 
 
+class StatePersistenceTests(unittest.TestCase):
+    """Every store must survive a restart — a restart is a new object reading
+    the same directory. This is the bot's whole memory (subscribers, levels,
+    tiers); on a host with a persistent disk at /root/.astra it survives a
+    deploy, and if that disk is missing this is exactly what is lost."""
+
+    def test_all_stores_reload_from_the_same_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            state_dir = Path(d)
+            # A selling URL is needed, else everyone is Pro by default and the
+            # tier assertion would pass without any persistence.
+            subs = bot.Subscriptions(state_dir / "telegram_subscribers.json")
+            levels = bot.LevelStore(state_dir / "price_levels.json")
+            ent = bot.Entitlements(state_dir / "entitlements.json",
+                                   upgrade_url="https://buy.example/x")
+
+            subs.add("111")
+            levels.add("111", 2400.5)
+            ent.grant_pro("111")
+
+            # A restart: fresh objects over the same directory.
+            subs2 = bot.Subscriptions(state_dir / "telegram_subscribers.json")
+            levels2 = bot.LevelStore(state_dir / "price_levels.json")
+            ent2 = bot.Entitlements(state_dir / "entitlements.json",
+                                    upgrade_url="https://buy.example/x")
+
+            self.assertEqual(subs2.all(), ["111"])
+            self.assertEqual(levels2.count("111"), 1)
+            self.assertTrue(ent2.is_pro("111"))
+            self.assertFalse(ent2.is_pro("999"))  # not granted, stays free
+
+    def test_the_stores_use_separate_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            state_dir = Path(d)
+            bot.Subscriptions(state_dir / "telegram_subscribers.json").add("111")
+            bot.LevelStore(state_dir / "price_levels.json").add("111", 2400.5)
+            bot.Entitlements(state_dir / "entitlements.json").grant_pro("111")
+            names = sorted(p.name for p in state_dir.iterdir())
+            self.assertEqual(
+                names,
+                ["entitlements.json", "price_levels.json",
+                 "telegram_subscribers.json"])
+
+
 class RouterTests(unittest.TestCase):
     def _router(self, api, chat="9"):
         with tempfile.TemporaryDirectory() as d:
