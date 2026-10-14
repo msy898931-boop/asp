@@ -398,6 +398,39 @@ edge-triggered alert when the probability crosses the threshold, re-arming only
 after the market calms — never a per-cycle repeat. The alert text states
 explicitly that it measures *size*, not direction.
 
+### The news-quiet window (Phase 2 — folded into the filter)
+
+`advisor/news_window.py` answers one question for the bot: is *now* a bad moment
+because a high-impact release is imminent or just printed? The logic is pure —
+it takes the normalized event list and a timestamp, returns a reason string or
+None — so it is fully unit-testable and pays no network cost of its own.
+`advisor/calendar_feed.py` owns the fetch.
+
+- `blackout_event` / `blackout_reason` — ±15 min around a high-impact event
+  (`importance >= HIGH`). The message says "the market is usually violent", never
+  that it *will* move.
+- `upcoming_event` — a relevant event within 45 min, when the coast is clear now
+  but a release looms.
+- `recent_context` — the level feature's "interpretation 1": when a price level
+  fires, the alert names the newest relevant release and reuses
+  `calendar_feed.classify`, so the baseline (forecast or previous) is always
+  named and gold direction is only asserted for a US event.
+
+`astra_bot.py` fetches the calendar **once per monitor cycle** (`news_snapshot`)
+and hands the same event list to both the volatility alert and the level alert.
+The advisor import is best-effort and probes several path shapes (repo
+`<root>/advisor`, container `/app/advisor`), so the bot degrades to
+volatility-only rather than crashing when the advisor is absent.
+
+**Honesty caveat (stated in code and on the page):** the news-quiet window is a
+*safety heuristic*, not a measured signal — the corpus has no historical
+calendar, so unlike the volatility model its effect cannot be backtested. The
+`/vol` reading and its alerts say so.
+
+The transparency page (`mobile/performance.html`) now leads with the measured
+volatility edge (AUC 0.743) and keeps the directional coin-flip (AUC 0.50) as
+the honest contrast.
+
 ## Product surface (mobile app / APK / desktop)
 
 The phone app is `mobile/` (a PWA served by `scripts/start_stack.sh`) and the

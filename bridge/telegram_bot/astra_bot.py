@@ -37,6 +37,29 @@ from price_levels import (DIR_ABOVE, DIR_BELOW, DIR_CROSS, Level, LevelStore,
 from volatility import (TIMEFRAMES, VolatilityModel, format_volatility_alert,
                         timeframe_features)
 
+# The news-quiet window lives in the advisor package. Its location differs by
+# deployment: the repo keeps it at <root>/advisor, while the container copies it
+# to /app/advisor next to (not inside) resources/. Probe the known shapes and
+# import best-effort, so the bot still runs (volatility only) without it.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ADVISOR_CANDIDATES = (
+    os.environ.get("ASTRA_ADVISOR_DIR", ""),
+    os.path.join(_HERE, "..", "..", "advisor"),        # repo: <root>/bridge/telegram_bot
+    os.path.join(_HERE, "..", "..", "..", "advisor"),  # container: /app/resources/bridge/telegram_bot
+    os.path.join(os.getcwd(), "advisor"),
+    os.path.join(os.getcwd(), "..", "advisor"),
+)
+for _cand in _ADVISOR_CANDIDATES:
+    _abs = os.path.abspath(_cand) if _cand else ""
+    if _abs and os.path.isfile(os.path.join(_abs, "calendar_feed.py")):
+        if _abs not in sys.path:
+            sys.path.insert(0, _abs)
+        break
+try:
+    import news_window
+except ImportError:  # pragma: no cover - deployment-shape dependent
+    news_window = None
+
 TELEGRAM_API = "https://api.telegram.org"
 _POLL_TIMEOUT_SECONDS = 25
 _SEND_TIMEOUT_SECONDS = 10
@@ -411,6 +434,10 @@ class CommandRouter:
         return (f"تم ضبط المستوى: {price:g} ({_dir_ar(direction)}).\n"
                 f"سينبّهك مرة واحدة عند اختراقه. لديك {n} مستوى.")
 
+    def _news_blackout(self) -> Optional[str]:
+        """The news-quiet reason for right now, or None (also when unavailable)."""
+        return news_blackout_now()
+
     def _vol_reading(self) -> Optional[float]:
         """Calibrated probability of high volatility, or None when unavailable."""
         if self.vol_model is None:
@@ -432,10 +459,15 @@ class CommandRouter:
         pct = round(p * 100)
         tier = "مرتفع" if p >= self.vol_model.threshold else (
             "متوسط" if p >= 0.4 else "هادئ")
-        return (f"🌊 توقّع التقلّب: {pct}% ({tier})\n"
-                f"هذا يقيس *حجم* الحركة القادمة، لا اتجاهها. "
-                f"عند {round(self.vol_model.threshold * 100)}%+ يُفضَّل تجنّب "
-                f"الصفقات الضيقة.")
+        lines = [f"🌊 توقّع التقلّب: {pct}% ({tier})",
+                 "هذا يقيس *حجم* الحركة القادمة، لا اتجاهها."]
+        if p >= self.vol_model.threshold:
+            lines.append(f"عند {round(self.vol_model.threshold * 100)}%+ يُفضَّل "
+                         "تجنّب الصفقات الضيقة.")
+        news = self._news_blackout()
+        if news:
+            lines.append(news)
+        return "\n".join(lines)
 
     def _list_levels(self, chat_id: str) -> str:
         if self.levels is None:
@@ -566,6 +598,33 @@ def poll_updates(client: TelegramClient, router: CommandRouter) -> None:
                     print(f"[warn] reply to {chat_id} failed: {exc}", file=sys.stderr)
 
 
+def news_snapshot(now: Optional[float] = None):
+    """One calendar fetch -> (blackout_reason, recent_context).
+
+    Both features read the same event list, so the monitor pays for one fetch
+    per cycle. Either element is None when there is nothing to say.
+    """
+    if news_window is None:
+        return None, None
+    try:
+        import calendar_feed as cal
+        now = time.time() if now is None else now
+        events = cal.fetch_events(now - 3600, now + news_window.UPCOMING_MIN * 60)
+    except Exception:
+        return None, None
+    return (news_window.blackout_reason(events, now),
+            news_window.recent_context(events, now))
+
+
+def news_blackout_now(now: Optional[float] = None) -> Optional[str]:
+    """The news-quiet reason for `now` (default: the clock), or None.
+
+    Best-effort: a dead calendar yields no reason, never a crash and never a
+    fabricated warning. Returns None when the advisor is not deployed.
+    """
+    return news_snapshot(now)[0]
+
+
 def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                     interval: int, levels: Optional[LevelStore] = None,
                     ent: Optional[Entitlements] = None,
@@ -581,26 +640,28 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                 _broadcast(client, subs, alert)
         except Exception as exc:  # never let the monitor thread die silently
             print(f"[warn] monitor: {exc}", file=sys.stderr)
+        news_reason, news_context = news_snapshot()
         if levels is not None:
             try:
-                _check_levels(api, levels, ent, client)
+                _check_levels(api, levels, ent, client, news_context)
             except Exception as exc:
                 print(f"[warn] levels: {exc}", file=sys.stderr)
         if vol_model is not None:
             try:
                 vol_was_high = _check_volatility(api, vol_model, subs, client,
-                                                 vol_was_high)
+                                                 vol_was_high, news_reason)
             except Exception as exc:
                 print(f"[warn] volatility: {exc}", file=sys.stderr)
 
 
 def _check_volatility(api: AstraApi, model: VolatilityModel,
                       subs: Subscriptions, client: TelegramClient,
-                      was_high: bool) -> bool:
+                      was_high: bool, news_reason: Optional[str] = None) -> bool:
     """Alert once when volatility crosses the threshold (edge-triggered).
 
     Returns the new high/low state so the caller can re-arm after the market
-    calms down, instead of re-alerting every cycle.
+    calms down, instead of re-alerting every cycle. ``news_reason`` is appended
+    when a high-impact release is imminent or just printed.
     """
     try:
         bars_by_tf = {tf: api.candles(tf, limit=220).get("payload", {})
@@ -612,13 +673,21 @@ def _check_volatility(api: AstraApi, model: VolatilityModel,
         return was_high
     is_high = p >= model.threshold
     if is_high and not was_high:
-        _broadcast(client, subs, format_volatility_alert(p, model.threshold))
+        text = format_volatility_alert(p, model.threshold)
+        if news_reason:
+            text = text + "\n" + news_reason
+        _broadcast(client, subs, text)
     return is_high
 
 
 def _check_levels(api: AstraApi, levels: LevelStore,
-                  ent: Optional[Entitlements], client: TelegramClient) -> None:
-    """Poll the live price once and alert every chat whose level was crossed."""
+                  ent: Optional[Entitlements], client: TelegramClient,
+                  news_context: Optional[str] = None) -> None:
+    """Poll the live price once and alert every chat whose level was crossed.
+
+    ``news_context`` is appended to the alert so a break is explained by the
+    release that likely caused it — the level feature's "interpretation 1".
+    """
     price = api.last_price()
     if price is None:
         return
@@ -627,6 +696,8 @@ def _check_levels(api: AstraApi, levels: LevelStore,
             arrow = "صعودًا عبر" if lv.last_side == "above" else "هبوطًا عبر"
             line = (f"🔔 تنبيه سعري: XAUUSD تحرّك {arrow} {lv.price:g}\n"
                     f"الآن {price:,.2f}. هذا المستوى انتهى؛ أضف غيره بـ /level.")
+            if news_context:
+                line = line + "\n" + news_context
             try:
                 client.send_message(chat_id, line)
             except RuntimeError as exc:

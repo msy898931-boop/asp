@@ -405,13 +405,13 @@ class VolatilityCommandTests(unittest.TestCase):
 
 
 class VolatilityMonitorTests(unittest.TestCase):
-    def _check(self, value, was_high):
+    def _check(self, value, was_high, news_reason=None):
         api = FakeVolApi([{"close": 1800.0, "high": 1801, "low": 1799}])
         subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
         subs.add("42")
         client = FakeClient()
         new_state = bot._check_volatility(api, FakeModel(value), subs, client,
-                                          was_high)
+                                          was_high, news_reason)
         return new_state, client.sent
 
     def test_crossing_the_threshold_alerts_once(self):
@@ -438,6 +438,35 @@ class VolatilityMonitorTests(unittest.TestCase):
         state, sent = self._check(0.80, was_high=state)
         self.assertTrue(state)
         self.assertEqual(len(sent), 1)
+
+    def test_news_reason_is_appended_to_the_alert(self):
+        _, sent = self._check(0.80, was_high=False, news_reason="⏸ نافذة خبر: CPI")
+        self.assertEqual(len(sent), 1)
+        self.assertIn("نافذة خبر", sent[0][1])
+
+
+class LevelNewsContextTests(unittest.TestCase):
+    def _fire_once(self, news_context):
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        levels = bot.LevelStore(Path(tempfile.mkdtemp()) / "l.json")
+        levels.add("7", 4180.0, "above")
+        client = FakeClient()
+        api.last_price = lambda: 4170.0
+        bot._check_levels(api, levels, None, client, news_context)  # learn side
+        api.last_price = lambda: 4181.0
+        bot._check_levels(api, levels, None, client, news_context)  # cross
+        return client.sent
+
+    def test_level_alert_carries_the_news_context(self):
+        sent = self._fire_once("📰 آخر خبر مهم: CPI")
+        self.assertEqual(len(sent), 1)
+        self.assertIn("📰", sent[0][1])
+        self.assertIn("تنبيه سعري", sent[0][1])
+
+    def test_level_alert_without_news_is_unchanged(self):
+        sent = self._fire_once(None)
+        self.assertEqual(len(sent), 1)
+        self.assertNotIn("📰", sent[0][1])
 
 
 if __name__ == "__main__":
