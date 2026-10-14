@@ -341,6 +341,25 @@ The remaining lever is **new information** the corpus does not contain — real
 order-book/tape imbalance, or a stationary target the drift cannot game. No
 transformation of the OHLC feed, and no horizon, will produce an edge.
 
+### The stationary target the drift cannot game (Phase 0 — GO)
+
+`research/horizon_probe.py` takes the second half of that lesson seriously and
+switches the target from the *sign* of the next move to its *size*. Volatility
+clusters, and that is a law, not a regime: trailing volatility ranks forward
+volatility with OOS (2025) AUC **0.688** (1h), **0.729** (4h), **0.794** (1d),
+and holds in every calendar year (0.646–0.729). The direction baselines in the
+same table sit on the base rate (0.49–0.51) — a coin flip, confirming the
+sections above.
+
+The probe also nails the drift trap from the other side: the OOS up-move base
+rate at the 15m horizon is **0.517**, *identical* to the published directional
+accuracy. T27's 0.517 was the market drifting up, not the model predicting it.
+Verdict and numbers: `research/PHASE0_VOLATILITY_DECISION.md`.
+
+The product this justifies is a **"do not trade now" volatility filter** (honest,
+never claims direction). It is Phase 1+; build it on `run_calibrated` with a
+"forward vol above median" label, and fold the news-quiet window into it.
+
 ## Product surface (mobile app / APK / desktop)
 
 The phone app is `mobile/` (a PWA served by `scripts/start_stack.sh`) and the

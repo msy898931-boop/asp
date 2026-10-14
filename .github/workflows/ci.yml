@@ -57,6 +57,9 @@ jobs:
       - name: Test the bot's alerts, watchdog and one-shot scanner
         run: python3 -m unittest discover -s bot -p "test_*.py"
 
+      - name: Test the Phase 0 volatility-probe math
+        run: python3 -m unittest discover -s research -p "test_*.py"
+
       - name: Test the paid-tool layer (tiers + price levels)
         run: |
           python3 bridge/telegram_bot/test_entitlements.py
