@@ -360,6 +360,44 @@ The product this justifies is a **"do not trade now" volatility filter** (honest
 never claims direction). It is Phase 1+; build it on `run_calibrated` with a
 "forward vol above median" label, and fold the news-quiet window into it.
 
+### The deployable volatility model (Phase 1 — shipped in the bot)
+
+`scripts/volatility_lab.py` trains the filter and `--export`s a self-contained
+JSON artifact (`bridge/telegram_bot/vol_model.json`). It reuses the published
+pipeline (IRLS logistic, l2=0.05, Platt calibration, chronological year split
+dev 2021-22 / val 2023-24 / OOS 2025). The label is stationary: each instant is
+"1" when *forward* volatility over the horizon beats the *causal* rolling median
+(30-day lookback), so market drift cannot game it the way it gamed the
+directional target.
+
+OOS (2025), 4h horizon, multi-timeframe feature set
+`(M5|M15|H1|H4|D1).(volatilityRatio|atrRatio)`:
+
+| metric | value | publish bar |
+|---|---|---|
+| Brier skill | **+0.1750** | > 0 |
+| AUC | **0.743** | > 0.5 |
+| ECE | **0.0325** | < 0.05 |
+
+The M15-only arm scores AUC 0.575 — **multi-timeframe is the winner**, so the
+artifact carries all five timeframes the bot actually fetches. The solver is
+pure-Python (stdlib-only, no numpy by design), which is why feature reduction
+was required to keep IRLS tractable.
+
+`bridge/telegram_bot/volatility.py` is the live inference path: it recomputes
+`volatilityRatio` and `atrRatio` from closed candles exactly as
+`AnalyticalFeatureEngine.cpp` defines them (sample stdev of log returns over the
+9-bar trigger window vs the 200-bar context; Wilder mean true range; clamped to
+[0,1]). **`test_volatility_parity.py` runs the real `aura_feature_dump` and
+asserts the Python values match to 1e-9 per timeframe** — if the engine's
+definitions change, that test fails. The model returns `None` (bot stays silent)
+rather than a number when fewer than five timeframes have data.
+
+The bot exposes `/vol` (a single reading) and the monitor thread emits one
+edge-triggered alert when the probability crosses the threshold, re-arming only
+after the market calms — never a per-cycle repeat. The alert text states
+explicitly that it measures *size*, not direction.
+
 ## Product surface (mobile app / APK / desktop)
 
 The phone app is `mobile/` (a PWA served by `scripts/start_stack.sh`) and the

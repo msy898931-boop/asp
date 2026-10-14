@@ -27,6 +27,9 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+      - name: The bot's volatility features must match the real engine
+        run: python3 bridge/telegram_bot/test_volatility_parity.py
+
   baseline:
     runs-on: ubuntu-latest
     steps:
@@ -64,3 +67,4 @@ jobs:
         run: |
           python3 bridge/telegram_bot/test_entitlements.py
           python3 bridge/telegram_bot/test_astra_bot.py
+          python3 bridge/telegram_bot/test_volatility.py

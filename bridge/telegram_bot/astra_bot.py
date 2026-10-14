@@ -34,6 +34,8 @@ from astra_api import ApiError, AstraApi
 from entitlements import Entitlements, from_env as entitlements_from_env
 from price_levels import (DIR_ABOVE, DIR_BELOW, DIR_CROSS, Level, LevelStore,
                           side_of)
+from volatility import (TIMEFRAMES, VolatilityModel, format_volatility_alert,
+                        timeframe_features)
 
 TELEGRAM_API = "https://api.telegram.org"
 _POLL_TIMEOUT_SECONDS = 25
@@ -348,12 +350,14 @@ class CommandRouter:
     def __init__(self, api: AstraApi, subs: Subscriptions,
                  default_chat: Optional[str],
                  levels: Optional[LevelStore] = None,
-                 ent: Optional[Entitlements] = None) -> None:
+                 ent: Optional[Entitlements] = None,
+                 vol_model: Optional[VolatilityModel] = None) -> None:
         self.api = api
         self.subs = subs
         self.default_chat = default_chat
         self.levels = levels
         self.ent = ent
+        self.vol_model = vol_model
 
     HELP = (
         "[ASTRA] الأوامر\n"
@@ -365,6 +369,7 @@ class CommandRouter:
         "🔔 /unsubscribe - إيقاف التنبيهات\n"
         "⭐ /plan - خطتك وحدودها\n"
         "📊 /status - حالة النظام والوضع\n"
+        "🌊 /vol - توقّع تقلّب السوق (لا يتنبّأ بالاتجاه)\n"
         "🩺 /health - تفاصيل الصحة\n"
         "📈 /analysis - آخر تحليل\n"
         "📶 /bridge - حالة جسر MT5\n"
@@ -405,6 +410,32 @@ class CommandRouter:
         n = self.levels.count(chat_id)
         return (f"تم ضبط المستوى: {price:g} ({_dir_ar(direction)}).\n"
                 f"سينبّهك مرة واحدة عند اختراقه. لديك {n} مستوى.")
+
+    def _vol_reading(self) -> Optional[float]:
+        """Calibrated probability of high volatility, or None when unavailable."""
+        if self.vol_model is None:
+            return None
+        try:
+            bars_by_tf = {tf: self.api.candles(tf, limit=220).get("payload", {})
+                          .get("bars", []) for tf in TIMEFRAMES}
+        except ApiError:
+            return None
+        return self.vol_model.predict(bars_by_tf)
+
+    def _vol_command(self) -> str:
+        if self.vol_model is None:
+            return "🌊 توقّع التقلّب غير مفعّل على هذا الخادم."
+        p = self._vol_reading()
+        if p is None:
+            return ("🌊 تقلّب السوق\nلا بيانات كافية الآن (الجسر غير متاح أو "
+                    "الشمعة الأخيرة لم تُغلق بعد).")
+        pct = round(p * 100)
+        tier = "مرتفع" if p >= self.vol_model.threshold else (
+            "متوسط" if p >= 0.4 else "هادئ")
+        return (f"🌊 توقّع التقلّب: {pct}% ({tier})\n"
+                f"هذا يقيس *حجم* الحركة القادمة، لا اتجاهها. "
+                f"عند {round(self.vol_model.threshold * 100)}%+ يُفضَّل تجنّب "
+                f"الصفقات الضيقة.")
 
     def _list_levels(self, chat_id: str) -> str:
         if self.levels is None:
@@ -469,6 +500,8 @@ class CommandRouter:
                 return f"🗑 تم مسح {n} مستوى."
             if cmd == "/status":
                 return format_status(self.api.snapshot())
+            if cmd == "/vol":
+                return self._vol_command()
             if cmd == "/health":
                 return ("[ASTRA] الصحة\n" +
                         json.dumps(self.api.health(), indent=2, ensure_ascii=False))
@@ -535,9 +568,11 @@ def poll_updates(client: TelegramClient, router: CommandRouter) -> None:
 
 def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                     interval: int, levels: Optional[LevelStore] = None,
-                    ent: Optional[Entitlements] = None) -> None:
+                    ent: Optional[Entitlements] = None,
+                    vol_model: Optional[VolatilityModel] = None) -> None:
     engine = AlertEngine(api)
     engine.prime()
+    vol_was_high = False
     while not _stop.is_set():
         if _stop.wait(interval):
             break
@@ -551,6 +586,34 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                 _check_levels(api, levels, ent, client)
             except Exception as exc:
                 print(f"[warn] levels: {exc}", file=sys.stderr)
+        if vol_model is not None:
+            try:
+                vol_was_high = _check_volatility(api, vol_model, subs, client,
+                                                 vol_was_high)
+            except Exception as exc:
+                print(f"[warn] volatility: {exc}", file=sys.stderr)
+
+
+def _check_volatility(api: AstraApi, model: VolatilityModel,
+                      subs: Subscriptions, client: TelegramClient,
+                      was_high: bool) -> bool:
+    """Alert once when volatility crosses the threshold (edge-triggered).
+
+    Returns the new high/low state so the caller can re-arm after the market
+    calms down, instead of re-alerting every cycle.
+    """
+    try:
+        bars_by_tf = {tf: api.candles(tf, limit=220).get("payload", {})
+                      .get("bars", []) for tf in TIMEFRAMES}
+    except ApiError:
+        return was_high
+    p = model.predict(bars_by_tf)
+    if p is None:
+        return was_high
+    is_high = p >= model.threshold
+    if is_high and not was_high:
+        _broadcast(client, subs, format_volatility_alert(p, model.threshold))
+    return is_high
 
 
 def _check_levels(api: AstraApi, levels: LevelStore,
@@ -599,11 +662,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     state_dir = Path(args.state).parent
     levels = LevelStore(state_dir / "price_levels.json")
     ent = entitlements_from_env(state_dir)
+    try:
+        vol_model = VolatilityModel.load()
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"[warn] volatility model unavailable: {exc}", file=sys.stderr)
+        vol_model = None
     # The default chat is always subscribed so the operator gets alerts without
     # having to send /subscribe first.
     if args.chat:
         subs.add(args.chat)
-    router = CommandRouter(api, subs, args.chat or None, levels=levels, ent=ent)
+    router = CommandRouter(api, subs, args.chat or None, levels=levels, ent=ent,
+                           vol_model=vol_model)
 
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         _signal.signal(sig, lambda *_: _stop.set())
@@ -627,7 +696,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"[warn] startup message failed: {exc}", file=sys.stderr)
 
     monitor = threading.Thread(target=monitor_backend,
-                               args=(api, subs, client, args.interval, levels, ent),
+                               args=(api, subs, client, args.interval, levels, ent,
+                                     vol_model),
                                daemon=True)
     monitor.start()
     try:

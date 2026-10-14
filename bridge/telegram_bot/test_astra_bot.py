@@ -352,5 +352,93 @@ def _paid_router(ent=None):
     return bot.CommandRouter(api, subs, None, levels=levels, ent=ent), subs, levels
 
 
+class FakeVolApi(FakeApi):
+    """A fake backend whose bridge returns a canned candle series."""
+
+    def __init__(self, bars, available=True):
+        super().__init__(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY,
+                         available=available)
+        self._bars = bars
+
+    def candles(self, timeframe="M15", limit=2):
+        return {"payload": {"bars": self._bars}}
+
+
+class FakeModel:
+    """A VolatilityModel stand-in with a scripted prediction."""
+
+    threshold = 0.65
+
+    def __init__(self, value):
+        self.value = value
+
+    def predict(self, bars_by_tf):
+        return self.value
+
+
+class VolatilityCommandTests(unittest.TestCase):
+    def _router(self, model, available=True):
+        api = FakeVolApi([{"close": 1800.0, "high": 1801, "low": 1799}], available)
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+        return bot.CommandRouter(api, subs, None, vol_model=model), api, subs
+
+    def test_high_reading_is_reported_as_a_percentage(self):
+        router, _, _ = self._router(FakeModel(0.80))
+        reply = router.handle("1", "/vol")
+        self.assertIn("80%", reply)
+        self.assertIn("مرتفع", reply)
+
+    def test_reading_states_it_does_not_predict_direction(self):
+        router, _, _ = self._router(FakeModel(0.50))
+        self.assertIn("لا اتجاهها", router.handle("1", "/vol"))
+
+    def test_unavailable_model_degrades_cleanly(self):
+        router, _, _ = self._router(None)
+        self.assertIn("غير مفعّل", router.handle("1", "/vol"))
+
+    def test_missing_prediction_does_not_invent_a_number(self):
+        router, _, _ = self._router(FakeModel(None))
+        self.assertIn("لا بيانات كافية", router.handle("1", "/vol"))
+
+    def test_help_lists_the_vol_command(self):
+        self.assertIn("/vol", bot.CommandRouter.HELP)
+
+
+class VolatilityMonitorTests(unittest.TestCase):
+    def _check(self, value, was_high):
+        api = FakeVolApi([{"close": 1800.0, "high": 1801, "low": 1799}])
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+        subs.add("42")
+        client = FakeClient()
+        new_state = bot._check_volatility(api, FakeModel(value), subs, client,
+                                          was_high)
+        return new_state, client.sent
+
+    def test_crossing_the_threshold_alerts_once(self):
+        state, sent = self._check(0.80, was_high=False)
+        self.assertTrue(state)
+        self.assertEqual(len(sent), 1)
+        self.assertIn("80%", sent[0][1])
+
+    def test_staying_high_does_not_repeat_the_alert(self):
+        state, sent = self._check(0.80, was_high=True)
+        self.assertTrue(state)
+        self.assertEqual(sent, [])
+
+    def test_calm_market_does_not_alert(self):
+        state, sent = self._check(0.30, was_high=False)
+        self.assertFalse(state)
+        self.assertEqual(sent, [])
+
+    def test_rearming_after_calm_alerts_again(self):
+        state, sent = self._check(0.80, was_high=False)
+        self.assertTrue(state)
+        state, sent = self._check(0.30, was_high=state)
+        self.assertFalse(state)
+        state, sent = self._check(0.80, was_high=state)
+        self.assertTrue(state)
+        self.assertEqual(len(sent), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
