@@ -745,3 +745,40 @@ html[dir="rtl"] .ai-events li::before { left: auto; right: 0; }
 }
 .trk-now-plan.warn { color: var(--down); }
 
+/* Trade journal: today's summary strip + a Today/All filter. */
+.jrn-strip {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--edge);
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.jrn-strip:empty { display: none; }
+.jrn-filter {
+  margin-top: 12px;
+  display: flex; gap: 6px;
+}
+.jrn-fbtn {
+  flex: 1;
+  padding: 7px 10px;
+  font: inherit; font-size: 12px; font-weight: 600;
+  color: var(--muted);
+  background: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.jrn-fbtn[aria-selected="true"] {
+  color: var(--paper);
+  border-color: var(--accent, var(--up));
+}
+.jrn-day {
+  margin-top: 10px;
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--muted);
+}
+.jrn-day:first-child { margin-top: 0; }
+

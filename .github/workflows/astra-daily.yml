@@ -1,0 +1,75 @@
+# The daily report: one Telegram message a day with that day's ideas.
+#
+# Reads the signal tracker, keeps the signals whose timestamp falls on the UTC
+# day, and reports the closed ones and any still-open idea, with the honest
+# "not enough scored trades yet" line. A state file in the Actions cache
+# records which days were sent, so a repeated or late cron slot changes latency
+# only.
+#
+# Free, like the signal bot: a cron, a small state file, one message a day.
+#
+# Required repository secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+# Without them the job prints the report (dry mode) and exits zero.
+
+name: astra-daily
+
+on:
+  schedule:
+    # 20:00 UTC every day.
+    - cron: "0 20 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the report instead of sending it"
+        type: boolean
+        default: false
+      date:
+        description: "Report this UTC day (YYYY-MM-DD); blank = today"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-daily
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore report state
+        uses: actions/cache/restore@v4
+        with:
+          path: run/daily_report_state.json
+          key: astra-daily-state-${{ github.run_id }}
+          restore-keys: |
+            astra-daily-state-
+
+      - name: Run the tests
+        run: python3 -m unittest discover -s bot -p "test_daily_report.py"
+
+      - name: Send the day's report
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ -n "${{ inputs.date }}" ]; then ARGS="$ARGS --date ${{ inputs.date }}"; fi
+          python3 bot/daily_report.py $ARGS
+
+      - name: Save report state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: run/daily_report_state.json
+          key: astra-daily-state-${{ github.run_id }}

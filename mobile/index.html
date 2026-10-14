@@ -231,8 +231,16 @@
   </section>
 
   <section class="panel" id="view-tracker" hidden>
-    <h2 class="panel-title" data-i18n="tracker_title">Signal tracker</h2>
+    <h2 class="panel-title" data-i18n="tracker_title">Trade journal</h2>
     <p class="panel-note ai-warn" data-i18n="tracker_warn">Replayed from closed bars. Unvalidated; not scored long enough to trust. Not financial advice.</p>
+
+    <div class="jrn-strip" id="jrn-today"></div>
+
+    <div class="jrn-filter" id="jrn-filter" role="tablist">
+      <button class="jrn-fbtn" data-scope="today" aria-selected="true" type="button" data-i18n="jrn_today">Today</button>
+      <button class="jrn-fbtn" data-scope="all" aria-selected="false" type="button" data-i18n="jrn_all">All</button>
+    </div>
+
     <div class="trk-now" id="trk-now"></div>
     <div class="trk-stats" id="trk-stats"></div>
     <p class="panel-note" id="trk-note"></p>

@@ -87,8 +87,8 @@ const STRINGS = {
     plans: "Plans & pricing",
     perf: "Performance",
     overview: "Overview", data: "Data",
-    tab_tracker: "Signals",
-    tracker_title: "Signal tracker",
+    tab_tracker: "Journal",
+    tracker_title: "Trade journal",
     tracker_warn: "Replayed from closed bars. Unvalidated and not scored for long enough to trust. Not financial advice.",
     tracker_insufficient: "Not enough scored trades yet — no win rate is stated.",
     tracker_hold: "Hold",
@@ -109,6 +109,9 @@ const STRINGS = {
     now_open: "Open now",
     tracker_spread: "spread {c}/oz", tracker_horizon: "{h}h horizon",
     trk_open: "Open", trk_target: "Target", trk_stop: "Stop", trk_timeout: "Timed out",
+    jrn_today: "Today", jrn_all: "All",
+    jrn_trades: "Closed", jrn_record: "W / L", jrn_net_r: "Net R",
+    jrn_net_usd: "Net $", jrn_open: "Open now",
   },
   ar: {
     title_sub: "الذهب · وضع الظل",
@@ -181,8 +184,8 @@ const STRINGS = {
     plans: "الخطط والأسعار",
     perf: "شفافية الأداء",
     overview: "نظرة عامة", data: "البيانات",
-    tab_tracker: "الإشارات",
-    tracker_title: "متتبّع الإشارات",
+    tab_tracker: "السجل",
+    tracker_title: "سجل الصفقات",
     tracker_warn: "مُعاد تشغيله من الشموع المغلقة. غير مُتحقَّق منه ولم يُقيَّس زمنًا كافيًا. ليس نصيحة مالية.",
     tracker_insufficient: "لا صفقات محسومة كافية بعد — لا تُذكر نسبة إصابة.",
     tracker_hold: "قيد الاحتفاظ",
@@ -203,6 +206,9 @@ const STRINGS = {
     now_open: "مفتوحة الآن",
     tracker_spread: "سبريد {c}/أونصة", tracker_horizon: "أفق {h} ساعة",
     trk_open: "مفتوحة", trk_target: "هدف", trk_stop: "وقف", trk_timeout: "انتهت المدّة",
+    jrn_today: "اليوم", jrn_all: "الكل",
+    jrn_trades: "المغلقة", jrn_record: "ربح / خسارة", jrn_net_r: "صافي R",
+    jrn_net_usd: "صافي $", jrn_open: "مفتوحة الآن",
   },
 };
 
@@ -218,6 +224,7 @@ const $ = (id) => document.getElementById(id);
 const num = (v, d = 2) =>
   v === null || v === undefined || v === "" ? "--" : Number(v).toFixed(d);
 const yn = (v) => (v ? T("yes") : T("no"));
+const mapI18n = (m, k) => (m[lang] || m.en)[k] || k;
 
 let activeTf = "M15";
 let alertsOn = false;
@@ -622,62 +629,183 @@ function renderNow(status) {
 }
 
 function renderTracker(data, warming) {
-  const statsEl = $("trk-stats");
   const listEl = $("trk-list");
   const noteEl = $("trk-note");
   if (warming) {
     $("trk-now").innerHTML = "";
-    statsEl.innerHTML = "";
+    $("trk-stats").innerHTML = "";
+    $("jrn-today").innerHTML = "";
     listEl.innerHTML = `<p class="panel-note">${T("tracker_warming")}</p>`;
     noteEl.textContent = "";
     return;
   }
   renderNow(data && data.last_bar);
   if (!data || typeof data !== "object") {
-    statsEl.innerHTML = "";
+    $("trk-stats").innerHTML = "";
+    $("jrn-today").innerHTML = "";
     listEl.innerHTML = "";
     noteEl.textContent = T("tracker_empty");
     return;
   }
-  const s = data.summary || {};
-  const netCls = (s.total_r_net || 0) > 0 ? "up" : (s.total_r_net || 0) < 0 ? "down" : "";
-  statsEl.innerHTML =
-    trkStat(T("tracker_count"), String(s.total_signals ?? 0)) +
-    trkStat(T("tracker_wins"), String(s.wins ?? 0), "up") +
-    trkStat(T("tracker_losses"), String(s.losses ?? 0), "down") +
-    trkStat(T("tracker_net"), fmt("{v}R", { v: num(s.total_r_net, 2) }), netCls) +
-    trkStat(T("tracker_gross"), fmt("{v}R", { v: num(s.total_r_gross, 2) })) +
-    trkStat(T("tracker_winrate"),
-      s.sufficient ? fmt("{p}%", { p: s.win_rate }) : "—");
+  trkData = data;
+  renderJournal(data);
 
+  const s = data.summary || {};
   const bits = [];
   if (data.cost_usd != null) bits.push(T("tracker_spread").replace("{c}", num(data.cost_usd)));
   if (data.horizon_bars != null) bits.push(
     T("tracker_horizon").replace("{h}", num((data.horizon_bars * 15) / 60, 1)));
   bits.push(s.sufficient ? "" : T("tracker_insufficient"));
   noteEl.textContent = bits.filter(Boolean).join(" · ");
+}
 
-  const rows = (data.signals || []).slice().reverse();
+/* ── trade journal ──────────────────────────────────────────────────── */
+
+let trkData = null;
+let jrnScope = "today";
+
+function dayKey(sec) {
+  const d = new Date(sec * 1000);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// 1 oz of gold moves $1 per $1/oz move, so a signal's dollar result is its net
+// R times the stop distance. That is the minimum position — the honest baseline.
+function jrnUsd(r) {
+  if (r.r_net == null || r.entry == null || r.stop == null) return null;
+  return r.r_net * Math.abs(r.entry - r.stop);
+}
+
+// Where a still-open idea stands right now, in R, against the live price.
+function jrnOpenR(r) {
+  if (lastPrice == null || r.entry == null || r.stop == null) return null;
+  const risk = Math.abs(r.entry - r.stop);
+  if (!risk) return null;
+  const dir = r.direction === "LONG" ? 1 : -1;
+  return ((lastPrice - r.entry) * dir) / risk;
+}
+
+function jrnStat(label, value, cls) {
+  return `<div class="trk-stat"><span class="trk-stat-label">${label}</span>` +
+    `<span class="trk-stat-value ${cls || ""}">${value}</span></div>`;
+}
+
+function renderJrnStrip(rows) {
+  const el = $("jrn-today");
+  if (!el) return;
+  const closed = rows.filter((r) => r.r_net != null);
+  const wins = closed.filter((r) => r.r_net > 0).length;
+  const losses = closed.length - wins;
+  const netR = closed.reduce((a, r) => a + r.r_net, 0);
+  const netUsd = closed.reduce((a, r) => a + (jrnUsd(r) || 0), 0);
+  const open = rows.find((r) => r.outcome === "OPEN");
+  const openR = open ? jrnOpenR(open) : null;
+
+  const netCls = netR > 0 ? "up" : netR < 0 ? "down" : "";
+  const openCls = openR == null ? "" : openR >= 0 ? "up" : "down";
+  el.innerHTML =
+    jrnStat(T("jrn_trades"), String(closed.length)) +
+    jrnStat(T("jrn_record"), `${wins} / ${losses}`, wins >= losses ? "up" : "down") +
+    jrnStat(T("jrn_net_r"), `${netR >= 0 ? "+" : ""}${num(netR, 2)}R`, netCls) +
+    jrnStat(T("jrn_net_usd"), `${netUsd >= 0 ? "+" : ""}$${num(netUsd, 2)}`, netCls) +
+    jrnStat(T("jrn_open"), openR == null ? "—"
+      : `${openR >= 0 ? "+" : ""}${num(openR, 2)}R`, openCls);
+}
+
+function renderJrnStats(rows) {
+  const s = (trkData && trkData.summary) || {};
+  const closed = rows.filter((r) => r.r_net != null);
+  const wins = closed.filter((r) => r.r_net > 0).length;
+  const losses = closed.length - wins;
+  const netR = closed.reduce((a, r) => a + r.r_net, 0);
+  const gross = closed.reduce((a, r) => a + (r.r_gross || 0), 0);
+  const netCls = netR > 0 ? "up" : netR < 0 ? "down" : "";
+  $("trk-stats").innerHTML =
+    trkStat(T("tracker_count"), String(rows.length)) +
+    trkStat(T("tracker_wins"), String(wins), "up") +
+    trkStat(T("tracker_losses"), String(losses), "down") +
+    trkStat(T("tracker_net"), `${netR >= 0 ? "+" : ""}${num(netR, 2)}R`, netCls) +
+    trkStat(T("tracker_gross"), `${gross >= 0 ? "+" : ""}${num(gross, 2)}R`) +
+    trkStat(T("tracker_winrate"),
+      s.sufficient ? fmt("{p}%", { p: s.win_rate }) : "—");
+}
+
+function jrnRow(r) {
+  const dirCls = r.direction === "LONG" ? "up" : "down";
+  const oc = TRK_OUTCOME_KEY[r.outcome] || r.outcome;
+  let rCls = "";
+  let rTxt = "—";
+  if (r.r_net != null) {
+    rCls = r.r_net >= 0 ? "up" : "down";
+    rTxt = `${r.r_net >= 0 ? "+" : ""}${num(r.r_net, 2)}R`;
+  } else if (r.outcome === "OPEN") {
+    const live = jrnOpenR(r);
+    if (live != null) { rCls = live >= 0 ? "up" : "down";
+      rTxt = `${live >= 0 ? "+" : ""}${num(live, 2)}R`; }
+  }
+  const usd = r.r_net != null ? jrnUsd(r) : null;
+  const usdTxt = usd == null ? "" :
+    ` · ${usd >= 0 ? "+" : ""}$${num(usd, 2)}`;
+  const t = new Date(r.time * 1000);
+  const hhmm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+  return `<div class="trk-row">` +
+    `<div class="trk-top">` +
+    `<span class="trk-dir ${dirCls}">${r.direction}</span>` +
+    `<span class="trk-r ${rCls}">${rTxt}</span></div>` +
+    `<div class="trk-levels">${T("entry")} ${num(r.entry)} · ` +
+    `${T("stop")} ${num(r.stop)} · ${T("target")} ${num(r.target)}</div>` +
+    `<div class="trk-sub">` +
+    `<span class="trk-oc ${rCls}">${T(oc)}${usdTxt}</span>` +
+    `<span class="trk-meta">${hhmm} · ${mapI18n(NOW_REGIME, r.regime || "UNKNOWN")} · RSI ${num(r.rsi, 0)}</span>` +
+    `</div></div>`;
+}
+
+function renderJrnList(rows) {
+  const listEl = $("trk-list");
   if (!rows.length) {
     listEl.innerHTML = `<p class="panel-note">${T("tracker_empty")}</p>`;
     return;
   }
-  listEl.innerHTML = rows.map((r) => {
-    const dirCls = r.direction === "LONG" ? "up" : "down";
-    const oc = TRK_OUTCOME_KEY[r.outcome] || r.outcome;
-    const rCls = r.r_net == null ? "" : r.r_net >= 0 ? "up" : "down";
-    const rTxt = r.r_net == null ? "—" : `${r.r_net >= 0 ? "+" : ""}${num(r.r_net, 2)}R`;
-    return `<div class="trk-row">` +
-      `<div class="trk-top">` +
-      `<span class="trk-dir ${dirCls}">${r.direction}</span>` +
-      `<span class="trk-r ${rCls}">${rTxt}</span></div>` +
-      `<div class="trk-levels">${T("entry")} ${num(r.entry)} · ` +
-      `${T("stop")} ${num(r.stop)} · ${T("target")} ${num(r.target)}</div>` +
-      `<div class="trk-sub">` +
-      `<span class="trk-oc ${rCls}">${T(oc)}</span>` +
-      `<span class="trk-meta">${r.regime || ""} · RSI ${num(r.rsi, 0)}</span>` +
-      `</div></div>`;
-  }).join("");
+  let html = "";
+  let lastDay = null;
+  rows.forEach((r) => {
+    if (jrnScope === "all") {
+      const k = dayKey(r.time);
+      if (k !== lastDay) {
+        lastDay = k;
+        const d = new Date(r.time * 1000);
+        html += `<div class="jrn-day">${d.toLocaleDateString()}</div>`;
+      }
+    }
+    html += jrnRow(r);
+  });
+  listEl.innerHTML = html;
+}
+
+function renderJournal(data) {
+  const all = (data.signals || []).slice().reverse();  // newest first
+  const today = dayKey(Math.floor(Date.now() / 1000));
+  const rows = jrnScope === "today"
+    ? all.filter((r) => dayKey(r.time) === today)
+    : all;
+  renderJrnStrip(rows);
+  renderJrnStats(rows);
+  renderJrnList(rows);
+}
+
+function bindJournalFilter() {
+  const box = $("jrn-filter");
+  if (!box) return;
+  box.querySelectorAll(".jrn-fbtn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      jrnScope = btn.dataset.scope;
+      box.querySelectorAll(".jrn-fbtn").forEach((b) =>
+        b.setAttribute("aria-selected", b === btn ? "true" : "false"));
+      if (trkData) renderJournal(trkData);
+    });
+  });
 }
 
 async function loadTracker(attempt = 0) {
@@ -1133,6 +1261,9 @@ async function loadTicker() {
       : `${activeTf} close · gold-api.com`;
     $("ticker").hidden = false;
     checkLevels(price);
+    // Keep an open idea's live R fresh while the journal tab is on screen.
+    const jrn = $("view-tracker");
+    if (jrn && !jrn.hidden && trkData) renderJournal(trkData);
   } catch (err) {
     $("ticker").hidden = true;
   }
@@ -1189,6 +1320,7 @@ function init() {
   renderLevels();
   buildTimeframes();
   bindTabs();
+  bindJournalFilter();
   $("refresh").addEventListener("click", refresh);
   $("ai-refresh").addEventListener("click", () => loadAdvisor(true));
   $("alerts").addEventListener("click", toggleAlerts);

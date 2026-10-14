@@ -165,6 +165,33 @@ class ComputeTest(unittest.TestCase):
         self.assertEqual(calls["n"], 2)
 
 
+class JournalTest(unittest.TestCase):
+    """The journal tab must be wired end to end, or it ships blank."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_panel_has_strip_and_filter(self):
+        html = self._read("index.html")
+        for anchor in ('id="jrn-today"', 'id="jrn-filter"', 'data-scope="today"',
+                       'data-scope="all"'):
+            self.assertIn(anchor, html)
+
+    def test_app_wires_the_journal(self):
+        js = self._read("app.js")
+        self.assertIn("renderJournal", js)
+        self.assertIn("bindJournalFilter()", js)
+        for key in ("jrn_today", "jrn_all", "jrn_trades", "jrn_record",
+                    "jrn_net_r", "jrn_net_usd", "jrn_open"):
+            self.assertIn(key, js, "missing journal string %s" % key)
+
+    def test_open_r_uses_live_price(self):
+        # Guard the sign convention: a LONG above entry is positive R.
+        js = self._read("app.js")
+        self.assertIn("(lastPrice - r.entry) * dir", js)
+
+
 class PreviewTest(unittest.TestCase):
     """A shared link must render a card, not a bare URL."""
 

@@ -470,6 +470,23 @@ meter is the model's own `alert_threshold`; the panel states plainly that this
 measures *size*, not direction, and is a safety filter rather than a trade
 signal.
 
+### The trade journal tab (and the daily Telegram report)
+
+The "Journal" tab (`tab_tracker`) lists the tracked ideas newest-first, with a
+`Today`/`All` filter. `Today` keeps the ideas whose timestamp falls on the
+device's local day; the summary strip shows closed count, the W/L record, net R
+and net **$**, plus where a still-open idea stands *right now* (live R, from the
+ticker price `lastPrice`). The dollar figure is the **minimum position** (1 oz =
+$1 per $1/oz move), never an implied account return — same baseline as the bot.
+
+`bot/daily_report.py` sends the same view to Telegram once a day
+(`.github/workflows/astra-daily.yml`, cron `0 20 * * *`, UTC). It reads
+`/tracker/v1/signals`, keeps the day's signals, and always appends the honest
+line: below `min_scored` (30) it says the sample is too thin to judge, and the
+message ends "not financial advice". State (`run/daily_report_state.json`) rides
+in the Actions cache so a repeated slot does not double-send. Both surfaces read
+the tracker; neither can invent a result.
+
 ### APK build
 
 `android/build.sh` needs only a JDK and SDK build-tools (no Gradle). Build with
