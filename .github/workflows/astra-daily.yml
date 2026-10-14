@@ -55,8 +55,21 @@ jobs:
           restore-keys: |
             astra-daily-state-
 
+      - name: Restore the akoan event ledger
+        uses: actions/cache/restore@v4
+        with:
+          path: run/akoan_events.jsonl
+          key: akoan-events-${{ github.run_id }}
+          restore-keys: |
+            akoan-events-
+
       - name: Run the tests
         run: python3 -m unittest discover -s bot -p "test_daily_report.py"
+
+      - name: Accrue the akoan event ledger
+        # The calendar feed prunes old rows; the cached ledger keeps what the
+        # feed later forgets, so akoan's history only ever grows.
+        run: python3 akoan/events.py --backfill --days 120
 
       - name: Send the day's report
         env:
@@ -74,3 +87,10 @@ jobs:
         with:
           path: run/daily_report_state.json
           key: astra-daily-state-${{ github.run_id }}
+
+      - name: Save the akoan event ledger
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: run/akoan_events.jsonl
+          key: akoan-events-${{ github.run_id }}

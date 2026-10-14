@@ -427,6 +427,54 @@ volatility-only rather than crashing when the advisor is absent.
 calendar, so unlike the volatility model its effect cannot be backtested. The
 `/vol` reading and its alerts say so.
 
+### akoan — the news ↔ statistics bridge (the caveat above, closed)
+
+`akoan/` is an additive engine that turns the caveat above into a test. It
+builds the historical calendar the corpus never had, joins it causally to real
+trades, and reports whether the news explains the results — with the honest
+default of "no". It changes no existing engine and writes nothing the rest of
+the system reads.
+
+- `stats.py` — the tests, stdlib-only: Wilson interval, Fisher exact, a
+  label-shuffle permutation test, and Benjamini-Hochberg FDR control. The edge
+  it reports is always the gap from the **base rate**, never from 0.5 — the
+  lesson from `horizon_diagnostic.py`, where a 51.7% "accuracy" was gold's
+  51.7% drift.
+- `events.py` — an append-only event ledger (`run/akoan_events.jsonl`,
+  gitignored). Backfills the keyless TradingView calendar (`--backfill DAYS`;
+  the feed reaches ~120 days) and self-accrues on every run. De-duplicated by
+  `(at_utc, title, country)`, so a later revision of `actual` does not
+  duplicate the row. `coverage()` states how thin the evidence is.
+- `state.py` — the causal news state at one instant: blackout, recent release,
+  upcoming, and whether the trade leaned with or against the news read. Only
+  events at or before the timestamp are consulted, so a later release can never
+  explain an earlier trade. Pure — no clock, no network.
+- `link.py` — joins `run/signal_trades.jsonl` with the news state. **Collapses
+  the tracker's repeated appends**: a trade is one `(time, direction, entry,
+  stop, target)`, however many polls re-appended it (without this, one idea
+  counted ~200 times and every rate was fiction).
+- `engine.py` — scans every dimension, applies FDR, and returns a verdict:
+  `NO_EDGE_MEASURED` / `INSUFFICIENT_DATA` / `EDGE_CANDIDATE`. A dimension with
+  only one populated bucket is marked `comparable: false` and reported as
+  "ما بينقاس" rather than shown as a rate with nothing to compare against.
+- `study.py` — replays the *project's own* chain (`tracker/replay.py`) over the
+  committed M1 corpus resampled to M15, so the study trades are the trades the
+  engine would take. This is what gives the analysis months of depth.
+- `run.py` / `report.py` — CLI and the Arabic report (also JSON). The report
+  always names its baseline, its coverage, and its disclaimer.
+
+**The measured result (over the committed corpus):** 353 scored trades, base
+rate 34.8%. Every news dimension sits on the base rate — `blackout` and
+`upcoming` have too few trades to compare, `recent_release` 36.4% vs 34.7%,
+`news_in_play` 36.7% vs 34.7% — and **nothing survives BH-FDR correction**.
+Verdict: `NO_EDGE_MEASURED`. So the news-quiet window stays a safety heuristic,
+now with evidence behind the claim rather than only an argument.
+
+**Operational note:** the feed prunes old rows, so re-run
+`python3 akoan/events.py --backfill --days 120` periodically; the ledger keeps
+what the feed later forgets. CI runs the tests and asserts the study
+reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
+
 The transparency page (`mobile/performance.html`) now leads with the measured
 volatility edge (AUC 0.743) and keeps the directional coin-flip (AUC 0.50) as
 the honest contrast.

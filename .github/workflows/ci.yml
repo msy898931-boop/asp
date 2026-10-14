@@ -66,6 +66,14 @@ jobs:
       - name: Test the Phase 0 volatility-probe math
         run: python3 -m unittest discover -s research -p "test_*.py"
 
+      - name: Test the akoan news-statistics engine
+        run: python3 -m unittest discover -s akoan -p "test_*.py"
+
+      - name: The akoan study must reproduce over the committed corpus
+        run: |
+          python3 akoan/study.py --json > /tmp/akoan_study.json
+          python3 -c "import json,sys; r=json.load(open('/tmp/akoan_study.json')); assert r['scored']>0, r; assert r['verdict'] in ('NO_EDGE_MEASURED','EDGE_CANDIDATE','INSUFFICIENT_DATA'), r; print('akoan study:', r['verdict'], r['scored'], 'scored')"
+
       - name: Test the paid-tool layer (tiers + price levels)
         run: |
           python3 bridge/telegram_bot/test_entitlements.py
