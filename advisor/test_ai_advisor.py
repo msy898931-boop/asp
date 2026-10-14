@@ -226,15 +226,20 @@ class CalendarTests(unittest.TestCase):
         import time as _t
         soon = _t.gmtime(_t.time() + 6 * 3600)
         stamp = "%02d-%02d-%04d" % (soon.tm_mon, soon.tm_mday, soon.tm_year)
+        # The time must come from the same instant as the date. Hardcoding
+        # "12:30pm" made this test fail for the six hours a day when now+6h
+        # lands past it (the feed window is [-1h, +48h]).
+        clock = "%d:%02d%s" % (
+            (soon.tm_hour % 12) or 12, soon.tm_min, "am" if soon.tm_hour < 12 else "pm")
         xml = ("<weeklyevents>"
                "<event><title>CPI m/m</title><country>USD</country>"
-               "<date>%s</date><time>12:30pm</time><impact>High</impact>"
+               "<date>%s</date><time>%s</time><impact>High</impact>"
                "<forecast>0.6%%</forecast><previous>0.4%%</previous></event>"
                "<event><title>Low thing</title><country>USD</country>"
-               "<date>%s</date><time>12:30pm</time><impact>Low</impact></event>"
+               "<date>%s</date><time>%s</time><impact>Low</impact></event>"
                "<event><title>JPY thing</title><country>JPY</country>"
-               "<date>%s</date><time>12:30pm</time><impact>High</impact></event>"
-               "</weeklyevents>" % (stamp, stamp, stamp)).encode()
+               "<date>%s</date><time>%s</time><impact>High</impact></event>"
+               "</weeklyevents>" % (stamp, clock, stamp, clock, stamp, clock)).encode()
         orig = urllib.request.urlopen
 
         class Fake:
