@@ -165,6 +165,22 @@ class ComputeTest(unittest.TestCase):
         self.assertEqual(calls["n"], 2)
 
 
+class PreviewTest(unittest.TestCase):
+    """A shared link must render a card, not a bare URL."""
+
+    def test_index_carries_open_graph_tags(self):
+        with open(os.path.join(sm.HERE, "index.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        for prop in ("og:title", "og:description", "og:image", "og:url"):
+            self.assertIn('property="%s"' % prop, html)
+        # og:image must be absolute — relative paths are ignored by chat apps.
+        self.assertRegex(html, r'og:image"\s+content="https://')
+
+    def test_og_image_is_a_real_asset(self):
+        self.assertTrue(
+            os.path.isfile(os.path.join(sm.HERE, "icons", "icon-512.png")))
+
+
 class RouteTest(unittest.TestCase):
     def setUp(self):
         sm._vol_cache["at"], sm._vol_cache["body"] = 0.0, None

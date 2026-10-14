@@ -8,7 +8,19 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
-<title>ASTRA</title>
+<!-- Preview card. Telegram (and most chat apps) read OpenGraph, not the
+     manifest, so a shared link would otherwise show as a bare URL. og:image
+     must be absolute; it points at the deployed host. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ASTRA">
+<meta property="og:title" content="ASTRA — Gold Analysis">
+<meta property="og:description" content="Shadow-mode XAUUSD decision support, on your phone. It states its own limits. Decision support only, not financial advice.">
+<meta property="og:url" content="https://astra-xlp9.onrender.com/">
+<meta property="og:image" content="https://astra-xlp9.onrender.com/icons/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta name="twitter:card" content="summary">
+<title>ASTRA — Gold Analysis</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
