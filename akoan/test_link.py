@@ -127,6 +127,40 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(cov["high_impact"], 1)
 
 
+class SeedTests(unittest.TestCase):
+    """The committed seed backs a fresh container that has no live ledger.
+
+    A non-default path must read only that file, so tests and tooling that pass
+    an explicit ledger are not polluted by the shipped seed.
+    """
+
+    def test_the_shipped_seed_exists_and_is_parseable(self):
+        self.assertTrue(os.path.isfile(ev.SEED_PATH), ev.SEED_PATH)
+        self.assertGreater(len(ev._read(ev.SEED_PATH)), 0)
+
+    def test_an_explicit_path_reads_only_that_file(self):
+        tmp = tempfile.mkdtemp()
+        path = os.path.join(tmp, "events.jsonl")
+        ev.append([ev._record(event(at=1000), "a")], path)
+        self.assertEqual(len(ev.load(path)), 1)
+
+    def test_the_live_ledger_wins_over_the_seed_on_a_shared_key(self):
+        seed = ev._read(ev.SEED_PATH)
+        key = next(iter(seed))
+        rec = dict(seed[key])
+        rec["actual"] = "REVISED"
+        tmp = tempfile.mkdtemp()
+        path = os.path.join(tmp, "events.jsonl")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec) + "\n")
+        original = ev.LEDGER_PATH
+        try:
+            ev.LEDGER_PATH = path
+            self.assertEqual(ev.load()["%s" % key]["actual"], "REVISED")
+        finally:
+            ev.LEDGER_PATH = original
+
+
 class LinkTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

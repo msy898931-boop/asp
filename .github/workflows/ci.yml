@@ -79,3 +79,42 @@ jobs:
           python3 bridge/telegram_bot/test_entitlements.py
           python3 bridge/telegram_bot/test_astra_bot.py
           python3 bridge/telegram_bot/test_volatility.py
+
+  container:
+    # What ships is the image, not the source tree — and every other job runs
+    # against the source tree. A route can therefore reference a module the
+    # Dockerfile never copies and still pass them all; the phone's News tab
+    # shipped broken exactly that way. This builds the real image and asks the
+    # running service for the routes that depend on their module being present.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t astra-ci .
+
+      - name: The image must serve the akoan route from its own contents
+        run: |
+          docker run -d --name astra-ci -p 8080:8080 -e ASTRA_DATA_SOURCE=replay astra-ci
+          trap 'docker logs astra-ci || true; docker rm -f astra-ci || true' EXIT
+          python3 - <<'PY'
+          import json, time, urllib.request
+          url = "http://127.0.0.1:8080/akoan.json"
+          last = None
+          for _ in range(40):
+              try:
+                  with urllib.request.urlopen(url, timeout=60) as fh:
+                      body = json.load(fh)
+                  if body.get("available"):
+                      break
+                  last = body
+              except Exception as exc:
+                  last = exc
+              time.sleep(3)
+          else:
+              raise SystemExit("akoan route never became available: %r" % (last,))
+          assert body.get("scored", 0) > 0, body
+          assert (body.get("coverage") or {}).get("events", 0) > 0, body
+          print("container akoan:", body["verdict"], body["scored"], "scored")
+          PY

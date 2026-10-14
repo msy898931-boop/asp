@@ -66,6 +66,9 @@ COPY mobile  /app/mobile
 # so the entrypoint starts it as a loopback sidecar (see docker_entrypoint.sh).
 COPY tracker /app/tracker
 COPY advisor /app/advisor
+# The akoan news-vs-results engine backs the phone's News tab (/akoan.json) and
+# the weekly Telegram digest. Without it the route answers "engine unavailable".
+COPY akoan /app/akoan
 COPY scripts/docker_entrypoint.sh /app/docker_entrypoint.sh
 RUN chmod +x /app/docker_entrypoint.sh
 

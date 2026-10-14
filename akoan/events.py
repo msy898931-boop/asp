@@ -46,10 +46,34 @@ import calendar_feed as cal  # noqa: E402
 
 LEDGER_PATH = os.environ.get("ASTRA_AKOAN_EVENTS",
                              os.path.join(ROOT, "run", "akoan_events.jsonl"))
+# The committed seed ships in the image so a fresh container has a calendar to
+# study against before it has accrued one of its own. See `load`.
+SEED_PATH = os.environ.get("ASTRA_AKOAN_EVENTS_SEED",
+                           os.path.join(HERE, "events_seed.jsonl"))
 # A release is "high impact" for gold at TradingView importance >= 1.
 HIGH = 1
 
 SCHEMA_VERSION = "1.0"
+
+
+def _read(path: str) -> dict[str, dict]:
+    """Parse one ledger file as {key: record}, last write winning. Empty if absent."""
+    out: dict[str, dict] = {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue  # a torn line must not poison the whole ledger
+                if isinstance(rec, dict) and rec.get("key"):
+                    out[rec["key"]] = rec
+    except OSError:
+        pass
+    return out
 
 
 def event_key(event: dict) -> str:
@@ -76,23 +100,19 @@ def _record(event: dict, source: str) -> dict:
     }
 
 
-def load(path: str = LEDGER_PATH) -> dict[str, dict]:
-    """The ledger as {key: record}, last write winning. Empty when absent."""
-    out: dict[str, dict] = {}
-    try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except ValueError:
-                    continue  # a torn line must not poison the whole ledger
-                if isinstance(rec, dict) and rec.get("key"):
-                    out[rec["key"]] = rec
-    except OSError:
-        pass
+def load(path: str | None = None) -> dict[str, dict]:
+    """The ledger as {key: record}, last write winning. Empty when absent.
+
+    The live ledger is the running record, but a fresh container starts without
+    one. Rather than answer "engine unavailable", fall back to the committed
+    seed (`events_seed.jsonl`) so the study still has a calendar to join
+    against. The live ledger always wins on a shared key, so accrued events are
+    never masked by the seed. A non-default path reads only that file.
+    """
+    if path is None:
+        path = LEDGER_PATH
+    out = _read(SEED_PATH) if path == LEDGER_PATH else {}
+    out.update(_read(path))
     return out
 
 

@@ -489,6 +489,20 @@ reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
   Actions cache makes a repeated cron slot idempotent. The ledger is accrued
   first, then cached back, so the record only grows.
 
+**Shipping note.** Two things the source tree has that the image does not, and
+both once made the phone's News tab answer "engine unavailable" in production
+while every CI job stayed green (they all run against the source tree):
+
+1. `Dockerfile` must `COPY akoan /app/akoan` — a route can import a package the
+   image never copied and no source-tree test can see it.
+2. `run/akoan_events.jsonl` is gitignored and absent in a fresh container, so
+   `events.load()` falls back to the committed seed `akoan/events_seed.jsonl`.
+   The live ledger wins on a shared key, so accrued events are never masked;
+   passing an explicit path reads only that file. Refresh the seed with
+   `cp run/akoan_events.jsonl akoan/events_seed.jsonl` when the live ledger
+   grows. The `container` CI job builds the real image and asks the running
+   service for the route, which is the only job that can catch this class.
+
 The transparency page (`mobile/performance.html`) now leads with the measured
 volatility edge (AUC 0.743) and keeps the directional coin-flip (AUC 0.50) as
 the honest contrast.
