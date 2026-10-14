@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import unittest
+import urllib.error
 from datetime import datetime, timedelta, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -76,6 +78,58 @@ class CheckBotTests(unittest.TestCase):
         ok, detail = wd.check_bot(NOW)
         self.assertTrue(ok)
         self.assertEqual(detail, "unavailable")
+
+class _Resp:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def read(self):
+        return json.dumps(self._payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class CheckEngineTests(unittest.TestCase):
+    """The 200-but-empty bug must be caught, not read as healthy."""
+
+    def setUp(self):
+        self._orig = wd.urllib.request.urlopen
+        self.addCleanup(lambda: setattr(wd.urllib.request, "urlopen", self._orig))
+
+    def test_available_true_is_healthy(self):
+        wd.urllib.request.urlopen = lambda *a, **k: _Resp(
+            {"available": True, "verdict": "NO_EDGE_MEASURED"})
+        ok, detail = wd.check_engine()
+        self.assertTrue(ok)
+        self.assertEqual(detail, "NO_EDGE_MEASURED")
+
+    def test_available_false_is_trouble(self):
+        wd.urllib.request.urlopen = lambda *a, **k: _Resp(
+            {"available": False, "reason": "engine unavailable"})
+        ok, detail = wd.check_engine()
+        self.assertFalse(ok)
+        self.assertIn("engine unavailable", detail)
+
+    def test_missing_route_is_not_trouble(self):
+        def raise404(*a, **k):
+            raise urllib.error.HTTPError("u", 404, "nf", {}, None)
+        wd.urllib.request.urlopen = raise404
+        ok, detail = wd.check_engine()
+        self.assertTrue(ok)
+        self.assertEqual(detail, "unavailable")
+
+    def test_other_http_error_is_trouble(self):
+        def raise500(*a, **k):
+            raise urllib.error.HTTPError("u", 500, "err", {}, None)
+        wd.urllib.request.urlopen = raise500
+        ok, _ = wd.check_engine()
+        self.assertFalse(ok)
+
+
 
 
 class CheckCommitTests(unittest.TestCase):

@@ -80,6 +80,32 @@ def check_server() -> tuple[bool, str]:
     return False, "no 200 from /api/v1/health"
 
 
+def check_engine() -> tuple[bool, str]:
+    """Does the akoan engine actually serve data, not just answer 200?
+
+    The bug this guards against shipped a route that returned HTTP 200 with
+    {"available": false} — invisible to a plain status check. This reads the
+    body and insists the engine produced a verdict. A 404 (older deploy without
+    the route) or a connection error reads as unavailable and never cries wolf;
+    any other failure is real trouble.
+    """
+    req = urllib.request.Request(
+        ASTRA_URL + "/akoan.json",
+        headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return True, "unavailable"
+        return False, "akoan route HTTP %d" % exc.code
+    except (urllib.error.URLError, OSError, ValueError):
+        return True, "unavailable"
+    if body.get("available"):
+        return True, str(body.get("verdict", "ok"))
+    return False, "akoan returned available=false (%s)" % body.get("reason", "no reason")
+
+
 def _parse_utc(text: str) -> datetime | None:
     try:
         return datetime.fromisoformat(text.replace("Z", "+00:00"))
@@ -131,6 +157,11 @@ def evaluate(now: datetime | None = None) -> dict:
     ok, detail = check_server()
     if not ok:
         problems.append({"key": "server", "ar": "السيرفر ما عم يستجيب", "detail": detail})
+    ok, detail = check_engine()
+    if not ok:
+        problems.append({"key": "engine",
+                         "ar": "محرك الخبر بيرجّع فاضي (بيانات غير متاحة)",
+                         "detail": detail})
     ok, detail = check_commit(now)
     if not ok:
         problems.append({"key": "commit",

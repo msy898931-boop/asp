@@ -228,6 +228,48 @@ class RouteTest(unittest.TestCase):
         self.assertIn("probability", body)
 
 
+class VersionRouteTest(unittest.TestCase):
+    """The version route is how 'is my fix live?' is answered with one curl."""
+
+    def _get(self, path):
+        app = _serve(sm.Handler)
+        try:
+            url = "http://127.0.0.1:%d%s" % (app.server_address[1], path)
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                return resp.status, dict(resp.headers), json.loads(resp.read())
+        finally:
+            _stop(app)
+
+    def test_version_route_reports_the_running_build(self):
+        status, headers, body = self._get("/version.json")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Cache-Control"), "no-store")
+        self.assertIn("shell", body)
+        self.assertIn("commit", body)
+        self.assertGreaterEqual(body["uptime_s"], 0)
+
+    def test_commit_comes_from_the_host_env_when_present(self):
+        old = os.environ.get("RENDER_GIT_COMMIT")
+        os.environ["RENDER_GIT_COMMIT"] = "abcdef1234567890"
+        try:
+            self.assertEqual(sm._commit_stamp(), "abcdef123456")
+        finally:
+            if old is None:
+                os.environ.pop("RENDER_GIT_COMMIT", None)
+            else:
+                os.environ["RENDER_GIT_COMMIT"] = old
+
+    def test_commit_is_unknown_when_no_env_is_set(self):
+        saved = {k: os.environ.pop(k, None)
+                 for k in ("ASTRA_COMMIT", "RENDER_GIT_COMMIT", "GITHUB_SHA")}
+        try:
+            self.assertEqual(sm._commit_stamp(), "unknown")
+        finally:
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+
+
 class AkoanPanelTest(unittest.TestCase):
     """The akoan tab must be wired end to end, or it ships blank."""
 

@@ -51,3 +51,17 @@ jobs:
           done
           echo "server did not answer 200 after retries" >&2
           exit 1
+
+      - name: The deploy must serve real data, not just answer 200
+        env:
+          ASTRA_URL: ${{ vars.ASTRA_URL || 'https://astra-xlp9.onrender.com' }}
+        run: |
+          set -u
+          echo "deployed version:"
+          curl -s -m 60 "$ASTRA_URL/version.json" || true
+          echo
+          # A 200 with an empty engine is the exact bug that shipped the News
+          # tab broken. Read the body and fail the run if it is empty.
+          body=$(curl -s -m 120 "$ASTRA_URL/akoan.json" || echo "")
+          echo "$body" | head -c 300; echo
+          echo "$body" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('available'), d; assert d.get('scored',0)>0, d; print('engine ok:', d['verdict'], d['scored'], 'scored')"

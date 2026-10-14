@@ -71,6 +71,16 @@ def _build_stamp() -> str:
 
 _BUILD = _build_stamp()
 _SHELL_ASSET_RE = re.compile(rb'(href|src)="(styles\.css|app\.js)"')
+_STARTED_AT = time.time()
+
+
+def _commit_stamp() -> str:
+    """The deployed commit, from whichever env var the host sets, or 'unknown'."""
+    for key in ("ASTRA_COMMIT", "RENDER_GIT_COMMIT", "GITHUB_SHA"):
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value[:12]
+    return "unknown"
 
 
 def _stamp_shell(body: bytes) -> bytes:
@@ -297,6 +307,8 @@ class Handler(BaseHTTPRequestHandler):
             self._apk()
         elif path == "/upgrade.json":
             self._upgrade_json()
+        elif path == "/version.json":
+            self._version_json()
         elif path == "/vol.json":
             self._volatility()
         elif path == "/akoan.json":
@@ -341,6 +353,24 @@ class Handler(BaseHTTPRequestHandler):
         """
         url = os.environ.get("ASTRA_UPGRADE_URL", "").strip()
         body = json.dumps({"url": url}).encode("utf-8")
+        self._send(200, body, "application/json; charset=utf-8")
+
+    # -- deployed version ---------------------------------------------------
+
+    def _version_json(self) -> None:
+        """What is actually running, so 'is my fix live?' is one curl.
+
+        The shell stamp changes when the served assets change; the commit comes
+        from the host's env (Render sets RENDER_GIT_COMMIT). Both are cheap, so
+        this is served fresh every time — it is the one reading that must never
+        be cached.
+        """
+        body = json.dumps({
+            "shell": _BUILD,
+            "commit": _commit_stamp(),
+            "started_at": int(_STARTED_AT),
+            "uptime_s": int(time.time() - _STARTED_AT),
+        }, sort_keys=True).encode("utf-8")
         self._send(200, body, "application/json; charset=utf-8")
 
     # -- volatility reading -------------------------------------------------
