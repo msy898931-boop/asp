@@ -10,8 +10,11 @@ clone/fetch from it, never push. All our work lives on `main` here.
 
 - Upstream: `https://github.com/alimazna/asp` (public, ~365 commits, active)
 - Our repo: `https://github.com/msy898931-boop/asp` (private)
-- Our `main` = upstream `main` + our Telegram bot. To resync, fetch upstream and
-  rebase/cherry-pick our additions on top (they touch disjoint files today).
+- Our `main` = upstream `main` + our additions (Telegram bot, mobile PWA,
+  akoan engine, container CI). The two lines have diverged (we are ~124 ahead,
+  ~101 behind); the resync decision is written down in
+  `docs/FORK_UPSTREAM_DECISION.md`. Never push upstream.
+- Doc map (current vs historical): `docs/INDEX.md`.
 
 ## Layout
 
@@ -21,6 +24,12 @@ clone/fetch from it, never push. All our work lives on `main` here.
 | `frontend/qt/` | Qt 6 desktop UI (the ASTRA window) |
 | `bridge/mt5_python/` | Loopback JSON bridge to MetaTrader 5 (Python stdlib) |
 | `bridge/telegram_bot/` | **Our** Telegram operator bot (Python stdlib) |
+| `bot/` | Watchdog + scheduled scanner (the always-on health layer) |
+| `mobile/` | **Our** phone PWA (serves the app and proxies the API) |
+| `akoan/` | **Our** news-statistics engine (the News tab) |
+| `advisor/` | External second-opinion model (headlines + a read) |
+| `android/` | Android wrapper that builds the `.apk` |
+| `docs/` | Architecture, runbook, brand, doc index (`docs/INDEX.md`) |
 | `scripts/bundle.py` | Stages the installable bundle from `packaging/bundle_manifest.json` |
 | `src/platform/windows/` | Backend host, path resolution, process supervision |
 
@@ -157,6 +166,27 @@ Set `ASTRA_DATA_SOURCE=replay` for an offline synthetic demo.
 Notes: the container must reach `api.telegram.org` (default egress is fine),
 `api.gold-api.com`, and `api.kraken.com`; the loopback API/bridge are never
 exposed publicly.
+
+### Deploy verification (is my fix live?)
+
+`GET /version.json` answers it in one curl: the `shell` stamp (changes when the
+served assets change), the `commit` (from `RENDER_GIT_COMMIT` / `ASTRA_COMMIT` /
+`GITHUB_SHA`, else `unknown`), and `uptime_s`. It is `no-store`, so it is never
+cached.
+
+```bash
+curl -s https://astra-xlp9.onrender.com/version.json
+# {"commit":"07a21a8...","shell":"c48cf55964","started_at":...,"uptime_s":...}
+```
+
+Two checks watch the live service, both free (GitHub Actions cron):
+
+- `astra-keepalive` (every 5 min) pings `/api/v1/health`, prints
+  `/version.json`, and **fails the run** if `/akoan.json` answers with
+  `available:false` — the exact bug that once shipped the News tab blank.
+- `astra-watchdog` (hourly) reads the same body via `check_engine()` and alerts
+  on Telegram when the engine serves empty. A 404 or dead connection is treated
+  as "unavailable", never as trouble, so an older deploy does not cry wolf.
 
 ### Synthetic data source
 

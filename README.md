@@ -26,3 +26,9 @@ The active architecture in V4 changes the market-data acquisition boundary from 
 
 ## Startup target
 A final packaged ASTRA application must start by double-click without requiring CMD. The application must resolve its paths from its installation/executable location, start the bundled Python bridge automatically, supervise its health, and expose actionable startup errors instead of depending on the developer shell.
+
+## Where things are
+This repository is a fork of `alimazna/asp` (never push upstream — see
+`docs/FORK_UPSTREAM_DECISION.md`). For a map of the docs, current versus
+historical, see **`docs/INDEX.md`**. Build/test/ship instructions live in
+`AGENTS.md`.
