@@ -140,6 +140,10 @@ def _compute_volatility(bridge_base: str, timeout: float = 5.0) -> dict:
                 payload = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, OSError, ValueError):
             continue
+        # The bridge wraps candles in an envelope ({"payload": {"bars": [...]}});
+        # accept a bare body too so the route is not coupled to the envelope.
+        if isinstance(payload.get("payload"), dict):
+            payload = payload["payload"]
         bars = payload.get("bars") or payload.get("candles") or []
         if bars:
             bars_by_tf[tf] = bars

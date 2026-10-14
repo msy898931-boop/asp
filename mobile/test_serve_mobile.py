@@ -32,9 +32,21 @@ def _bars(n=220, base=1800.0):
 
 
 class _StubBridge(BaseHTTPRequestHandler):
+    """Mirrors the real bridge: candles live under payload.bars."""
     def log_message(self, *a):  # silence
         pass
 
+    def do_GET(self):  # noqa: N802
+        body = json.dumps({"payload": {"bars": _bars()}}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class _BareStubBridge(_StubBridge):
+    """A bare body, to prove the route is not coupled to the envelope."""
     def do_GET(self):  # noqa: N802
         body = json.dumps({"bars": _bars()}).encode("utf-8")
         self.send_response(200)
@@ -109,6 +121,15 @@ class ComputeTest(unittest.TestCase):
         self.assertLessEqual(body["probability"], 1.0)
         self.assertEqual(body["timeframes"], ["D1", "H1", "H4", "M15", "M5"])
         self.assertIn(body["tier"], ("calm", "elevated", "high"))
+
+    def test_bare_body_also_scores(self):
+        bridge = _serve(_BareStubBridge)
+        try:
+            base = "http://127.0.0.1:%d" % bridge.server_address[1]
+            body = sm._compute_volatility(base)
+        finally:
+            _stop(bridge)
+        self.assertTrue(body["available"])
 
     def test_body_is_cached_within_the_ttl(self):
         calls = {"n": 0}
