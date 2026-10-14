@@ -95,10 +95,15 @@ _vol_lock = threading.Lock()
 
 
 def _load_volatility():
-    """The bot's volatility module, imported from its real location, or None."""
+    """The bot's volatility module, imported from its real location, or None.
+
+    Two deployment shapes: the repo keeps it at <root>/bridge/telegram_bot,
+    while the container puts it at /app/resources/bridge/telegram_bot.
+    """
     for cand in (
         os.environ.get("ASTRA_VOLATILITY_DIR", ""),
         os.path.join(ROOT, "bridge", "telegram_bot"),
+        os.path.join(ROOT, "resources", "bridge", "telegram_bot"),
     ):
         if cand and os.path.isfile(os.path.join(cand, "volatility.py")):
             if cand not in sys.path:

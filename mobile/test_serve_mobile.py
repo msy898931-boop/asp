@@ -65,12 +65,32 @@ class TierTest(unittest.TestCase):
         self.assertEqual(sm._tier(0.30, 0.65), "calm")
 
 
+class LoadTest(unittest.TestCase):
+    def test_model_module_is_found(self):
+        self.assertIsNotNone(sm._load_volatility())
+
+    def test_found_in_the_container_layout_too(self):
+        import shutil
+        import tempfile
+        root = tempfile.mkdtemp()
+        try:
+            dest = os.path.join(root, "resources", "bridge", "telegram_bot")
+            os.makedirs(dest)
+            src = os.path.join(os.path.dirname(sm.HERE), "bridge", "telegram_bot")
+            shutil.copy(os.path.join(src, "volatility.py"), dest)
+            original = sm.ROOT
+            sm.ROOT = root
+            try:
+                self.assertIsNotNone(sm._load_volatility())
+            finally:
+                sm.ROOT = original
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
 class ComputeTest(unittest.TestCase):
     def setUp(self):
         sm._vol_cache["at"], sm._vol_cache["body"] = 0.0, None
-
-    def test_model_module_is_found(self):
-        self.assertIsNotNone(sm._load_volatility())
 
     def test_unreachable_bridge_yields_a_null_body(self):
         body = sm._compute_volatility("http://127.0.0.1:9")  # nothing listens
