@@ -5,10 +5,10 @@
 mobile PWA, CI, deployment, docs, git state.
 **Method:** static read of every subsystem, the test suites executed locally,
 the C++ test binaries executed, and the live Render service probed.
-**Verdict:** **84.5 / 100** — a genuinely well-built, unusually honest system
+**Verdict:** **85.0 / 100** — a genuinely well-built, unusually honest system
 that is production-capable today for its stated use, held back by a few real
-gaps (C++ tests outside CI, single-instance deployment, ephemeral bot state,
-and some portability/branding drift).
+gaps (single-instance deployment, ephemeral bot state, no public auth, and
+some portability/branding drift).
 
 This document is a point-in-time assessment. It adds nothing to the code; it
 records what was measured so the next reader does not have to re-derive it.
@@ -22,7 +22,7 @@ records what was measured so the next reader does not have to re-derive it.
 | Python test suites (bot/advisor/research/akoan/mobile/tracker) | **333 passing**, 0 failures |
 | bridge tests (entitlements/astra_bot/volatility/parity/mt5) | **110 passing** |
 | C++ test binaries (19, prebuilt tree) | **19/19 pass** |
-| C++ tests executed in CI | **No** — only build + the 19 targets are defined |
+| C++ tests executed in CI | **Yes** — `ctest --test-dir build --output-on-failure` (19/19) |
 | Committed secrets (tokens/keys/keystore) | **none** (`.env`, `*.keystore`, `*.pem` ignored) |
 | Bare `except:` / TODO / FIXME / HACK | **0 / 0 / 0 / 0** |
 | Live routes `/ /version.json /bot.json /vol.json /api/v1/health /upgrade.json` | all **200** |
@@ -38,7 +38,7 @@ records what was measured so the next reader does not have to re-derive it.
 | # | Dimension | Weight | Score |
 | --- | --- | --- | --- |
 | 1 | Architecture & design | 14 | **12.5** |
-| 2 | Testing & verification | 15 | **13.5** |
+| 2 | Testing & verification | 15 | **14.0** |
 | 3 | Security & safety | 13 | **10.0** |
 | 4 | Reliability & operations | 13 | **10.5** |
 | 5 | Documentation | 11 | **9.0** |
@@ -46,7 +46,7 @@ records what was measured so the next reader does not have to re-derive it.
 | 7 | Product honesty & scientific rigor | 10 | **9.5** |
 | 8 | UX / product polish | 8 | **7.0** |
 | 9 | Delivery & portability | 5 | **3.5** |
-| | **Total** | **100** | **84.5** |
+| | **Total** | **100** | **85.0** |
 
 Band: 90+ exemplary · 80–89 strong · 70–79 solid · <70 needs work.
 
@@ -76,7 +76,7 @@ state. (c) `src/` is ~35 directories and ~28.5k lines of C++ for what the
 shipping product (phone + bot) barely exercises — the C++ surface is far larger
 than the live product needs.
 
-### 2. Testing & verification — 13.5 / 15
+### 2. Testing & verification — 14.0 / 15
 
 **Strengths.** This is the project's best attribute. 443 Python tests across
 six suites plus the bridge, with real (not mocked) code paths — the mobile
@@ -87,12 +87,13 @@ is exactly how the "News tab shipped blank" bug would be caught again. The
 baseline job re-verifies the published research bit-for-bit. Tests assert the
 *absence* of claims ("no edge measured", "n/a" over invented confidence).
 
-**Weaknesses.** The C++ suite (19 targets) is built in CI but **never run** —
-no `ctest` step, so the 28.5k-line engine has no CI gate. Its tests exist and
-pass locally, which makes the omission a one-line fix rather than a design
-flaw, but as it stands a C++ regression can merge green. (The Docker build does
-compile the host, so compile-breaks are caught; behavioural regressions are
-not.)
+**Weaknesses.** The suite is small relative to the surface: 19 targets cover the
+feature engine, API contracts, bridge recovery, persistence, and startup, but
+`src/` is ~28.5k lines across 35 directories, so much of the engine (regime,
+scoring, risk, reconciliation) is exercised only indirectly through the
+integration tests. There is no coverage measurement, so "how much is tested" is
+not answerable from the repo. These are depth concerns, not a missing gate — the
+suite does run in CI (verified live: the `Test` step passed on `32eeaae`).
 
 ### 3. Security & safety — 10 / 13
 
@@ -198,38 +199,44 @@ separated from upstream with a written decision and a hard "never push upstream"
 constraint.
 
 **Weaknesses.** (a) The deployed host (`astra-xlp9.onrender.com`) and the fork
-owner (`msy898931-boop`) are **hardcoded in 18 and 9 places** respectively
-(workflows, bot defaults, mobile README, `serve_mobile.py` APK fallback) — a
-clone-and-rename would need a sweep. (b) A second live poller location (Fly)
-would collide with Render's on the same token. (c) The free tier is a
-constraint the product design leans on.
+owner (`msy898931-boop`) are **hardcoded in 13 lines (13 files) and 8 files**
+respectively (workflows, bot defaults, mobile README, `serve_mobile.py` APK
+fallback, LICENSE) — a clone-and-rename would need a sweep. (b) A second live
+poller location (Fly) would collide with Render's on the same token. (c) The
+free tier is a constraint the product design leans on.
 
 ---
 
 ## 4. Top fixes, ranked by value
 
-1. **Add `ctest` to CI** (`cmake --build build && ctest --test-dir build
-   --output-on-failure`). One line; closes the only real testing gap.
-2. **Fix the bot-command docs** (`bridge/telegram_bot/README.md`, `RUNBOOK.md`)
+1. **Fix the bot-command docs** (`bridge/telegram_bot/README.md`, `RUNBOOK.md`)
    to match the Arabic menu.
-3. **Externalise the host + owner** (`ASTRA_URL`, `ASTRA_REPO`) with the
+2. **Externalise the host + owner** (`ASTRA_URL`, `ASTRA_REPO`) with the
    current values as defaults, so a rename is config, not a code sweep.
-4. **Persist bot state off the free container** (a committed "seed" or an
+3. **Persist bot state off the free container** (a committed "seed" or an
    external store), or document the loss on restart.
-5. **Give `/akoan.json` a warm cache** (compute once at startup) and a client
+4. **Give `/akoan.json` a warm cache** (compute once at startup) and a client
    timeout, so the News tab is never a 100-second blank.
-6. **Add a request timeout** to `getJson()` in `app.js` so no panel hangs.
-7. **Split `app.js` and `astra_bot.py`** along transport / view / state lines.
-8. **Decide the paywall posture** before selling: today the Stripe link grants
+5. **Add a request timeout** to `getJson()` in `app.js` so no panel hangs.
+6. **Split `app.js` and `astra_bot.py`** along transport / view / state lines.
+7. **Decide the paywall posture** before selling: today the Stripe link grants
    nothing automatically and the gate is per-chat local state.
+
+> **Correction (2026-10-14, same day).** The first draft of this audit claimed
+> the C++ suite was built but not run in CI, and ranked "add `ctest`" as fix #1.
+> That was **wrong**: `.github/workflows/ci.yml` has run
+> `ctest --test-dir build --output-on-failure` since commit `5cb9ea7`
+> (2026-10-10), and the live run on `32eeaae` shows the `Test` step passing.
+> The testing dimension is corrected to 14.0 and the total to 85.0. This note
+> stays so the mistake is not repeated.
 
 ## 5. Overall
 
-ASTRA is a **strong, honest, well-tested system (84.5/100)**. Its testing,
+ASTRA is a **strong, honest, well-tested system (85.0/100)**. Its testing,
 documentation-as-memory, and scientific honesty are well above what a project
 of this size usually carries, and the live service is genuinely operational
 (phone app, bot, engine, watchdog all verified live). The remaining points are
-concentrated in three places: the C++ suite is not gated in CI, the deployment
-is single-instance with ephemeral state, and some identity/portability strings
-are hardcoded to one fork. None of these is architectural; each is a bounded,
-low-risk change.
+concentrated in three places: the deployment is single-instance with ephemeral
+state, the public surface has no authentication, and some identity/portability
+strings are hardcoded to one fork. None of these is architectural; each is a
+bounded, low-risk change.
