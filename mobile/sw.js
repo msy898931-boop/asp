@@ -4,7 +4,7 @@
    up on the next load instead of the load after next, and the app still opens
    offline. */
 
-const SHELL = "astra-shell-v20";
+const SHELL = "astra-shell-v21";
 const ASSETS = [
   "./",
   "./index.html",

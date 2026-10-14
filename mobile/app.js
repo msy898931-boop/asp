@@ -60,6 +60,35 @@ const STRINGS = {
     vol_title: "Volatility filter",
     vol_note: "Measured on closed bars: will the next window be turbulent? Size, not direction.",
     vol_caveat: "A safety filter, not a trade signal. When it says \"high\", the market is usually violent — so a tight entry is a bad idea. It never predicts direction.",
+    tab_akoan: "News",
+    akoan_title: "News vs results",
+    akoan_note: "Does the news explain the trade results? Every rate is compared to the overall baseline, and only a difference that survives correction is called a finding.",
+    akoan_loading: "Running the engine…",
+    akoan_unavail: "akoan unavailable: {reason}",
+    akoan_verdict_EDGE_CANDIDATE: "Candidate edge",
+    akoan_verdict_NO_EDGE_MEASURED: "No news edge measured",
+    akoan_verdict_INSUFFICIENT_DATA: "Not enough data",
+    akoan_verdict_EDGE_CANDIDATE_sub: "A difference survived correction — needs a bigger sample to confirm.",
+    akoan_verdict_NO_EDGE_MEASURED_sub: "Every news slice sits on the baseline. The news does not explain the results.",
+    akoan_verdict_INSUFFICIENT_DATA_sub: "Too few scored trades to judge. No rate is stated.",
+    akoan_base: "Baseline {p} · {n} scored",
+    akoan_net: "Net {r}",
+    akoan_dim_blackout: "News blackout window",
+    akoan_dim_recent_release: "After a release",
+    akoan_dim_upcoming: "Before a release",
+    akoan_dim_alignment: "Trade side vs news",
+    akoan_dim_news_in_play: "News in play",
+    akoan_val_blackout: "blackout", akoan_val_quiet: "quiet",
+    akoan_val_after_release: "after release", akoan_val_no_release: "no recent release",
+    akoan_val_before_release: "before release", akoan_val_no_upcoming: "no upcoming",
+    akoan_val_WITH_NEWS: "with news", akoan_val_AGAINST_NEWS: "against news",
+    akoan_val_NEUTRAL: "neutral",
+    akoan_val_news_in_play: "news in play", akoan_val_no_news: "no news",
+    akoan_not_comparable: "Only one side present — nothing to compare against. {n} scored.",
+    akoan_insufficient: "insufficient data ({n})",
+    akoan_sig: "survived correction",
+    akoan_cov: "Calendar coverage: {events} events ({released} released) over ~{days} days. Partial — the result is only as good as the record.",
+    akoan_footer: "akoan engine — decision support only, not financial advice.",
     vol_tier_calm: "calm", vol_tier_elevated: "elevated", vol_tier_high: "high",
     vol_verdict_calm: "Next window likely quiet — normal conditions.",
     vol_verdict_elevated: "Next window could be livelier than usual. Size positions with care.",
@@ -157,6 +186,35 @@ const STRINGS = {
     vol_title: "فلتر التقلّب",
     vol_note: "مقاس على الشموع المغلقة: هل تكون النافذة القادمة مضطربة؟ الحجم، لا الاتجاه.",
     vol_caveat: "إجراء أمان، لا إشارة تداول. حين يقول «مرتفع» يكون السوق عادةً عنيفًا — فالدخول الضيّق فكرة سيّئة. لا يتنبّأ بالاتجاه إطلاقًا.",
+    tab_akoan: "الخبر",
+    akoan_title: "الخبر مقابل النتائج",
+    akoan_note: "هل يفسّر الخبر نتائج الصفقات؟ كل نسبة تُقارَن بخط الأساس العام، والفرق لا يُسمّى نتيجة إلا إذا نجا من تصحيح التعدّد.",
+    akoan_loading: "جارٍ تشغيل المحرك…",
+    akoan_unavail: "محرك akoan غير متاح: {reason}",
+    akoan_verdict_EDGE_CANDIDATE: "مرشّح لحافة",
+    akoan_verdict_NO_EDGE_MEASURED: "ما انقاس تأثير للخبر",
+    akoan_verdict_INSUFFICIENT_DATA: "بيانات غير كافية",
+    akoan_verdict_EDGE_CANDIDATE_sub: "في فرق نجا من التصحيح — بدو عيّنة أكبر للتأكيد.",
+    akoan_verdict_NO_EDGE_MEASURED_sub: "كل شرائح الخبر تقع على خط الأساس. الخبر لا يفسّر النتائج.",
+    akoan_verdict_INSUFFICIENT_DATA_sub: "صفقات محسومة قليلة للحكم. لا تُذكر أي نسبة.",
+    akoan_base: "خط الأساس {p} · {n} صفقة مقيّمة",
+    akoan_net: "صافي {r}",
+    akoan_dim_blackout: "نافذة الخبر (محظور)",
+    akoan_dim_recent_release: "بعد صدور خبر",
+    akoan_dim_upcoming: "قبل صدور خبر",
+    akoan_dim_alignment: "اتجاه الصفقة مقابل الخبر",
+    akoan_dim_news_in_play: "وجود خبر",
+    akoan_val_blackout: "محظور", akoan_val_quiet: "هادئ",
+    akoan_val_after_release: "بعد صدور", akoan_val_no_release: "بلا خبر حديث",
+    akoan_val_before_release: "قبل صدور", akoan_val_no_upcoming: "بلا خبر قريب",
+    akoan_val_WITH_NEWS: "مع الخبر", akoan_val_AGAINST_NEWS: "ضد الخبر",
+    akoan_val_NEUTRAL: "محايد",
+    akoan_val_news_in_play: "الخبر مؤثّر", akoan_val_no_news: "بلا خبر",
+    akoan_not_comparable: "جهة واحدة فقط — ما في مجموعة مقارنة. {n} صفقة مقيّمة.",
+    akoan_insufficient: "بيانات غير كافية ({n})",
+    akoan_sig: "نجا من التصحيح",
+    akoan_cov: "تغطية سجل الأخبار: {events} حدث ({released} صدر) خلال ~{days} يوم. جزئية — النتيجة بقدر ما في السجل.",
+    akoan_footer: "محرك akoan — دعم قرار فقط، وليس نصيحة مالية.",
     vol_tier_calm: "هادئ", vol_tier_elevated: "مرتفع قليلًا", vol_tier_high: "مرتفع",
     vol_verdict_calm: "النافذة القادمة هادئة على الأرجح — ظروف طبيعية.",
     vol_verdict_elevated: "قد تكون النافذة القادمة أنشط من المعتاد. احسب حجم الصفقة بحذر.",
@@ -229,6 +287,7 @@ const mapI18n = (m, k) => (m[lang] || m.en)[k] || k;
 let activeTf = "M15";
 let alertsOn = false;
 let swReg = null;   // the service worker registration, used to show notifications
+let akoanData;      // last akoan reading, so a language switch can re-render it
 let lastSignalKey = null;
 let lastPrice = null;
 let priceLevels = []; // { value, crossed }
@@ -267,6 +326,7 @@ function applyLang() {
     el.setAttribute("aria-label", T(el.getAttribute("data-i18n-aria")));
   });
   try { localStorage.setItem(LANG_KEY, lang); } catch (e) { /* ignore */ }
+  rerenderAkoan();
 }
 
 function initLang() {
@@ -1232,6 +1292,129 @@ function renderVolatility(data) {
   });
 }
 
+// akoan: does the news explain the results? The server runs the same engine the
+// CLI does, so this panel cannot disagree with the report. It is deliberately
+// slow to change (the study replays the corpus), so it is fetched on demand.
+async function loadAkoan() {
+  const verdict = $("akoan-verdict");
+  const sub = $("akoan-sub");
+  const dims = $("akoan-dims");
+  const base = $("akoan-base");
+  const cov = $("akoan-cov");
+  const note = $("akoan-note");
+  verdict.textContent = T("akoan_loading");
+  verdict.className = "akoan-verdict";
+  sub.textContent = "";
+  dims.innerHTML = "";
+  base.textContent = "";
+  cov.textContent = "";
+  note.textContent = "";
+
+  let data = null;
+  try {
+    const res = await fetch("akoan.json", { cache: "no-store" });
+    data = await res.json();
+  } catch (err) {
+    data = null;
+  }
+  akoanData = data;
+  renderAkoan(data);
+}
+
+// The panel's text is built in JS, so a language switch must rebuild it from
+// the last reading — applyLang only rewrites [data-i18n] nodes.
+function rerenderAkoan() {
+  if (akoanData !== undefined) renderAkoan(akoanData);
+}
+
+function _akoanPct(x) {
+  return (x === null || x === undefined) ? "—" : `${(x * 100).toFixed(1)}%`;
+}
+
+function renderAkoan(data) {
+  const verdict = $("akoan-verdict");
+  const sub = $("akoan-sub");
+  const dims = $("akoan-dims");
+  const base = $("akoan-base");
+  const cov = $("akoan-cov");
+  const note = $("akoan-note");
+
+  if (!data || !data.available) {
+    const reason = (data && data.reason) || "backend unreachable";
+    verdict.textContent = "—";
+    verdict.className = "akoan-verdict";
+    sub.textContent = fmt(T("akoan_unavail"), { reason });
+    dims.innerHTML = "";
+    base.textContent = "";
+    cov.textContent = "";
+    note.textContent = "";
+    return;
+  }
+
+  const v = data.verdict || "INSUFFICIENT_DATA";
+  verdict.textContent = T(`akoan_verdict_${v}`);
+  verdict.className = "akoan-verdict " + v.toLowerCase();
+  sub.textContent = T(`akoan_verdict_${v}_sub`);
+
+  base.textContent = fmt(T("akoan_base"), {
+    p: _akoanPct(data.base_rate),
+    n: data.scored ?? 0,
+  }) + (data.net_r !== undefined ? " · " + fmt(T("akoan_net"), { r: `${data.net_r >= 0 ? "+" : ""}${data.net_r}R` }) : "");
+
+  dims.innerHTML = "";
+  (data.dimensions || []).forEach((dim) => {
+    const wrap = document.createElement("div");
+    wrap.className = "akoan-dim";
+    const title = document.createElement("div");
+    title.className = "akoan-dim-title";
+    title.textContent = T(`akoan_dim_${dim.name}`);
+    wrap.appendChild(title);
+
+    if (!dim.comparable) {
+      const row = document.createElement("div");
+      row.className = "akoan-row muted";
+      const total = (dim.buckets || []).reduce((s, b) => s + (b.n || 0), 0);
+      row.textContent = fmt(T("akoan_not_comparable"), { n: total });
+      wrap.appendChild(row);
+      dims.appendChild(wrap);
+      return;
+    }
+
+    (dim.buckets || []).forEach((b) => {
+      const row = document.createElement("div");
+      row.className = "akoan-row";
+      if (b.significant) row.classList.add("sig");
+
+      const label = document.createElement("span");
+      label.className = "akoan-label";
+      label.textContent = T(`akoan_val_${b.value}`);
+
+      const val = document.createElement("span");
+      val.className = "akoan-val";
+      if (b.insufficient) {
+        val.textContent = fmt(T("akoan_insufficient"), { n: b.n });
+        val.classList.add("muted");
+      } else {
+        const edge = (b.edge_vs_base === null || b.edge_vs_base === undefined)
+          ? "" : ` · ${b.edge_vs_base >= 0 ? "+" : ""}${(b.edge_vs_base * 100).toFixed(1)}%`;
+        val.textContent = `${_akoanPct(b.win_rate)} · n=${b.n}${edge}`
+          + (b.significant ? ` ⭐ ${T("akoan_sig")}` : "");
+      }
+
+      row.appendChild(label);
+      row.appendChild(val);
+      wrap.appendChild(row);
+    });
+    dims.appendChild(wrap);
+  });
+
+  const c = data.coverage || {};
+  cov.textContent = fmt(T("akoan_cov"), {
+    events: c.events ?? 0, released: c.released ?? 0, days: c.span_days ?? 0,
+  });
+  note.textContent = T("akoan_footer");
+}
+
 // A prominent live price in the header. The price itself comes from the live
 // tick (the freshest quote the bridge has); the closed-bar series only supplies
 // the reference for the change. Sampling the price from the newest *closed* bar
@@ -1306,6 +1489,7 @@ function bindTabs() {
         (p.hidden = p.id !== `view-${view}`));
       if (view === "chart") loadChart();
       if (view === "vol") loadVolatility();
+      if (view === "akoan") loadAkoan();
       if (view === "conn") renderConn();
       if (view === "tracker") loadTracker();
       if (view === "ai") loadAdvisor(false);

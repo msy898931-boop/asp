@@ -228,5 +228,114 @@ class RouteTest(unittest.TestCase):
         self.assertIn("probability", body)
 
 
+class AkoanPanelTest(unittest.TestCase):
+    """The akoan tab must be wired end to end, or it ships blank."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_panel_exists_and_is_named(self):
+        html = self._read("index.html")
+        self.assertIn('id="view-akoan"', html)
+        self.assertIn('data-view="akoan"', html)
+        for anchor in ('id="akoan-verdict"', 'id="akoan-dims"', 'id="akoan-base"',
+                       'id="akoan-cov"'):
+            self.assertIn(anchor, html)
+
+    def test_app_wires_the_engine_route(self):
+        js = self._read("app.js")
+        self.assertIn("loadAkoan", js)
+        self.assertIn("renderAkoan", js)
+        self.assertIn("akoan.json", js)
+        for key in ("tab_akoan", "akoan_verdict_NO_EDGE_MEASURED",
+                    "akoan_base", "akoan_cov", "akoan_not_comparable",
+                    "akoan_footer"):
+            self.assertIn(key, js, "missing akoan string %s" % key)
+
+    def test_panel_states_its_disclaimer(self):
+        js = self._read("app.js")
+        self.assertIn("not financial advice", js)
+
+    def test_styles_exist(self):
+        css = self._read("styles.css")
+        for cls in (".akoan-verdict", ".akoan-row", ".akoan-base", ".akoan-dim"):
+            self.assertIn(cls, css)
+
+
+class AkoanRouteTest(unittest.TestCase):
+    def setUp(self):
+        sm._akoan_cache["at"], sm._akoan_cache["body"] = 0.0, None
+
+    def test_compact_shape_is_phone_sized(self):
+        result = {
+            "verdict": "NO_EDGE_MEASURED", "scored": 353, "wins": 123,
+            "losses": 230, "net_r": -33.44, "base_rate": 0.348, "survivors": 0,
+            "min_n": 8, "fdr_q": 0.10,
+            "dimensions": [{"name": "blackout", "comparable": False,
+                            "buckets": [{"value": "quiet", "n": 353,
+                                         "win_rate": 0.348, "edge_vs_base": 0.0,
+                                         "net_r": -33.4, "significant": False}]}],
+            "coverage": {"events": 1659, "released": 1332, "span_days": 119},
+        }
+        body = sm._akoan_compact(result)
+        self.assertEqual(body["engine"], "akoan")
+        self.assertEqual(body["verdict"], "NO_EDGE_MEASURED")
+        self.assertEqual(body["coverage"]["span_days"], 119)
+        bucket = body["dimensions"][0]["buckets"][0]
+        self.assertFalse(bucket["insufficient"])
+        self.assertEqual(bucket["win_rate"], 0.348)
+
+    def test_insufficient_bucket_is_flagged(self):
+        result = {"dimensions": [{"name": "blackout", "comparable": True,
+                                  "buckets": [{"value": "quiet", "n": 2,
+                                               "win_rate": None}]}]}
+        body = sm._akoan_compact(result)
+        self.assertTrue(body["dimensions"][0]["buckets"][0]["insufficient"])
+
+    def test_unavailable_engine_yields_a_null_body(self):
+        original = sm._load_akoan
+        sm._load_akoan = lambda: None
+        try:
+            body = sm._compute_akoan()
+        finally:
+            sm._load_akoan = original
+        self.assertFalse(body["available"])
+        self.assertIn("reason", body)
+
+    def test_body_is_cached_within_the_ttl(self):
+        calls = {"n": 0}
+        original = sm._compute_akoan
+
+        def counting():
+            calls["n"] += 1
+            return {"available": False, "reason": "stub"}
+
+        sm._compute_akoan = counting
+        try:
+            first = sm.akoan_body(now=1000.0)
+            second = sm.akoan_body(now=1000.0 + sm._AKOAN_CACHE_TTL - 1)
+        finally:
+            sm._compute_akoan = original
+        self.assertEqual(calls["n"], 1)
+        self.assertEqual(first, second)
+
+    def test_cache_expires_after_the_ttl(self):
+        calls = {"n": 0}
+
+        def counting():
+            calls["n"] += 1
+            return {"available": False, "reason": "stub"}
+
+        original = sm._compute_akoan
+        sm._compute_akoan = counting
+        try:
+            sm.akoan_body(now=2000.0)
+            sm.akoan_body(now=2000.0 + sm._AKOAN_CACHE_TTL + 1)
+        finally:
+            sm._compute_akoan = original
+        self.assertEqual(calls["n"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()

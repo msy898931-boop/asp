@@ -62,11 +62,32 @@ python3 akoan/study.py
 
 # send the report to Telegram
 python3 akoan/run.py --send
+
+# the weekly Telegram digest of the study (Mondays, 06:00 UTC)
+python3 bot/weekly_akoan.py --dry-run
 ```
+
+## On the phone
+
+The PWA (`mobile/`) has a **News** tab that shows the same result. It fetches
+`/akoan.json`, which the mobile server computes by running this engine on the
+server — same code as the CLI, so the panel and the report cannot disagree. The
+route is cached for ten minutes and computed behind a lock, because the corpus
+replay is heavy and every phone polls.
+
+## Weekly on Telegram
+
+`bot/weekly_akoan.py` sends the study as one Arabic message a week (workflow
+`astra-weekly-akoan.yml`, Monday 06:00 UTC). Weekly, not daily: the answer moves
+slowly and a daily message would be noise. A state file in the Actions cache
+records which ISO weeks were sent, so a repeated cron slot changes latency only.
+It names the baseline, the per-dimension buckets, the verdict, and the coverage
+caveat — never an edge on thin data.
 
 Environment knobs: `ASTRA_AKOAN_MIN_N`, `ASTRA_AKOAN_FDR_Q`,
 `ASTRA_AKOAN_BEFORE_MIN`, `ASTRA_AKOAN_AFTER_MIN`, `ASTRA_AKOAN_RECENT_MIN`,
-`ASTRA_AKOAN_EVENTS`, `ASTRA_AKOAN_TRADES`, `ASTRA_AKOAN_CORPUS`.
+`ASTRA_AKOAN_EVENTS`, `ASTRA_AKOAN_TRADES`, `ASTRA_AKOAN_CORPUS`,
+`ASTRA_WEEKLY_AKOAN_STATE`.
 
 ## Reading the output
 

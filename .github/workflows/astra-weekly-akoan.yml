@@ -1,0 +1,71 @@
+# The weekly akoan report: one Telegram message a week with the news-vs-results
+# read, produced by the same engine the CLI and the phone panel use.
+#
+# Weekly, not daily: the study replays the committed corpus and the answer moves
+# slowly, so a daily message would be noise. A state file in the Actions cache
+# records which ISO weeks were sent, so a repeated cron slot changes latency
+# only.
+#
+# Free, like the daily report: a cron, a small state file, one message a week.
+#
+# Required repository secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
+# Without them the job prints the report (dry mode) and exits zero.
+
+name: astra-weekly-akoan
+
+on:
+  schedule:
+    # Monday 06:00 UTC = 09:00 in UTC+3 (Damascus) — the week's read, first
+    # thing Monday.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the report instead of sending it"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-weekly-akoan
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore the akoan event ledger
+        uses: actions/cache/restore@v4
+        with:
+          path: run/akoan_events.jsonl
+          key: akoan-events-${{ github.run_id }}
+          restore-keys: |
+            akoan-events-
+
+      - name: Run the tests
+        run: python3 -m unittest discover -s bot -p "test_weekly_akoan.py"
+
+      - name: Send the week's report
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          python3 bot/weekly_akoan.py $ARGS
+
+      - name: Save the akoan event ledger
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: run/akoan_events.jsonl
+          key: akoan-events-${{ github.run_id }}

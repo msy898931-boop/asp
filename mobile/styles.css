@@ -407,6 +407,41 @@ main { flex: 1; padding: 8px 14px 90px; }
 .vol-verdict.high { color: var(--down); }
 .vol-verdict.elevated { color: var(--gold); }
 
+/* ── akoan: news vs results ─────────────────────────────────────────── */
+.akoan-head { display: flex; align-items: baseline; gap: 12px; margin: 4px 0 8px; }
+.akoan-verdict {
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  line-height: 1.2; color: var(--paper);
+}
+.akoan-verdict.edge_candidate { color: var(--gold); }
+.akoan-verdict.no_edge_measured { color: var(--flat); }
+.akoan-verdict.insufficient_data { color: var(--muted); }
+.akoan-sub { font-size: 13px; line-height: 1.5; margin: 0 0 14px; color: var(--muted); }
+
+.akoan-base {
+  font-family: var(--mono); font-size: 12px; color: var(--gold);
+  padding: 8px 12px; margin-bottom: 14px;
+  border: 1px solid var(--gold-dim); border-radius: 10px;
+  background: var(--ink-2);
+}
+
+.akoan-dim { margin-bottom: 14px; }
+.akoan-dim-title {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px;
+}
+.akoan-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; padding: 7px 10px; border-radius: 8px;
+  background: var(--ink-2); border: 1px solid var(--edge);
+  margin-bottom: 5px; font-size: 12.5px;
+}
+.akoan-row.sig { border-color: var(--gold-dim); background: var(--ink-3); }
+.akoan-row.muted { color: var(--muted); font-style: italic; }
+.akoan-label { color: var(--paper); }
+.akoan-val { font-family: var(--mono); color: var(--paper); text-align: end; }
+.akoan-val.muted { color: var(--muted); }
+
 /* ── connection table ───────────────────────────────────────────────── */
 .conn {
   width: 100%; border-collapse: collapse;

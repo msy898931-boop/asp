@@ -175,6 +175,107 @@ def volatility_body(bridge_base: str, now: float | None = None) -> bytes:
     return body
 
 
+# ── akoan reading ────────────────────────────────────────────────────────
+#
+# The phone can reach neither the trade ledger nor the calendar feed. This route
+# runs the akoan engine on the server (over the committed corpus and the local
+# event ledger, both of which the server can read) and returns the *compact*
+# result — verdict, base rate, and one bucket per dimension. Same engine as the
+# CLI, so the panel cannot disagree with the report.
+#
+# It is the slowest route (the corpus replay takes a few seconds), so it is
+# cached for minutes and computed behind a lock: one run serves every phone.
+
+_AKOAN_CACHE_TTL = 600.0
+_akoan_cache = {"at": 0.0, "body": None}
+_akoan_lock = threading.Lock()
+_akoan_compute_lock = threading.Lock()
+
+
+def _load_akoan():
+    """The akoan package, imported from its real location, or None."""
+    for cand in (os.environ.get("ASTRA_AKOAN_DIR", ""), os.path.join(ROOT, "akoan")):
+        if cand and os.path.isfile(os.path.join(cand, "engine.py")):
+            if cand not in sys.path:
+                sys.path.insert(0, cand)
+            break
+    try:
+        import study
+        return study
+    except ImportError:
+        return None
+
+
+def _compute_akoan() -> dict:
+    """The compact akoan result, or an 'available: false' body."""
+    mod = _load_akoan()
+    if mod is None:
+        return {"available": False, "reason": "engine unavailable"}
+    try:
+        result = mod.study()
+    except Exception as exc:  # a bad corpus must not take the app down
+        return {"available": False, "reason": "study failed: %s" % exc}
+    compact = _akoan_compact(result)
+    compact["available"] = True
+    return compact
+
+
+def _akoan_compact(result: dict) -> dict:
+    """The result trimmed for a phone screen: no per-bucket prose, no raw rows."""
+    dims = []
+    for dim in result.get("dimensions", []):
+        buckets = [{
+            "value": b.get("value"),
+            "n": b.get("n"),
+            "win_rate": b.get("win_rate"),
+            "edge_vs_base": b.get("edge_vs_base"),
+            "net_r": b.get("net_r"),
+            "significant": bool(b.get("significant")),
+            "insufficient": b.get("win_rate") is None,
+        } for b in dim.get("buckets", [])]
+        dims.append({"name": dim.get("name"),
+                     "comparable": bool(dim.get("comparable")),
+                     "buckets": buckets})
+    cov = result.get("coverage") or {}
+    return {
+        "engine": "akoan",
+        "verdict": result.get("verdict"),
+        "scored": result.get("scored"),
+        "wins": result.get("wins"),
+        "losses": result.get("losses"),
+        "base_rate": result.get("base_rate"),
+        "overall_win_rate": result.get("overall_win_rate"),
+        "net_r": result.get("net_r"),
+        "survivors": result.get("survivors"),
+        "min_n": result.get("min_n"),
+        "fdr_q": result.get("fdr_q"),
+        "dimensions": dims,
+        "coverage": {"events": cov.get("events", 0),
+                     "released": cov.get("released", 0),
+                     "span_days": cov.get("span_days", 0)},
+        "bars_m15": result.get("corpus_bars_m15"),
+        "news_coverage_pct": result.get("news_coverage_pct"),
+    }
+
+
+def akoan_body(now: float | None = None) -> bytes:
+    """Cached JSON body for /akoan.json."""
+    now = time.time() if now is None else now
+    with _akoan_lock:
+        if _akoan_cache["body"] is not None and now - _akoan_cache["at"] < _AKOAN_CACHE_TTL:
+            return _akoan_cache["body"]
+    # One compute at a time: the replay is CPU-heavy and every phone polls.
+    with _akoan_compute_lock:
+        with _akoan_lock:
+            if _akoan_cache["body"] is not None and now - _akoan_cache["at"] < _AKOAN_CACHE_TTL:
+                return _akoan_cache["body"]
+        body = json.dumps(_compute_akoan(), ensure_ascii=False).encode("utf-8")
+        with _akoan_lock:
+            _akoan_cache["at"], _akoan_cache["body"] = now, body
+    return body
+
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "AstraMobile/1.0"
 
@@ -198,6 +299,8 @@ class Handler(BaseHTTPRequestHandler):
             self._upgrade_json()
         elif path == "/vol.json":
             self._volatility()
+        elif path == "/akoan.json":
+            self._akoan()
         elif path.startswith("/api/v1/"):
             self._proxy(self.api_base + path[len("/api/v1"):], self.path)
         elif path.startswith("/bridge/"):
@@ -249,6 +352,16 @@ class Handler(BaseHTTPRequestHandler):
         construction. Null body when it cannot be scored.
         """
         body = volatility_body(self.bridge_base)
+        self._send(200, body, "application/json; charset=utf-8")
+
+    # -- akoan reading ------------------------------------------------------
+
+    def _akoan(self) -> None:
+        """The akoan result, computed by the same engine the CLI runs.
+
+        Cached for minutes; the replay is heavy, so one run serves every phone.
+        """
+        body = akoan_body()
         self._send(200, body, "application/json; charset=utf-8")
 
     # -- APK download -------------------------------------------------------

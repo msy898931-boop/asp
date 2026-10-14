@@ -475,6 +475,20 @@ now with evidence behind the claim rather than only an argument.
 what the feed later forgets. CI runs the tests and asserts the study
 reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
 
+**Where it surfaces.** Two places, both reading the same engine:
+
+- **The phone's News tab** (`mobile/`, `/akoan.json`). The mobile server runs
+  `study.study()` and returns a compact body — verdict, baseline, one bucket per
+  dimension, coverage. Cached 10 min behind a compute lock, because the replay
+  is heavy and every phone polls. The panel's text is built in JS, so
+  `applyLang` calls `rerenderAkoan()` to rebuild it from the last reading on a
+  language switch (an `[data-i18n]` sweep cannot reach generated nodes).
+- **A weekly Telegram digest** (`bot/weekly_akoan.py`, workflow
+  `astra-weekly-akoan.yml`, Monday 06:00 UTC). Weekly, not daily: the answer
+  moves slowly and a daily message would be noise. ISO-week state in the
+  Actions cache makes a repeated cron slot idempotent. The ledger is accrued
+  first, then cached back, so the record only grows.
+
 The transparency page (`mobile/performance.html`) now leads with the measured
 volatility edge (AUC 0.743) and keeps the directional coin-flip (AUC 0.50) as
 the honest contrast.
