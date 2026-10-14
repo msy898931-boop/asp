@@ -372,6 +372,41 @@ main { flex: 1; padding: 8px 14px 90px; }
 .edge-text em { font-size: 11px; font-style: normal; color: var(--muted);
                 letter-spacing: .04em; }
 
+/* The volatility badge states a real, measured edge — green, not a warning. */
+.edge-badge.vol { border-color: rgba(79,180,119,.5); background: rgba(79,180,119,.07); }
+.edge-dot.vol { background: var(--up); box-shadow: 0 0 10px var(--up); }
+.edge-badge.vol .edge-text b { color: var(--up); }
+
+/* ── volatility filter ──────────────────────────────────────────────── */
+.vol-head { display: flex; align-items: baseline; gap: 12px; margin: 4px 0 12px; }
+.vol-pct { font-family: var(--serif); font-size: 44px; font-weight: 700;
+           letter-spacing: .02em; color: var(--paper); }
+.vol-pct.calm { color: var(--up); }
+.vol-pct.elevated { color: var(--gold); }
+.vol-pct.high { color: var(--down); }
+.vol-tier { font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+            padding: 4px 10px; border-radius: 999px; border: 1px solid var(--edge); }
+.vol-tier.calm { color: var(--up); border-color: rgba(79,180,119,.5); }
+.vol-tier.elevated { color: var(--gold); border-color: var(--gold-dim); }
+.vol-tier.high { color: var(--down); border-color: rgba(209,88,79,.55); }
+
+.vol-meter { position: relative; height: 12px; border-radius: 999px;
+             background: var(--ink-3); border: 1px solid var(--edge);
+             overflow: hidden; margin: 0 0 14px; }
+.vol-meter i { display: block; height: 100%; width: 0;
+               background: var(--muted); transition: width .4s ease; }
+.vol-meter i.calm { background: var(--up); }
+.vol-meter i.elevated { background: var(--gold); }
+.vol-meter i.high { background: var(--down); }
+/* The threshold tick: where "high" begins. */
+.vol-meter u { position: absolute; top: -2px; bottom: -2px; left: 65%;
+               width: 2px; background: var(--paper); opacity: .7; }
+
+.vol-verdict { font-size: 13.5px; line-height: 1.5; margin: 0 0 10px;
+               color: var(--paper); }
+.vol-verdict.high { color: var(--down); }
+.vol-verdict.elevated { color: var(--gold); }
+
 /* ── connection table ───────────────────────────────────────────────── */
 .conn {
   width: 100%; border-collapse: collapse;
@@ -432,14 +467,20 @@ main { flex: 1; padding: 8px 14px 90px; }
 /* ── tabs ───────────────────────────────────────────────────────────── */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
   gap: 1px;
   background: var(--edge);
   border-top: 1px solid var(--edge);
   padding-bottom: env(safe-area-inset-bottom);
   z-index: 10;
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tab {
+  flex: 1 0 auto;
+  min-width: 66px;
   font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
   text-transform: uppercase;
   background: var(--ink-2); color: var(--muted);

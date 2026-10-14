@@ -51,6 +51,9 @@ jobs:
       - name: Every offline-shell asset must exist
         run: python3 mobile/check_shell.py
 
+      - name: Test the phone server's volatility route
+        run: python3 mobile/test_serve_mobile.py
+
       - name: Test the signal engine and its honesty guarantees
         run: python3 -m unittest discover -s tracker -p "test_*.py"
 

@@ -438,12 +438,14 @@ installable Android app is a WebView shell around it (`android/`). Two rules
 keep them honest and in sync:
 
 - **The app states its own limits.** The analytics panel is titled "Market
-  state" and carries a permanent badge reading *Edge: none measured (OOS 2025,
-  AUC ≈ 0.50)*, matching the research finding above. Confidence is shown only
-  when the backend produced a *calibrated* probability; otherwise it reads
-  `n/a` rather than inventing a number from an uncalibrated score. Do not
-  reintroduce predictive language ("signal", "buy/sell") — that would assert an
-  edge the corpus does not support.
+  state" and carries two permanent honesty badges: *Direction edge: none
+  measured (OOS 2025, AUC ≈ 0.50)* — matching the research finding above — and
+  *Volatility edge: measured (OOS 2025, AUC ≈ 0.74, predicts size not
+  direction)*. Confidence is shown only when the backend produced a
+  *calibrated* probability; otherwise it reads `n/a` rather than inventing a
+  number from an uncalibrated score. Do not reintroduce predictive language
+  ("signal", "buy/sell") — that would assert an edge the corpus does not
+  support.
 - **Bilingual by design (EN/AR, RTL).** All user-facing strings live in the
   `STRINGS` table in `mobile/app.js` and are applied via `data-i18n` attributes.
   The layout flips with `dir="rtl"`; numeric readouts stay LTR. Add a string in
@@ -451,6 +453,22 @@ keep them honest and in sync:
 
 The app is read-only: one origin (`serve_mobile.py`) reverse-proxies `/api/v1`
 to the backend and `/bridge` to the bridge. It never places trades.
+
+### The volatility panel (the phone's one measured edge)
+
+The "Vol" tab shows the same calibrated reading the bot reports. `serve_mobile.py`
+exposes `/vol.json`, which imports the bot's `volatility.py` from
+`bridge/telegram_bot`, fetches M5/M15/H1/H4/D1 candles from the bridge, and
+scores the loaded artifact — the *same* artifact and *same* code, so the phone
+and the bot cannot disagree by construction. The result is cached (~20 s) so the
+15 s app refresh does not re-hit the bridge five times each cycle.
+
+The route is best-effort: an unreachable bridge, a missing model, or too few
+closed bars yields `{"available": false, "reason": ...}` and the panel reads
+"reading unavailable" — it never fabricates a number. The threshold tick on the
+meter is the model's own `alert_threshold`; the panel states plainly that this
+measures *size*, not direction, and is a safety filter rather than a trade
+signal.
 
 ### APK build
 

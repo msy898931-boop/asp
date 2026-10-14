@@ -67,12 +67,20 @@
       </div>
     </div>
 
-    <!-- Honesty badge: no measured edge. Always visible, never hidden. -->
+    <!-- Honesty badges: direction has no measured edge; volatility does.
+         Both always visible, never hidden. -->
     <div class="edge-badge" role="note">
       <span class="edge-dot" aria-hidden="true"></span>
       <span class="edge-text">
-        <b data-i18n="edge_none">Edge: none measured</b>
+        <b data-i18n="edge_none">Direction edge: none measured</b>
         <em data-i18n="edge_none_sub">OOS 2025 · AUC ≈ 0.50</em>
+      </span>
+    </div>
+    <div class="edge-badge vol" role="note">
+      <span class="edge-dot vol" aria-hidden="true"></span>
+      <span class="edge-text">
+        <b data-i18n="edge_vol">Volatility edge: measured</b>
+        <em data-i18n="edge_vol_sub">OOS 2025 · AUC ≈ 0.74 · predicts size, not direction</em>
       </span>
     </div>
 
@@ -196,6 +204,20 @@
     <button id="ai-refresh" class="text-btn" type="button" data-i18n="ai_refresh">Ask again</button>
   </section>
 
+  <!-- VOLATILITY -->
+  <section class="panel" id="view-vol" hidden>
+    <h2 class="panel-title" data-i18n="vol_title">Volatility filter</h2>
+    <p class="panel-note" data-i18n="vol_note">Measured on closed bars: will the next window be turbulent? Size, not direction.</p>
+    <div class="vol-head">
+      <span id="vol-pct" class="vol-pct">--</span>
+      <span id="vol-tier" class="vol-tier calm">--</span>
+    </div>
+    <div class="vol-meter"><i id="vol-fill"></i><u id="vol-mark"></u></div>
+    <p id="vol-verdict" class="vol-verdict">--</p>
+    <p class="stamp" id="vol-meta"></p>
+    <p class="panel-note" id="vol-caveat" data-i18n="vol_caveat">A safety filter, not a trade signal. When it says "high", the market is usually violent — so a tight entry is a bad idea. It never predicts direction.</p>
+  </section>
+
   <section class="panel" id="view-tracker" hidden>
     <h2 class="panel-title" data-i18n="tracker_title">Signal tracker</h2>
     <p class="panel-note ai-warn" data-i18n="tracker_warn">Replayed from closed bars. Unvalidated; not scored long enough to trust. Not financial advice.</p>
@@ -209,6 +231,7 @@
 <nav class="tabs" role="tablist">
   <button class="tab" data-view="status" aria-selected="true" type="button" data-i18n="tab_status">Status</button>
   <button class="tab" data-view="signal" type="button" data-i18n="tab_signal">State</button>
+  <button class="tab" data-view="vol" type="button" data-i18n="tab_vol">Vol</button>
   <button class="tab" data-view="chart" type="button" data-i18n="tab_chart">Chart</button>
   <button class="tab" data-view="tracker" type="button" data-i18n="tab_tracker">Signals</button>
   <button class="tab" data-view="ai" type="button" data-i18n="tab_ai">AI</button>

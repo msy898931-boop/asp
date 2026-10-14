@@ -18,7 +18,7 @@ const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
 const STRINGS = {
   en: {
     title_sub: "XAUUSD · shadow mode",
-    tab_status: "Status", tab_signal: "State", tab_chart: "Chart",
+    tab_status: "Status", tab_signal: "State", tab_vol: "Vol", tab_chart: "Chart",
     tab_conn: "Data", tab_bridge: "Bridge", tab_ai: "AI",
     ai_title: "AI advisor",
     ai_warn: "Second opinion from an external model. Outside the validated system, not scored. Not financial advice.",
@@ -53,8 +53,19 @@ const STRINGS = {
     entry: "Reference", stop: "Stop", target: "Target", rr: "R:R",
     no_decision: "no decision recorded yet",
     context_txt: "H4 bias {h4} · M15 trigger {m15} · volatility {vol}",
-    edge_none: "Edge: none measured",
+    edge_none: "Direction edge: none measured",
     edge_none_sub: "OOS 2025 · AUC ≈ 0.50",
+    edge_vol: "Volatility edge: measured",
+    edge_vol_sub: "OOS 2025 · AUC ≈ 0.74 · predicts size, not direction",
+    vol_title: "Volatility filter",
+    vol_note: "Measured on closed bars: will the next window be turbulent? Size, not direction.",
+    vol_caveat: "A safety filter, not a trade signal. When it says \"high\", the market is usually violent — so a tight entry is a bad idea. It never predicts direction.",
+    vol_tier_calm: "calm", vol_tier_elevated: "elevated", vol_tier_high: "high",
+    vol_verdict_calm: "Next window likely quiet — normal conditions.",
+    vol_verdict_elevated: "Next window could be livelier than usual. Size positions with care.",
+    vol_verdict_high: "Next window likely turbulent. Stand aside — avoid tight entries.",
+    vol_unavail: "reading unavailable — {reason}",
+    vol_meta: "model AUC 0.74 · threshold {th}% · timeframes {tf} · as of {at}",
     data_quality: "Data quality",
     dq_freshness: "Freshness", dq_lastbar: "Last closed bar",
     dq_bars: "Closed bars", dq_range: "Range", dq_quality: "Quality",
@@ -101,7 +112,7 @@ const STRINGS = {
   },
   ar: {
     title_sub: "الذهب · وضع الظل",
-    tab_status: "الحالة", tab_signal: "السوق", tab_chart: "الشارت",
+    tab_status: "الحالة", tab_signal: "السوق", tab_vol: "التقلّب", tab_chart: "الشارت",
     tab_conn: "البيانات", tab_bridge: "الجسر", tab_ai: "الذكاء",
     ai_title: "المستشار الذكي",
     ai_warn: "رأي ثانٍ من نموذج خارجي. خارج النظام المُتحقَّق منه، وغير مُقيَّم. ليس نصيحة مالية.",
@@ -136,8 +147,19 @@ const STRINGS = {
     entry: "المرجع", stop: "الإيقاف", target: "الهدف", rr: "المخاطرة/العائد",
     no_decision: "لا يوجد قرار مسجّل بعد",
     context_txt: "ميول H4 {h4} · محفّز M15 {m15} · التقلب {vol}",
-    edge_none: "الحافة: لا شيء مُقاس",
+    edge_none: "حافة الاتجاه: لا شيء مُقاس",
     edge_none_sub: "خارج العيّنة 2025 · AUC ≈ 0.50",
+    edge_vol: "حافة التقلّب: مُقاسة",
+    edge_vol_sub: "خارج العيّنة 2025 · AUC ≈ 0.74 · يتنبّأ بالحجم لا بالاتجاه",
+    vol_title: "فلتر التقلّب",
+    vol_note: "مقاس على الشموع المغلقة: هل تكون النافذة القادمة مضطربة؟ الحجم، لا الاتجاه.",
+    vol_caveat: "إجراء أمان، لا إشارة تداول. حين يقول «مرتفع» يكون السوق عادةً عنيفًا — فالدخول الضيّق فكرة سيّئة. لا يتنبّأ بالاتجاه إطلاقًا.",
+    vol_tier_calm: "هادئ", vol_tier_elevated: "مرتفع قليلًا", vol_tier_high: "مرتفع",
+    vol_verdict_calm: "النافذة القادمة هادئة على الأرجح — ظروف طبيعية.",
+    vol_verdict_elevated: "قد تكون النافذة القادمة أنشط من المعتاد. احسب حجم الصفقة بحذر.",
+    vol_verdict_high: "النافذة القادمة مضطربة على الأرجح. توقّف — تجنّب الدخول الضيّق.",
+    vol_unavail: "القراءة غير متاحة — {reason}",
+    vol_meta: "النموذج AUC 0.74 · العتبة {th}% · الأطر {tf} · حتى {at}",
     data_quality: "جودة البيانات",
     dq_freshness: "الحداثة", dq_lastbar: "آخر شمعة مغلقة",
     dq_bars: "الشموع المغلقة", dq_range: "المدى", dq_quality: "الجودة",
@@ -1013,6 +1035,7 @@ async function refresh() {
   }
   loadTicker();
   loadChart();
+  loadVolatility();
   renderConn();
 }
 
@@ -1025,6 +1048,60 @@ async function loadChart() {
     $("chart-meta").textContent = fmt(T("chart_unavail"), { err: err.message });
   }
   renderConn();
+}
+
+// The one measured edge, re-scored by the server from the same artifact and
+// code the bot uses. The route returns null fields when it cannot score, so the
+// panel degrades to "unavailable" rather than inventing a number.
+async function loadVolatility() {
+  let data = null;
+  try {
+    const res = await fetch(`vol.json`, { cache: "no-store" });
+    data = await res.json();
+  } catch (err) {
+    data = null;
+  }
+  renderVolatility(data);
+}
+
+function renderVolatility(data) {
+  const pct = $("vol-pct");
+  const tier = $("vol-tier");
+  const fill = $("vol-fill");
+  const mark = $("vol-mark");
+  const verdict = $("vol-verdict");
+  const meta = $("vol-meta");
+
+  if (!data || !data.available) {
+    const reason = (data && data.reason) || "backend unreachable";
+    pct.textContent = "--";
+    pct.className = "vol-pct";
+    tier.textContent = "—";
+    tier.className = "vol-tier calm";
+    fill.style.width = "0%";
+    fill.className = "";
+    verdict.textContent = fmt(T("vol_unavail"), { reason });
+    meta.textContent = "";
+    return;
+  }
+
+  const p = data.probability;
+  const th = data.threshold;
+  pct.textContent = `${Math.round(p * 100)}%`;
+  pct.className = "vol-pct " + data.tier;
+  tier.textContent = T(`vol_tier_${data.tier}`);
+  tier.className = "vol-tier " + data.tier;
+  fill.style.width = `${Math.round(p * 100)}%`;
+  fill.className = data.tier;
+  mark.style.left = `${Math.round(th * 100)}%`;
+  verdict.textContent = T(`vol_verdict_${data.tier}`);
+  verdict.className = "vol-verdict " + data.tier;
+  const at = new Date().toLocaleTimeString();
+  meta.textContent = fmt(T("vol_meta"), {
+    th: Math.round(th * 100),
+    tf: (data.timeframes || []).join(" "),
+    at,
+  });
 }
 
 // A prominent live price in the header. The price itself comes from the live
@@ -1097,6 +1174,7 @@ function bindTabs() {
       document.querySelectorAll(".panel").forEach((p) =>
         (p.hidden = p.id !== `view-${view}`));
       if (view === "chart") loadChart();
+      if (view === "vol") loadVolatility();
       if (view === "conn") renderConn();
       if (view === "tracker") loadTracker();
       if (view === "ai") loadAdvisor(false);

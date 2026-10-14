@@ -22,11 +22,14 @@ import json
 import os
 import re
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
 
 # Where /astra.apk points when no local build is staged: the rolling release
 # the Android workflow republishes on every mobile/android change.
@@ -77,6 +80,92 @@ def _stamp_shell(body: bytes) -> bytes:
     )
 
 
+# ── volatility reading ───────────────────────────────────────────────────
+#
+# The phone has no way to reach the bot, and the bot's calibrated model is the
+# one measured edge the project has. This route re-scores the *same* artifact
+# with the *same* code the bot uses, so the number on the phone cannot drift
+# from the number the bot reports. Best-effort and cached: a slow or empty
+# bridge yields null, never a fabricated reading.
+
+_VOL_TIMEFRAMES = ("M5", "M15", "H1", "H4", "D1")
+_VOL_CACHE_TTL = 20.0
+_vol_cache = {"at": 0.0, "body": None}
+_vol_lock = threading.Lock()
+
+
+def _load_volatility():
+    """The bot's volatility module, imported from its real location, or None."""
+    for cand in (
+        os.environ.get("ASTRA_VOLATILITY_DIR", ""),
+        os.path.join(ROOT, "bridge", "telegram_bot"),
+    ):
+        if cand and os.path.isfile(os.path.join(cand, "volatility.py")):
+            if cand not in sys.path:
+                sys.path.insert(0, cand)
+            break
+    try:
+        import volatility
+        return volatility
+    except ImportError:
+        return None
+
+
+def _tier(probability: float, threshold: float) -> str:
+    if probability >= threshold:
+        return "high"
+    return "elevated" if probability >= 0.4 else "calm"
+
+
+def _compute_volatility(bridge_base: str, timeout: float = 5.0) -> dict:
+    """The current volatility reading, or a null body when it cannot be scored."""
+    mod = _load_volatility()
+    if mod is None:
+        return {"available": False, "reason": "model unavailable"}
+    try:
+        model = mod.VolatilityModel.load()
+    except (OSError, ValueError, KeyError):
+        return {"available": False, "reason": "model unavailable"}
+
+    bars_by_tf = {}
+    for tf in _VOL_TIMEFRAMES:
+        url = "%s/v1/candles?tf=%s&limit=220" % (bridge_base, tf)
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, OSError, ValueError):
+            continue
+        bars = payload.get("bars") or payload.get("candles") or []
+        if bars:
+            bars_by_tf[tf] = bars
+
+    if not bars_by_tf:
+        return {"available": False, "reason": "market data unavailable"}
+    probability = model.predict(bars_by_tf)
+    if probability is None:
+        return {"available": False, "reason": "not enough closed bars"}
+    return {
+        "available": True,
+        "probability": round(probability, 4),
+        "threshold": model.threshold,
+        "tier": _tier(probability, model.threshold),
+        "timeframes": sorted(bars_by_tf),
+    }
+
+
+def volatility_body(bridge_base: str, now: float | None = None) -> bytes:
+    """Cached JSON body for /vol.json."""
+    now = time.time() if now is None else now
+    with _vol_lock:
+        if _vol_cache["body"] is not None and now - _vol_cache["at"] < _VOL_CACHE_TTL:
+            return _vol_cache["body"]
+    body = json.dumps(_compute_volatility(bridge_base),
+                      ensure_ascii=False).encode("utf-8")
+    with _vol_lock:
+        _vol_cache["at"], _vol_cache["body"] = now, body
+    return body
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "AstraMobile/1.0"
 
@@ -98,6 +187,8 @@ class Handler(BaseHTTPRequestHandler):
             self._apk()
         elif path == "/upgrade.json":
             self._upgrade_json()
+        elif path == "/vol.json":
+            self._volatility()
         elif path.startswith("/api/v1/"):
             self._proxy(self.api_base + path[len("/api/v1"):], self.path)
         elif path.startswith("/bridge/"):
@@ -138,6 +229,17 @@ class Handler(BaseHTTPRequestHandler):
         """
         url = os.environ.get("ASTRA_UPGRADE_URL", "").strip()
         body = json.dumps({"url": url}).encode("utf-8")
+        self._send(200, body, "application/json; charset=utf-8")
+
+    # -- volatility reading -------------------------------------------------
+
+    def _volatility(self) -> None:
+        """Re-score the bot's calibrated model for the phone.
+
+        Same artifact, same code as the bot, so the number agrees by
+        construction. Null body when it cannot be scored.
+        """
+        body = volatility_body(self.bridge_base)
         self._send(200, body, "application/json; charset=utf-8")
 
     # -- APK download -------------------------------------------------------
