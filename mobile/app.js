@@ -13,6 +13,12 @@ const BRIDGE = "bridge/";
 const REFRESH_MS = 15000;
 const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
 
+// No panel may hang forever. The default is generous because the akoan study
+// legitimately takes ~100 s on a cold server; the News tab passes its own,
+// larger budget. Aborting turns a silent spinner into an honest error line.
+const FETCH_TIMEOUT_MS = 20000;
+const AKOAN_TIMEOUT_MS = 150000;
+
 /* ── i18n ───────────────────────────────────────────────────────────── */
 
 const STRINGS = {
@@ -64,6 +70,7 @@ const STRINGS = {
     akoan_title: "News vs results",
     akoan_note: "Does the news explain the trade results? Every rate is compared to the overall baseline, and only a difference that survives correction is called a finding.",
     akoan_loading: "Running the engine…",
+    akoan_slow: "Still running the engine… ({s}s). The result is cached once ready.",
     akoan_unavail: "akoan unavailable: {reason}",
     akoan_verdict_EDGE_CANDIDATE: "Candidate edge",
     akoan_verdict_NO_EDGE_MEASURED: "No news edge measured",
@@ -190,6 +197,7 @@ const STRINGS = {
     akoan_title: "الخبر مقابل النتائج",
     akoan_note: "هل يفسّر الخبر نتائج الصفقات؟ كل نسبة تُقارَن بخط الأساس العام، والفرق لا يُسمّى نتيجة إلا إذا نجا من تصحيح التعدّد.",
     akoan_loading: "جارٍ تشغيل المحرك…",
+    akoan_slow: "المحرك ما زال يعمل… ({s} ثانية). تُخزَّن النتيجة بعد الانتهاء.",
     akoan_unavail: "محرك akoan غير متاح: {reason}",
     akoan_verdict_EDGE_CANDIDATE: "مرشّح لحافة",
     akoan_verdict_NO_EDGE_MEASURED: "ما انقاس تأثير للخبر",
@@ -357,16 +365,20 @@ function toast(message) {
   }, 4200);
 }
 
-async function getJson(url) {
+async function getJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
   const t0 = performance.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
     connStats[url] = { ok: res.ok, ms: Math.round(performance.now() - t0) };
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   } catch (err) {
     if (!connStats[url]) connStats[url] = { ok: false, ms: Math.round(performance.now() - t0) };
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -1247,8 +1259,7 @@ async function loadChart() {
 async function loadVolatility() {
   let data = null;
   try {
-    const res = await fetch(`vol.json`, { cache: "no-store" });
-    data = await res.json();
+    data = await getJson("vol.json");
   } catch (err) {
     data = null;
   }
@@ -1313,12 +1324,25 @@ async function loadAkoan() {
   cov.textContent = "";
   note.textContent = "";
 
+  // The study replays the corpus; a cold server can take a while. Show elapsed
+  // time and then the cached-forecast hint, so a slow read is visibly working
+  // rather than a frozen panel.
+  let seconds = 0;
+  const tick = setInterval(() => {
+    seconds += 1;
+    if (seconds >= 20) {
+      sub.textContent = fmt(T("akoan_slow"), { s: seconds });
+    }
+  }, 1000);
+
   let data = null;
   try {
-    const res = await fetch("akoan.json", { cache: "no-store" });
-    data = await res.json();
+    data = await getJson("akoan.json", AKOAN_TIMEOUT_MS);
   } catch (err) {
-    data = null;
+    data = (err && err.name === "AbortError")
+      ? { available: false, reason: "timed out" } : null;
+  } finally {
+    clearInterval(tick);
   }
   akoanData = data;
   renderAkoan(data);

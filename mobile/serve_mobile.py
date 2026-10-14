@@ -322,6 +322,20 @@ def akoan_body(now: float | None = None) -> bytes:
     return body
 
 
+def warm_akoan_cache() -> None:
+    """Populate the akoan cache once, in the background, at startup.
+
+    The study replays the committed corpus and takes ~100 s cold; without this
+    the first phone to open the News tab waits that long on a blank panel. The
+    cache TTL is 10 minutes, so warming at boot covers the window in which the
+    service is first opened. Best-effort: a failure must not stop the server.
+    """
+    try:
+        akoan_body()
+    except Exception as exc:  # pragma: no cover - defensive
+        print("[warn] akoan warm-up failed: %s" % exc, file=sys.stderr)
+
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "AstraMobile/1.0"
@@ -524,6 +538,10 @@ def main(argv=None) -> int:
     server.daemon_threads = True
     print(f"[OK] ASTRA mobile app on http://{args.host}:{args.port} "
           f"(api -> {Handler.api_base})", flush=True)
+    # Warm the heavy akoan study in the background so the first phone that
+    # opens the News tab reads a cached result instead of waiting ~100 s.
+    threading.Thread(target=warm_akoan_cache, name="akoan-warmup",
+                     daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

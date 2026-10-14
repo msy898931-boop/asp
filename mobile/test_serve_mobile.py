@@ -480,5 +480,74 @@ class AkoanRouteTest(unittest.TestCase):
         self.assertEqual(calls["n"], 2)
 
 
+class AkoanWarmupTest(unittest.TestCase):
+    """The first phone to open the News tab must not wait ~100 s on a blank.
+
+    The study is warmed once at startup so /akoan.json is already cached when
+    the tab is first opened.
+    """
+
+    def setUp(self):
+        sm._akoan_cache["at"], sm._akoan_cache["body"] = 0.0, None
+
+    def test_warmup_populates_the_cache(self):
+        calls = {"n": 0}
+
+        def counting():
+            calls["n"] += 1
+            return {"available": True, "verdict": "NO_EDGE_MEASURED"}
+
+        original = sm._compute_akoan
+        sm._compute_akoan = counting
+        try:
+            sm.warm_akoan_cache()
+            self.assertEqual(calls["n"], 1)
+            # A subsequent read is served from the cache, not recomputed.
+            body = sm.akoan_body()
+            self.assertEqual(calls["n"], 1)
+            self.assertIn(b"NO_EDGE_MEASURED", body)
+        finally:
+            sm._compute_akoan = original
+
+    def test_warmup_failure_does_not_raise(self):
+        original = sm._compute_akoan
+
+        def boom():
+            raise RuntimeError("corpus missing")
+
+        sm._compute_akoan = boom
+        try:
+            sm.warm_akoan_cache()  # must not raise
+        finally:
+            sm._compute_akoan = original
+
+    def test_server_starts_a_warmup_thread(self):
+        # The wiring, not just the helper: main() must launch the warm-up.
+        with open(os.path.join(sm.HERE, "serve_mobile.py"), encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn("warm_akoan_cache", src)
+        self.assertIn("akoan-warmup", src)
+
+
+class FetchTimeoutTest(unittest.TestCase):
+    """No panel may hang forever; the app must bound every request."""
+
+    def _js(self):
+        with open(os.path.join(sm.HERE, "app.js"), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_requests_are_bounded(self):
+        js = self._js()
+        self.assertIn("FETCH_TIMEOUT_MS", js)
+        self.assertIn("AbortController", js)
+        # The heavy News read gets its own, larger budget.
+        self.assertIn("AKOAN_TIMEOUT_MS", js)
+
+    def test_akoan_shows_progress_when_slow(self):
+        js = self._js()
+        self.assertIn("akoan_slow", js)
+        self.assertIn("setInterval", js)
+
+
 if __name__ == "__main__":
     unittest.main()

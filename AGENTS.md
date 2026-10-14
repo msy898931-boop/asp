@@ -527,9 +527,15 @@ reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
 - **The phone's News tab** (`mobile/`, `/akoan.json`). The mobile server runs
   `study.study()` and returns a compact body — verdict, baseline, one bucket per
   dimension, coverage. Cached 10 min behind a compute lock, because the replay
-  is heavy and every phone polls. The panel's text is built in JS, so
-  `applyLang` calls `rerenderAkoan()` to rebuild it from the last reading on a
-  language switch (an `[data-i18n]` sweep cannot reach generated nodes).
+  is heavy and every phone polls. The cache is **warmed in a background thread
+  at startup** (`warm_akoan_cache`), so the first phone to open the tab reads a
+  cached result instead of waiting the ~100 s cold replay on a blank panel. The
+  panel's text is built in JS, so `applyLang` calls `rerenderAkoan()` to rebuild
+  it from the last reading on a language switch (an `[data-i18n]` sweep cannot
+  reach generated nodes). Because the read can still be slow, the panel shows
+  elapsed seconds past 20 s (`akoan_slow`) rather than a frozen "loading…", and
+  the app bounds every request with `AbortController` (`FETCH_TIMEOUT_MS`,
+  `AKOAN_TIMEOUT_MS` for this one) so no panel can hang forever.
 - **A weekly Telegram digest** (`bot/weekly_akoan.py`, workflow
   `astra-weekly-akoan.yml`, Monday 06:00 UTC). Weekly, not daily: the answer
   moves slowly and a daily message would be noise. ISO-week state in the
