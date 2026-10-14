@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ASTRA — شفافية الأداء</title>
+<meta name="description" content="أرقام ASTRA الحقيقية من الاختبار خارج العيّنة: معايرة ممتازة، حافة تنبؤية معدومة. نقولها كما هي.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="performance.css">
+</head>
+<body>
+<main class="wrap">
+
+  <header class="head">
+    <div class="brand">ASTRA</div>
+    <h1>شفافية الأداء</h1>
+    <p class="lede">
+      كل بوت ذهب يقول لك إنه «دقيق». نحن نعرض الأرقام التي قاسها اختبارٌ
+      خارج العيّنة، حتى لو كانت ضعيفة — وخصوصًا لأنها ضعيفة.
+    </p>
+  </header>
+
+  <section class="verdict">
+    <p class="big">AUC ≈ 0.50</p>
+    <p class="big-sub">قدرة تمييزية قريبة من المصادفة</p>
+    <p class="verdict-note">
+      النموذج <strong>معايَر بدقة عالية</strong> (احتمالاته صادقة)، لكنه
+      <strong>لا يتنبّأ بالاتجاه</strong>. لذلك لا نبيع «توصيات»، ولا نَدّعي
+      حافة إحصائية. ما نبيعه هو شيء آخر — تفاصيله في الأسفل.
+    </p>
+  </section>
+
+  <section class="results">
+    <h2>النتيجة الرسمية — خارج العيّنة (2025)</h2>
+    <p class="src">
+      البيانات: Dukascopy 2021–2025 (BID+ASK)، 1,695,651 شمعة M1.
+      التقسيم بالسنوات: تطوير 2021–22 · تحقّق 2023–24 · خارج العيّنة 2025.
+      المصدر: <code>docs/FINAL_REPORT.md</code>.
+    </p>
+    <table class="tbl">
+      <thead>
+        <tr><th>المقياس</th><th>القيمة</th><th>معناه</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>مهارة Brier</td><td class="num">+0.0012</td><td>≈ صفر — كرمية عملة</td></tr>
+        <tr><td>الدقة الاتجاهية</td><td class="num">51.7%</td><td>قريب جدًا من 50%</td></tr>
+        <tr><td>Brier (معايَر)</td><td class="num">0.2497</td><td>ممتاز (الخط الأساسي 0.25)</td></tr>
+        <tr><td>ECE</td><td class="num">0.0015</td><td>معايرة شبه مثالية</td></tr>
+        <tr><td>عدد الحالات</td><td class="num">22,425</td><td>عيّنة كبيرة كفاية</td></tr>
+      </tbody>
+    </table>
+    <p class="read">
+      اقرأ أول سطرين. مهارة شبه صفرية ودقة 51.7% تعني أن الإشارة — بإحصاء
+      صادق — <strong>لا تفوق الصدفة</strong>. الأرقام الممتازة في آخر سطرين
+      تخصّ <em>صدق الاحتمال</em>، لا <em>صحّة الاتجاه</em>.
+    </p>
+  </section>
+
+  <section class="results">
+    <h2>اختبار التقدّم الزمني (Walk-forward)</h2>
+    <p class="src">56 طيّة متتابعة، بلا تداخل — أقرب محاكاة للتداول الحقيقي.</p>
+    <table class="tbl">
+      <thead><tr><th>المقياس</th><th>القيمة</th></tr></thead>
+      <tbody>
+        <tr><td>Brier المجمّع</td><td class="num">0.2551</td></tr>
+        <tr><td>ECE</td><td class="num">0.0454</td></tr>
+        <tr><td>الدقة</td><td class="num">0.5021</td></tr>
+        <tr><td>حجم العيّنة</td><td class="num">28,000</td></tr>
+      </tbody>
+    </table>
+    <p class="read">النتيجة نفسها على مسار زمني حقيقي: معايرة جيدة، تمييز معدوم.</p>
+  </section>
+
+  <section class="results">
+    <h2>تحقّق مستقل — مزوّد ثانٍ وفترة أحدث</h2>
+    <p class="src">
+      بيانات MT5 2026 (3.5 أشهر) — مزوّد مختلف وزمن مختلف، للتأكد أن النتيجة
+      ليست أثرًا لمزوّد واحد.
+    </p>
+    <table class="tbl">
+      <thead><tr><th>المقياس</th><th>القيمة</th></tr></thead>
+      <tbody>
+        <tr><td>Brier (معايَر)</td><td class="num">0.2499</td></tr>
+        <tr><td>ECE</td><td class="num">0.0017</td></tr>
+        <tr><td>الدقة</td><td class="num">0.4992</td></tr>
+        <tr><td>حجم العيّنة</td><td class="num">1,339</td></tr>
+      </tbody>
+    </table>
+    <p class="read">مزوّد ثانٍ، فترة جديدة — والخلاصة تتفق: معايرة ممتازة، تمييز ضعيف.</p>
+  </section>
+
+  <section class="sell">
+    <h2>إذن ماذا نبيع؟</h2>
+    <div class="sell-grid">
+      <div>
+        <h3 class="yes">نبيعه فعلاً ✓</h3>
+        <ul>
+          <li>تنبيهات سعرية حيّة (XAUUSD)</li>
+          <li>متابعة السوق وحالة الاتصال</li>
+          <li>ملخّصات صادقة، بلا تهويل</li>
+          <li>أداة قرار — لا صندوق أسود</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="no">لا نبيعه ✗</h3>
+        <ul>
+          <li>لا حافة إحصائية مُثبَتة</li>
+          <li>لا وعود أرباح</li>
+          <li>لا «دقة 90%» ولا أرقام مُختلَقة</li>
+          <li>لا تنفيذ صفقات</li>
+        </ul>
+      </div>
+    </div>
+    <p class="sell-note">
+      المشروع قويّ كأداة صادقة، وضعيف كآلة ربح. نحن نبيع الأداة، ونقول لك
+      بصراحة أين حدّها.
+    </p>
+  </section>
+
+  <section class="method">
+    <h2>كيف تتحقق بنفسك</h2>
+    <ol>
+      <li>البيانات والتقسيم موثّقان في <code>research/data/xauusd_m1/README.md</code>.</li>
+      <li>الأرقام والتقرير الكامل في <code>docs/FINAL_REPORT.md</code>.</li>
+      <li>النتيجة السلبية مسجّلة صراحة كـ «no edge» — لم نخفِها ولم نُجمّلها.</li>
+    </ol>
+  </section>
+
+  <footer class="foot">
+    <p>
+      كل رقم في هذه الصفحة مقتبس من تقارير المشروع نفسه وقابل للتحقق.
+      الأداء السابق — حتى الصادق منه — ليس وعدًا بالمستقبل.
+      لا شيء هنا نصيحة مالية.
+    </p>
+    <p>
+      <a href="/">العودة إلى التطبيق</a> ·
+      <a href="/pricing.html">الأسعار</a>
+    </p>
+  </footer>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,123 @@
+/* ASTRA performance-transparency page — same instrument-panel language as the
+   app and the pricing page: deep ink field, engraved gold, monospace telemetry.
+   The one big number is deliberately plain: this page is a statement of fact,
+   not a sales panel. */
+
+:root {
+  --ink: #0B0E13;
+  --ink-2: #12161E;
+  --edge: #232B36;
+  --gold: #D6A53C;
+  --paper: #ECE6D8;
+  --muted: #7C8794;
+  --mono: "IBM Plex Mono", "IBM Plex Sans Arabic", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 880px; margin: 0 auto; padding: 40px 20px 64px; }
+
+.head { text-align: center; margin-bottom: 36px; }
+.brand {
+  color: var(--gold);
+  letter-spacing: 0.42em;
+  font-size: 13px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.head h1 { font-size: clamp(24px, 5vw, 34px); margin: 0 0 12px; font-weight: 600; }
+.lede { color: var(--muted); max-width: 48ch; margin: 0 auto; font-size: 15px; }
+
+/* The headline number — big, but not celebratory. */
+.verdict {
+  text-align: center;
+  background: var(--ink-2);
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  padding: 30px 22px;
+}
+.big {
+  font-size: clamp(44px, 12vw, 76px);
+  margin: 0;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+  font-weight: 600;
+  line-height: 1;
+}
+.big-sub { margin: 8px 0 0; color: var(--paper); font-size: 16px; }
+.verdict-note {
+  margin: 18px auto 0;
+  max-width: 52ch;
+  color: var(--muted);
+  font-size: 14px;
+  border-top: 1px solid var(--edge);
+  padding-top: 16px;
+}
+
+.results, .sell, .method { margin-top: 40px; }
+.results h2, .sell h2, .method h2 {
+  font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px;
+}
+.src { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th, .tbl td {
+  text-align: start;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--edge);
+}
+.tbl th { color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: 0.08em; }
+.tbl td.num { color: var(--gold); font-weight: 600; white-space: nowrap; }
+.tbl tr:last-child td { border-bottom: 0; }
+
+.read {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  border-inline-start: 2px solid var(--gold);
+  padding-inline-start: 12px;
+}
+
+.sell-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 14px; }
+@media (min-width: 640px) { .sell-grid { grid-template-columns: 1fr 1fr; } }
+.sell-grid > div {
+  background: var(--ink-2);
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.sell h3 { margin: 0 0 10px; font-size: 14px; }
+.sell h3.yes { color: var(--gold); }
+.sell h3.no { color: var(--paper); }
+.sell ul { list-style: none; margin: 0; padding: 0; }
+.sell li { padding: 5px 0; font-size: 14px; border-bottom: 1px solid var(--edge); }
+.sell li:last-child { border-bottom: 0; }
+.sell-note {
+  margin-top: 14px; color: var(--muted); font-size: 13px;
+  border-inline-start: 2px solid var(--gold); padding-inline-start: 12px;
+}
+
+.method ol { padding-inline-start: 20px; }
+.method li { margin: 8px 0; font-size: 14px; }
+
+code {
+  background: var(--ink-2); border: 1px solid var(--edge);
+  padding: 1px 6px; border-radius: 6px; color: var(--gold);
+  font-size: 12.5px;
+}
+
+.foot {
+  margin-top: 48px; border-top: 1px solid var(--edge); padding-top: 20px;
+  color: var(--muted); font-size: 12.5px;
+}
+.foot a { color: var(--gold); }

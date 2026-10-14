@@ -45,6 +45,9 @@ jobs:
           node --check mobile/app.js
           node --check mobile/sw.js
 
+      - name: Every offline-shell asset must exist
+        run: python3 mobile/check_shell.py
+
       - name: Test the signal engine and its honesty guarantees
         run: python3 -m unittest discover -s tracker -p "test_*.py"
 

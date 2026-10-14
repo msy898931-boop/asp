@@ -77,6 +77,17 @@ server fills from `ASTRA_UPGRADE_URL`. An admin grants Pro with
 `/grant <chat_id> pro`; users read their id with `/myid`. See RUNBOOK §11 for
 the mechanics and docs/SELLING.md for the Stripe product/custom-field copy.
 
+`mobile/performance.html` is the **transparency page** — the honest numbers the
+project already publishes in `docs/FINAL_REPORT.md`, shown to the buyer: OOS
+Brier skill ≈ +0.0012, directional accuracy 51.7%, ECE 0.0015, AUC ≈ 0.50, plus
+the walk-forward and the second-provider cross-check. It is a selling point, not
+a confession: it says plainly that the model is well calibrated and carries no
+demonstrated edge, so the product is the alert tool, not a prediction. If the
+tuning changes the numbers, update this page in the same commit — a stale
+honesty page is worse than none. `mobile/check_shell.py` (run in CI) fails if any
+file named in `sw.js`'s `ASSETS` list is missing, so the offline shell cannot
+break silently.
+
 ## Windows .exe
 
 `.github/workflows/build-windows.yml` builds `frontend/qt` on `windows-latest`
