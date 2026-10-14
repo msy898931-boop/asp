@@ -733,6 +733,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     state_dir = Path(args.state).parent
     levels = LevelStore(state_dir / "price_levels.json")
     ent = entitlements_from_env(state_dir)
+    # Liveness beacon: the phone server reads this file to answer /bot.json, so
+    # "is the bot actually polling?" is observable. Without it a dead poller is
+    # silent — the watchdog only watched the GitHub scanner, never this process.
+    beat = state_dir / "bot_heartbeat.json"
+    try:
+        beat.parent.mkdir(parents=True, exist_ok=True)
+        beat.write_text(json.dumps({"pid": os.getpid(), "at": time.time()}),
+                        encoding="utf-8")
+    except OSError as exc:
+        print(f"[warn] heartbeat unavailable: {exc}", file=sys.stderr)
     try:
         vol_model = VolatilityModel.load()
     except (OSError, ValueError, KeyError) as exc:
@@ -765,6 +775,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                                 keyboard=True)
         except RuntimeError as exc:
             print(f"[warn] startup message failed: {exc}", file=sys.stderr)
+
+    def _heartbeat() -> None:
+        while not _stop.wait(60):
+            try:
+                beat.write_text(
+                    json.dumps({"pid": os.getpid(), "at": time.time()}),
+                    encoding="utf-8")
+            except OSError:
+                pass
+
+    threading.Thread(target=_heartbeat, daemon=True).start()
 
     monitor = threading.Thread(target=monitor_backend,
                                args=(api, subs, client, args.interval, levels, ent,

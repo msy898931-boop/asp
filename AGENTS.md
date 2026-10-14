@@ -188,6 +188,23 @@ Two checks watch the live service, both free (GitHub Actions cron):
   on Telegram when the engine serves empty. A 404 or dead connection is treated
   as "unavailable", never as trouble, so an older deploy does not cry wolf.
 
+### Is the interactive bot actually alive?
+
+`GET /bot.json` answers it. The bot long-polls `getUpdates` and writes a
+heartbeat every minute (`~/.astra/bot_heartbeat.json`); the phone server reads
+its age and reports `available`:
+
+```bash
+curl -s https://astra-xlp9.onrender.com/bot.json
+# {"available":true,"age_s":12,"pid":1234}
+# {"available":false,"reason":"stale","age_s":400,"pid":1234}
+```
+
+The hourly watchdog's `check_poller()` fails the verdict on `stale` (three
+missed beats, `_BOT_STALE_AFTER` 180 s) so a dead poller alerts on Telegram.
+A missing file (`reason":"no heartbeat"`) means this host has no token, which is
+not an outage; a 404 means an older deploy, and neither cries wolf.
+
 ### Synthetic data source
 
 Without a Windows terminal the bridge reports MT5 as unavailable and the system
@@ -674,6 +691,11 @@ permanently, launch the watchdog with the token unset
 Confirm with `getWebhookInfo` (empty URL) and by watching the 409 counter in
 `run/host.log` while making no external Telegram calls.
 
+To see whether a poller is running *right now*, ask the server instead of
+guessing from 409s: `GET /bot.json` reports the heartbeat's age (see "Is the
+interactive bot actually alive?"). A `stale` reading is a real outage; a
+`no heartbeat` reading means the host has no token, which is not one.
+
 ### Per-bar answers: the heartbeat contract
 
 The user wants an answer on **every** closed M15 bar, not only when the engine
@@ -857,19 +879,23 @@ span, `scan_once` sends one heads-up (`telegram_bot.format_approach`) naming the
 nearer side and the distance left. It fires once per bar, so it cannot spam;
 `ASTRA_APPROACH_ALERT=0` silences it.
 
-### The three silent failures: watchdog and stale data
+### The silent failures: watchdog and stale data
 
 `bot/watchdog.py` (the `astra-watchdog` cron, hourly) is a dead-man's switch
 over the failures the trading jobs cannot report on their own: the bot stopped
 running (`check_bot`, last successful `astra-bot` run older than
 `ASTRA_BOT_MAX_AGE_MIN`, 90 min), the web server is down (`check_server`, no 200
-from `/api/v1/health`), and the repository has gone idle long enough
-(`check_commit`, over `ASTRA_COMMIT_WARN_DAYS`, 55 days) that GitHub disables the
-scheduled workflows outright. It alerts on the transition into trouble,
+from `/api/v1/health`), the engine serves empty (`check_engine`), the
+**interactive poller** stopped (`check_poller`, reads `/bot.json`), and the
+repository has gone idle long enough (`check_commit`, over
+`ASTRA_COMMIT_WARN_DAYS`, 55 days) that GitHub disables the scheduled workflows
+outright. It alerts on the transition into trouble,
 re-alerts every `ASTRA_WATCHDOG_REALERT_HOURS` (6) while the trouble lasts, and
 confirms recovery. `decide()` is pure over (verdict, state, now); the state
 rides in the Actions cache. An unreachable GitHub API never cries wolf — the
-check returns "unavailable" and stays quiet.
+check returns "unavailable" and stays quiet. So does a 404 (an older deploy
+without the route) or a missing heartbeat (a host with no token): only a
+*stale* beat, or a real 200-but-empty engine, is trouble.
 
 `scan_once.staleness()` guards the other silent failure: a bar older than
 `ASTRA_STALE_AFTER_MIN` (45) means the feed is quiet or the market is closed

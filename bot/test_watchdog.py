@@ -132,6 +132,50 @@ class CheckEngineTests(unittest.TestCase):
 
 
 
+class CheckPollerTests(unittest.TestCase):
+    """A silent poller must be caught, but an absent one must not cry wolf."""
+
+    def setUp(self):
+        self._orig = wd.urllib.request.urlopen
+        self.addCleanup(lambda: setattr(wd.urllib.request, "urlopen", self._orig))
+
+    def test_fresh_beat_is_healthy(self):
+        wd.urllib.request.urlopen = lambda *a, **k: _Resp(
+            {"available": True, "age_s": 30, "pid": 5})
+        ok, detail = wd.check_poller()
+        self.assertTrue(ok)
+        self.assertIn("min ago", detail)
+
+    def test_stale_beat_is_trouble(self):
+        wd.urllib.request.urlopen = lambda *a, **k: _Resp(
+            {"available": False, "reason": "stale", "age_s": 400})
+        ok, detail = wd.check_poller()
+        self.assertFalse(ok)
+        self.assertIn("no beat", detail)
+
+    def test_missing_heartbeat_is_not_trouble(self):
+        wd.urllib.request.urlopen = lambda *a, **k: _Resp(
+            {"available": False, "reason": "no heartbeat"})
+        ok, detail = wd.check_poller()
+        self.assertTrue(ok)
+        self.assertEqual(detail, "unavailable")
+
+    def test_missing_route_is_not_trouble(self):
+        def raise404(*a, **k):
+            raise urllib.error.HTTPError("u", 404, "nf", {}, None)
+        wd.urllib.request.urlopen = raise404
+        ok, detail = wd.check_poller()
+        self.assertTrue(ok)
+        self.assertEqual(detail, "unavailable")
+
+    def test_unreachable_server_is_not_trouble(self):
+        def raise_url(*a, **k):
+            raise urllib.error.URLError("down")
+        wd.urllib.request.urlopen = raise_url
+        ok, _ = wd.check_poller()
+        self.assertTrue(ok)
+
+
 class CheckCommitTests(unittest.TestCase):
     def test_recent_commit_is_healthy(self):
         d = (NOW - timedelta(days=3)).isoformat().replace("+00:00", "Z")

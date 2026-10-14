@@ -185,6 +185,43 @@ def volatility_body(bridge_base: str, now: float | None = None) -> bytes:
     return body
 
 
+# ── bot liveness ─────────────────────────────────────────────────────────
+#
+# The interactive Telegram poller is a long-running process on this same host,
+# and until now nothing observed whether it was alive: the hourly watchdog only
+# watched the GitHub scanner. The bot writes a heartbeat file every minute; this
+# route exposes its age, so a dead poller is visible instead of silent.
+
+_BOT_STALE_AFTER = 180.0  # three missed 60s beats
+
+
+def _heartbeat_path() -> str:
+    env = os.environ.get("ASTRA_BOT_HEARTBEAT", "").strip()
+    if env:
+        return env
+    return os.path.join(os.path.expanduser("~"), ".astra", "bot_heartbeat.json")
+
+
+def bot_heartbeat_body(now: float | None = None) -> bytes:
+    """Freshness of the bot's heartbeat, as JSON."""
+    now = time.time() if now is None else now
+    try:
+        with open(_heartbeat_path(), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        at = float(data.get("at", 0))
+    except (OSError, ValueError, TypeError):
+        return json.dumps({"available": False, "reason": "no heartbeat"},
+                          ensure_ascii=False).encode("utf-8")
+    age = max(0.0, now - at)
+    if age > _BOT_STALE_AFTER:
+        return json.dumps({"available": False, "reason": "stale",
+                           "age_s": int(age), "pid": data.get("pid")},
+                          ensure_ascii=False).encode("utf-8")
+    return json.dumps({"available": True, "age_s": int(age),
+                       "pid": data.get("pid")},
+                      ensure_ascii=False).encode("utf-8")
+
+
 # ── akoan reading ────────────────────────────────────────────────────────
 #
 # The phone can reach neither the trade ledger nor the calendar feed. This route
@@ -309,6 +346,8 @@ class Handler(BaseHTTPRequestHandler):
             self._upgrade_json()
         elif path == "/version.json":
             self._version_json()
+        elif path == "/bot.json":
+            self._bot_json()
         elif path == "/vol.json":
             self._volatility()
         elif path == "/akoan.json":
@@ -372,6 +411,12 @@ class Handler(BaseHTTPRequestHandler):
             "uptime_s": int(time.time() - _STARTED_AT),
         }, sort_keys=True).encode("utf-8")
         self._send(200, body, "application/json; charset=utf-8")
+
+    # -- bot liveness -------------------------------------------------------
+
+    def _bot_json(self) -> None:
+        """Whether the interactive Telegram poller is alive right now."""
+        self._send(200, bot_heartbeat_body(), "application/json; charset=utf-8")
 
     # -- volatility reading -------------------------------------------------
 

@@ -106,6 +106,34 @@ def check_engine() -> tuple[bool, str]:
     return False, "akoan returned available=false (%s)" % body.get("reason", "no reason")
 
 
+def check_poller() -> tuple[bool, str]:
+    """Is the interactive Telegram poller still alive?
+
+    The bot long-polls getUpdates and writes a heartbeat every minute; the phone
+    server exposes its age at /bot.json. A poller that stops is otherwise
+    silent — the scanner check above only covers the GitHub cron. A stale beat
+    is real trouble; a missing file or a 404 (an older deploy, or a host with no
+    token) cannot be judged and never cries wolf.
+    """
+    req = urllib.request.Request(
+        ASTRA_URL + "/bot.json",
+        headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return True, "unavailable"
+        return False, "bot route HTTP %d" % exc.code
+    except (urllib.error.URLError, OSError, ValueError):
+        return True, "unavailable"
+    if body.get("available"):
+        return True, "%.0f min ago" % (body.get("age_s", 0) / 60.0)
+    if body.get("reason") == "stale":
+        return False, "no beat for %.0f min" % (body.get("age_s", 0) / 60.0)
+    return True, "unavailable"
+
+
 def _parse_utc(text: str) -> datetime | None:
     try:
         return datetime.fromisoformat(text.replace("Z", "+00:00"))
@@ -161,6 +189,11 @@ def evaluate(now: datetime | None = None) -> dict:
     if not ok:
         problems.append({"key": "engine",
                          "ar": "محرك الخبر بيرجّع فاضي (بيانات غير متاحة)",
+                         "detail": detail})
+    ok, detail = check_poller()
+    if not ok:
+        problems.append({"key": "poller",
+                         "ar": "بوت التلغرام ما عم يستجيب (توقّف عن الدوران)",
                          "detail": detail})
     ok, detail = check_commit(now)
     if not ok:

@@ -10,7 +10,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -268,6 +270,79 @@ class VersionRouteTest(unittest.TestCase):
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
+
+
+class BotHeartbeatTest(unittest.TestCase):
+    """A dead interactive poller must be visible, not silent."""
+
+    def _write(self, payload, tmp):
+        path = os.path.join(tmp, "bot_heartbeat.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh)
+        return path
+
+    def test_fresh_heartbeat_is_available(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write({"pid": 42, "at": 1000.0}, tmp)
+            old = os.environ.get("ASTRA_BOT_HEARTBEAT")
+            os.environ["ASTRA_BOT_HEARTBEAT"] = path
+            try:
+                body = json.loads(sm.bot_heartbeat_body(now=1010.0))
+            finally:
+                if old is None:
+                    os.environ.pop("ASTRA_BOT_HEARTBEAT", None)
+                else:
+                    os.environ["ASTRA_BOT_HEARTBEAT"] = old
+            self.assertTrue(body["available"])
+            self.assertEqual(body["pid"], 42)
+
+    def test_stale_heartbeat_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write({"pid": 42, "at": 1000.0}, tmp)
+            old = os.environ.get("ASTRA_BOT_HEARTBEAT")
+            os.environ["ASTRA_BOT_HEARTBEAT"] = path
+            try:
+                body = json.loads(sm.bot_heartbeat_body(now=1000.0 + sm._BOT_STALE_AFTER + 1))
+            finally:
+                if old is None:
+                    os.environ.pop("ASTRA_BOT_HEARTBEAT", None)
+                else:
+                    os.environ["ASTRA_BOT_HEARTBEAT"] = old
+            self.assertFalse(body["available"])
+            self.assertEqual(body["reason"], "stale")
+
+    def test_missing_heartbeat_is_unavailable_not_an_error(self):
+        old = os.environ.get("ASTRA_BOT_HEARTBEAT")
+        os.environ["ASTRA_BOT_HEARTBEAT"] = "/nonexistent/bot_heartbeat.json"
+        try:
+            body = json.loads(sm.bot_heartbeat_body(now=1000.0))
+        finally:
+            if old is None:
+                os.environ.pop("ASTRA_BOT_HEARTBEAT", None)
+            else:
+                os.environ["ASTRA_BOT_HEARTBEAT"] = old
+        self.assertFalse(body["available"])
+        self.assertEqual(body["reason"], "no heartbeat")
+
+    def test_route_serves_the_heartbeat(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._write({"pid": 7, "at": time.time()}, tmp)
+            old = os.environ.get("ASTRA_BOT_HEARTBEAT")
+            os.environ["ASTRA_BOT_HEARTBEAT"] = path
+            app = _serve(sm.Handler)
+            try:
+                url = "http://127.0.0.1:%d/bot.json" % app.server_address[1]
+                with urllib.request.urlopen(url, timeout=10) as resp:
+                    self.assertEqual(resp.status, 200)
+                    self.assertEqual(resp.headers.get("Cache-Control"), "no-store")
+                    body = json.loads(resp.read())
+            finally:
+                _stop(app)
+                if old is None:
+                    os.environ.pop("ASTRA_BOT_HEARTBEAT", None)
+                else:
+                    os.environ["ASTRA_BOT_HEARTBEAT"] = old
+            self.assertTrue(body["available"])
 
 
 class AkoanPanelTest(unittest.TestCase):
