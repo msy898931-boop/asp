@@ -577,6 +577,24 @@ keep them honest and in sync:
 The app is read-only: one origin (`serve_mobile.py`) reverse-proxies `/api/v1`
 to the backend and `/bridge` to the bridge. It never places trades.
 
+### The tab bar (nine tabs, one phone width)
+
+Nine tabs at a readable size are wider than a phone (~594px vs 375–430px), so
+the bar scrolls horizontally. Because an overflowing bar with no cue reads as a
+bar with fewer tabs, two affordances make the rest discoverable:
+
+* `updateTabFades()` in `app.js` toggles `.more-left` / `.more-right` on the
+  bar from the *real* layout (`scrollWidth - clientWidth` and `scrollLeft`), and
+  the CSS masks the overflowing edge with a gradient. The hidden side flips with
+  direction — RTL starts at the right — so the classes are chosen by
+  `getComputedStyle(el).direction`, not by assuming LTR.
+* Choosing a tab calls `scrollIntoView({inline:"center"})`, so the selected
+  label is never left off-screen. Fades recompute on scroll, on `resize`, on
+  `orientationchange`, and after a language switch (which flips direction).
+
+Arabic sets `html[dir="rtl"] .tab { letter-spacing: normal }`: the Latin
+tracking that separates capitals breaks the joins between Arabic letters.
+
 ### The volatility panel (the phone's one measured edge)
 
 The "Vol" tab shows the same calibrated reading the bot reports. `serve_mobile.py`

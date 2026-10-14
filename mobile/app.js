@@ -327,6 +327,9 @@ function applyLang() {
   });
   try { localStorage.setItem(LANG_KEY, lang); } catch (e) { /* ignore */ }
   rerenderAkoan();
+  // Switching language flips the bar's direction, which moves which side
+  // overflows; recompute the fades once layout settles.
+  requestAnimationFrame(updateTabFades);
 }
 
 function initLang() {
@@ -1478,6 +1481,22 @@ function buildTimeframes() {
   });
 }
 
+/* The tab bar is wider than a phone, so it scrolls. Show a fade only on the
+   side that actually has hidden tabs, so the user can tell more exist. The
+   hidden side flips with direction: RTL starts at the right and overflows to
+   the physical left. */
+function updateTabFades() {
+  const el = document.querySelector(".tabs");
+  if (!el) return;
+  const max = el.scrollWidth - el.clientWidth;
+  const pos = Math.abs(el.scrollLeft);
+  const rtl = getComputedStyle(el).direction === "rtl";
+  const atStart = pos <= 2;
+  const atEnd = pos >= max - 2;
+  el.classList.toggle("more-left", rtl ? !atEnd : !atStart);
+  el.classList.toggle("more-right", rtl ? !atStart : !atEnd);
+}
+
 function bindTabs() {
   const tabs = [...document.querySelectorAll(".tab")];
   tabs.forEach((tab) => {
@@ -1487,6 +1506,10 @@ function bindTabs() {
       const view = tab.dataset.view;
       document.querySelectorAll(".panel").forEach((p) =>
         (p.hidden = p.id !== `view-${view}`));
+      // A chosen tab can sit off-screen; bring it into view so the selection
+      // is visible, not just the panel.
+      tab.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+      updateTabFades();
       if (view === "chart") loadChart();
       if (view === "vol") loadVolatility();
       if (view === "akoan") loadAkoan();
@@ -1495,6 +1518,11 @@ function bindTabs() {
       if (view === "ai") loadAdvisor(false);
     });
   });
+  const bar = document.querySelector(".tabs");
+  if (bar) {
+    bar.addEventListener("scroll", updateTabFades, { passive: true });
+    updateTabFades();
+  }
 }
 
 function init() {
@@ -1529,6 +1557,8 @@ function init() {
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refresh();
   });
+  window.addEventListener("resize", updateTabFades);
+  window.addEventListener("orientationchange", () => setTimeout(updateTabFades, 150));
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
 

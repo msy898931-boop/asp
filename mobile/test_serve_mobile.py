@@ -345,6 +345,32 @@ class BotHeartbeatTest(unittest.TestCase):
             self.assertTrue(body["available"])
 
 
+class TabBarTest(unittest.TestCase):
+    """Nine tabs overflow a phone; the bar must say so and follow selection."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_css_has_edge_fades_and_arabic_spacing(self):
+        css = self._read("styles.css")
+        self.assertIn(".tabs.more-left", css)
+        self.assertIn(".tabs.more-right", css)
+        self.assertIn("mask-image", css)
+        # Arabic joins break under Latin letter-spacing.
+        self.assertIn('html[dir="rtl"] .tab', css)
+
+    def test_js_tracks_fades_and_scrolls_the_selected_tab(self):
+        js = self._read("app.js")
+        self.assertIn("function updateTabFades", js)
+        self.assertIn("more-left", js)
+        self.assertIn("more-right", js)
+        self.assertIn("scrollIntoView", js)
+        # Fades must be recomputed when direction or viewport changes.
+        self.assertIn('addEventListener("resize", updateTabFades)', js)
+        self.assertIn("orientationchange", js)
+
+
 class AkoanPanelTest(unittest.TestCase):
     """The akoan tab must be wired end to end, or it ships blank."""
 
