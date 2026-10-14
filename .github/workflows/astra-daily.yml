@@ -15,8 +15,9 @@ name: astra-daily
 
 on:
   schedule:
-    # 20:00 UTC every day.
-    - cron: "0 20 * * *"
+    # 17:00 UTC = 20:00 in UTC+3 (Damascus). Adjust if the reader's local
+    # evening differs — the report is the day's UTC ideas either way.
+    - cron: "0 17 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
