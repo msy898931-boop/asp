@@ -52,6 +52,15 @@ service (disks require a paid plan).
 duplicate service pointing at the same repo) makes Telegram answer
 `409 Conflict` and both pollers starve. Suspend or delete the duplicate.
 
+**Deploy on push (recommended).** `autoDeploy` depends on the dashboard
+toggle and can lag — the live service once stayed on the previous commit for
+about an hour across two pushes with CI green. To make a deploy deterministic,
+copy the service's **Deploy Hook** URL (Render → the service → Settings →
+Deploy Hook) into the repo secret `RENDER_DEPLOY_HOOK`; the
+`.github/workflows/deploy-render.yml` job then triggers a deploy on every push
+to `main`. Until the secret is set the job skips, so it is safe to leave in
+place.
+
 ## Option C — any Docker host / VPS
 
 ```sh

@@ -130,8 +130,13 @@ ephemeral on a free host** — the subscriber/entitlements/levels files live on
 the container disk; a restart loses them unless a paid disk is mounted (and
 Render's free tier forbids disks). (c) The free plan sleeps, so first open is a
 cold start; the keepalive mitigates but depends on GitHub cron being on time.
-(d) `/akoan.json` cold-computes for ~100 s; the phone has no request timeout, so
-a cold News tab can spin a long time.
+(d) `/akoan.json` cold-computes for ~100 s. **Fixed after this audit** (commit
+`4ee8ff7`): the server now warms the akoan cache in a background thread at
+startup, the app bounds every request with `AbortController`, and the News panel
+shows elapsed time past 20 s instead of a frozen "loading…". (e) A push does not
+always redeploy: Render stayed on the previous commit for ~1 h across two pushes
+with CI green — see `deploy-render.yml` (a deploy hook that makes the deploy
+deterministic once the secret is set).
 
 ### 5. Documentation — 9 / 11
 

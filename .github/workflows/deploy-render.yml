@@ -1,0 +1,31 @@
+# Trigger a Render deploy on every push to main.
+#
+# Why this exists: the Render service did not rebuild for two pushes in a row
+# (it stayed on the previous commit for ~1 h) while CI was green, so "merged"
+# did not mean "live". A deploy hook makes the deploy deterministic and
+# observable from the run itself, instead of depending on a dashboard toggle.
+#
+# Setup (once): Render dashboard -> the service -> Settings -> Deploy Hook ->
+# copy the URL -> GitHub repo -> Settings -> Secrets -> Actions -> add
+# RENDER_DEPLOY_HOOK. Until then this job skips, so it is safe to ship.
+name: Deploy (Render)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the Render deploy hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK is not set; skipping (Render autoDeploy still applies)."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK"
+          echo "Deploy triggered."
