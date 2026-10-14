@@ -555,6 +555,33 @@ Telegram alert per event (dedup key `country:title:at_utc`, kept in
 trade into it. `--dry-run` prints instead of sending. Tests in
 `bot/test_news_alert.py`.
 
+### What a release actually did
+
+The pre-release alert can only warn: the Forex Factory mirror carries forecast
+and previous, never a released value. `advisor/calendar_feed.py` reads the
+keyless TradingView calendar instead, which carries `actual`, and turns a
+release into a directional read:
+
+  * actual vs forecast — falling back to previous, and saying which it used;
+  * higher-is-stronger, with the inversion for jobless claims and the
+    unemployment rate (a high print there is currency-*negative*);
+  * USD for US events, EUR for EU; and for a US event only, the usual gold
+    pressure (a stronger dollar presses gold). A non-US event is labelled as an
+    indirect gold link rather than asserting one, because the direct link is
+    the dollar.
+
+`bot/news_result.py` runs on the `astra-result` cron (every 15 minutes, state
+cached) and sends one Arabic message per released, market-relevant event —
+high-impact, or a medium whose indicator is known to move gold (ADP, CPI, PPI,
+NFP, claims...). Dedup key `country:title:at_utc` in
+`run/news_result_state.json`. A release with no baseline at all says so instead
+of guessing. `--dry-run` prints. Tests in `bot/test_news_result.py` and
+`advisor/test_calendar_feed.py`.
+
+This is the honest answer to a message that compares an actual against nothing
+and calls it "positive for the dollar": the read here always names the baseline
+it used, and refuses the call when there is none.
+
 ### The self-review digest
 
 `bot/review_digest.py` runs on the `astra-review` cron (daily, 07:00 UTC). It
