@@ -189,7 +189,7 @@ h1 {
 .banner.offline .dot { background: var(--down); box-shadow: 0 0 10px var(--down); }
 
 /* ── panels ─────────────────────────────────────────────────────────── */
-main { flex: 1; padding: 8px 14px 90px; }
+main { flex: 1; padding: 8px 14px 108px; }
 
 .panel {
   border: 1px solid var(--edge);
@@ -201,6 +201,20 @@ main { flex: 1; padding: 8px 14px 90px; }
   animation: rise .45s cubic-bezier(.2,.8,.2,1) both;
 }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+
+/* A panel that is fetching shows a shimmer instead of a frozen "--" grid, so a
+   slow read looks like work rather than a dead screen. The class is added when
+   a fetch starts and removed when it settles, by setPanelLoading. */
+.panel.loading { position: relative; }
+.panel.loading::after {
+  content: ""; position: absolute; inset: 0; border-radius: 18px;
+  background: linear-gradient(100deg, transparent 30%,
+              rgba(255,255,255,.05) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.4s linear infinite;
+  pointer-events: none;
+}
+@keyframes shimmer { from { background-position: 160% 0; } to { background-position: -60% 0; } }
 
 /* ── gauge ──────────────────────────────────────────────────────────── */
 .gauge { position: relative; width: min(74vw, 280px); margin: 4px auto 10px; }
@@ -500,17 +514,13 @@ main { flex: 1; padding: 8px 14px 90px; }
 .lvl button:active { color: var(--down); }
 
 /* ── tabs ───────────────────────────────────────────────────────────── */
-/* Nine tabs cannot fit a phone width, so the bar scrolls. Two things make
-   that obvious and usable: edge fades that appear only on the side that has
-   hidden tabs (toggled by JS from the real layout), and a scroll-into-view
-   when a tab is chosen, so the selected label is never left off-screen. */
+/* Nine tabs do not fit one phone-width row, so the bar is a two-row grid and
+   every tab is visible at once — no scrolling, no tabs hidden behind an edge.
+   A short gold bar over the selected label is the only selection cue. */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0;
-  display: flex;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
   gap: 1px;
   background: var(--edge);
   border-top: 1px solid var(--edge);
@@ -533,31 +543,38 @@ main { flex: 1; padding: 8px 14px 90px; }
                      #000 calc(100% - 30px), transparent 100%);
 }
 .tab {
-  flex: 1 0 auto;
-  min-width: 58px;
-  font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
-  text-transform: uppercase;
+  position: relative;
+  min-width: 0;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+  text-transform: uppercase; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
   background: var(--ink-2); color: var(--muted);
-  border: 0; padding: 15px 6px; cursor: pointer;
-  scroll-snap-align: center;
+  border: 0; padding: 16px 2px 12px; cursor: pointer;
 }
 /* Arabic is a connected script: the Latin tracking that separates Latin
    capitals visually breaks the joins between Arabic letters. */
 html[dir="rtl"] .tab { letter-spacing: normal; }
 .tab[aria-selected="true"] { color: var(--gold); background: var(--ink-3); }
+/* Absolutely positioned so the selected label sits at the same baseline as the
+   rest; the mark is the only difference between a selected tab and a quiet one. */
 .tab[aria-selected="true"]::before {
-  content: ""; display: block; height: 2px; width: 22px;
-  margin: 0 auto 8px; background: var(--gold);
+  content: ""; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  height: 2px; width: 18px; background: var(--gold);
 }
 
 .foot {
   text-align: center; font-size: 10px; letter-spacing: .1em;
-  color: var(--muted); padding: 0 18px 84px;
+  color: var(--muted); padding: 0 18px 116px;
 }
-.foot span { display: block; }
+.foot span { display: block; margin-top: 10px; }
+/* The APK and the two links are three destinations in one compact row, so the
+   footer takes two lines instead of four. */
+.foot-row {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  align-items: center;
+}
 .apk-link {
   display: inline-block;
-  margin-bottom: 12px;
   padding: 10px 16px;
   border: 1px solid var(--gold-dim);
   border-radius: 999px;
@@ -570,12 +587,12 @@ html[dir="rtl"] .tab { letter-spacing: normal; }
 /* Inside the installed app the APK is already on the phone — hide the link. */
 @media (display-mode: standalone) { .apk-link { display: none; } }
 .plans-link {
-  display: block;
-  margin-bottom: 12px;
+  display: inline-block;
+  padding: 9px 14px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
   color: var(--muted);
   text-decoration: none;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 .plans-link:active { color: var(--gold); }
 
@@ -604,6 +621,9 @@ html[data-theme="light"] .tab[aria-selected="true"] { background: var(--ink-3); 
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+  /* The shimmer is motion; without it, show a quiet static tint instead of a
+     frozen bright band across the panel. */
+  .panel.loading::after { background: rgba(255,255,255,.03); }
 }
 
 /* ── right-to-left (Arabic) ─────────────────────────────────────────── */

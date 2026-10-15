@@ -292,6 +292,13 @@ const num = (v, d = 2) =>
 const yn = (v) => (v ? T("yes") : T("no"));
 const mapI18n = (m, k) => (m[lang] || m.en)[k] || k;
 
+// A panel that is fetching gets a shimmer (see .panel.loading in styles.css) so
+// a slow read looks like work, not a frozen screen. Every caller pairs the two.
+function setPanelLoading(view, on) {
+  const el = $("view-" + view);
+  if (el) el.classList.toggle("loading", !!on);
+}
+
 let activeTf = "M15";
 let alertsOn = false;
 let swReg = null;   // the service worker registration, used to show notifications
@@ -483,6 +490,7 @@ const AI_STANCE_KEY = {
 async function loadAdvisor(force) {
   const stanceEl = $("ai-stance");
   const setStatus = (text) => { $("ai-status").textContent = text; };
+  setPanelLoading("ai", true);
   try {
     const env = await getJson("advisor/v1/advisor" + (force ? "?refresh=1" : ""));
     const a = (env && env.advisor) || {};
@@ -604,6 +612,8 @@ async function loadAdvisor(force) {
       if (el.tagName === "UL" || el.tagName === "DIV") el.innerHTML = "";
     }
     setStatus(T("ai_unavail"));
+  } finally {
+    setPanelLoading("ai", false);
   }
 }
 
@@ -884,6 +894,7 @@ function bindJournalFilter() {
 }
 
 async function loadTracker(attempt = 0) {
+  setPanelLoading("tracker", true);
   try {
     const env = await getJson("tracker/v1/signals");
     renderTracker(env && env.tracker);
@@ -897,6 +908,8 @@ async function loadTracker(attempt = 0) {
       return loadTracker(attempt + 1);
     }
     renderTracker(null);
+  } finally {
+    setPanelLoading("tracker", false);
   }
 }
 
@@ -1243,12 +1256,15 @@ async function refresh() {
 }
 
 async function loadChart() {
+  setPanelLoading("chart", true);
   try {
     const env = await bridgeEnvelope(`v1/candles?tf=${activeTf}&limit=120`);
     renderChart(env.payload || {});
     renderDataQuality(env);
   } catch (err) {
     $("chart-meta").textContent = fmt(T("chart_unavail"), { err: err.message });
+  } finally {
+    setPanelLoading("chart", false);
   }
   renderConn();
 }
@@ -1257,11 +1273,14 @@ async function loadChart() {
 // code the bot uses. The route returns null fields when it cannot score, so the
 // panel degrades to "unavailable" rather than inventing a number.
 async function loadVolatility() {
+  setPanelLoading("vol", true);
   let data = null;
   try {
     data = await getJson("vol.json");
   } catch (err) {
     data = null;
+  } finally {
+    setPanelLoading("vol", false);
   }
   renderVolatility(data);
 }
@@ -1316,6 +1335,7 @@ async function loadAkoan() {
   const base = $("akoan-base");
   const cov = $("akoan-cov");
   const note = $("akoan-note");
+  setPanelLoading("akoan", true);
   verdict.textContent = T("akoan_loading");
   verdict.className = "akoan-verdict";
   sub.textContent = "";
@@ -1343,6 +1363,7 @@ async function loadAkoan() {
       ? { available: false, reason: "timed out" } : null;
   } finally {
     clearInterval(tick);
+    setPanelLoading("akoan", false);
   }
   akoanData = data;
   renderAkoan(data);
@@ -1505,14 +1526,18 @@ function buildTimeframes() {
   });
 }
 
-/* The tab bar is wider than a phone, so it scrolls. Show a fade only on the
-   side that actually has hidden tabs, so the user can tell more exist. The
-   hidden side flips with direction: RTL starts at the right and overflows to
-   the physical left. */
+/* The tab bar is a two-row grid, so nothing is hidden and no edge fade is
+   needed. The function stays (and clears the classes) because a wide screen in
+   a landscape or desktop window can still make the grid overflow; when it does,
+   the fades return. */
 function updateTabFades() {
   const el = document.querySelector(".tabs");
   if (!el) return;
   const max = el.scrollWidth - el.clientWidth;
+  if (max <= 2) {
+    el.classList.remove("more-left", "more-right");
+    return;
+  }
   const pos = Math.abs(el.scrollLeft);
   const rtl = getComputedStyle(el).direction === "rtl";
   const atStart = pos <= 2;
@@ -1530,9 +1555,6 @@ function bindTabs() {
       const view = tab.dataset.view;
       document.querySelectorAll(".panel").forEach((p) =>
         (p.hidden = p.id !== `view-${view}`));
-      // A chosen tab can sit off-screen; bring it into view so the selection
-      // is visible, not just the panel.
-      tab.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
       updateTabFades();
       if (view === "chart") loadChart();
       if (view === "vol") loadVolatility();

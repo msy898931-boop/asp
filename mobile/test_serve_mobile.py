@@ -346,29 +346,53 @@ class BotHeartbeatTest(unittest.TestCase):
 
 
 class TabBarTest(unittest.TestCase):
-    """Nine tabs overflow a phone; the bar must say so and follow selection."""
+    """Nine tabs do not fit one row; the bar is a two-row grid that shows them all."""
 
     def _read(self, name):
         with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
             return fh.read()
 
-    def test_css_has_edge_fades_and_arabic_spacing(self):
+    def test_css_is_a_two_row_grid_with_arabic_spacing(self):
         css = self._read("styles.css")
+        self.assertIn("grid-template-columns: repeat(5, 1fr)", css)
+        self.assertIn("display: grid", css)
+        # The overflow affordance stays for a wide screen that still overflows.
         self.assertIn(".tabs.more-left", css)
         self.assertIn(".tabs.more-right", css)
         self.assertIn("mask-image", css)
         # Arabic joins break under Latin letter-spacing.
         self.assertIn('html[dir="rtl"] .tab', css)
 
-    def test_js_tracks_fades_and_scrolls_the_selected_tab(self):
+    def test_js_keeps_the_overflow_affordance(self):
         js = self._read("app.js")
         self.assertIn("function updateTabFades", js)
         self.assertIn("more-left", js)
         self.assertIn("more-right", js)
-        self.assertIn("scrollIntoView", js)
         # Fades must be recomputed when direction or viewport changes.
         self.assertIn('addEventListener("resize", updateTabFades)', js)
         self.assertIn("orientationchange", js)
+
+
+class PanelLoadingTest(unittest.TestCase):
+    """A slow read must look like work, not a frozen panel."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_css_defines_the_loading_shimmer(self):
+        css = self._read("styles.css")
+        self.assertIn(".panel.loading", css)
+        self.assertIn("shimmer", css)
+        # Reduced motion must not leave a frozen bright band.
+        self.assertIn("prefers-reduced-motion", css)
+
+    def test_js_toggles_loading_on_the_slow_panels(self):
+        js = self._read("app.js")
+        self.assertIn("function setPanelLoading", js)
+        for view in ("akoan", "chart", "vol", "ai", "tracker"):
+            self.assertIn('setPanelLoading("%s"' % view, js,
+                          "no loading indicator wired for %s" % view)
 
 
 class AkoanPanelTest(unittest.TestCase):
