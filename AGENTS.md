@@ -550,6 +550,16 @@ lower bound below break-even on both halves). So: a **real, significant lead,
 not a proven edge** — which earns a paper-trading trial, not live. Report:
 `docs/research/PLAN_C_PRESPECIFIED_RULE.md`.
 
+**Plan C, step 2 - the rule is now running on paper.** `bot/paper_trade.py` +
+`.github/workflows/astra-paper.yml` shadow the live bot every 15 minutes: they
+fetch the same closed bars, replay the engine, and append the trades the rule
+would take to `run/paper_trades.jsonl` (de-duped by time+direction+entry, cached
+between runs). No orders, no live state touched, no engine change. The channel
+gets a message when the rule trades or once a day, and the read states a win
+rate only once there are enough scored trades. This is the only honest way to
+settle a rule that is significant but under-sampled: forward in time, on bars
+the backtest never saw. If the rule is wrong, the ledger will show it.
+
 ### akoan ŌĆö the news Ōåö statistics bridge (the caveat above, closed)
 
 `akoan/` is an additive engine that turns the caveat above into a test. It
