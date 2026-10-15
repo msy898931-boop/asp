@@ -1017,3 +1017,26 @@ shows it ("ž¦ž│ž¬ž«ž»┘ģ ž¦┘äžŻž«ž©ž¦ž▒"). Knobs: `
 repoints it. Every fetch is best-effort: a dead feed yields no headlines and the
 advisor honestly reports `news_used: false` rather than inventing news. (Kitco
 and FXStreet RSS both 404/403 from a datacenter IP; Google News does not.)
+
+### Research: the feature store and the promotion gate
+
+`tracker/features.py` turns each replayed trade into a flat context row (regime,
+session, weekday, RSI, ATR scale, H4 agreement) with **no lookahead** — every
+feature is computed from bars up to the entry bar only. `tracker/validation_gate.py`
+is the one standard a change must clear before it may touch the engine: the
+**Wilson 95% lower bound** of the win rate must clear break-even on **both** the
+in-sample (2021-23) and out-of-sample (2024-26) halves, with positive net R and
+`min_n` scored trades per half. Thin samples report `INSUFFICIENT`, never a pass.
+
+`research/features_real/build_store.py` builds the store from the real corpus
+(`--tf` picks the bar size), `study.py` gates every candidate condition, and
+`timeframe_study.py` repeats it for H1/H4. The engine is untouched: this is
+read-only analysis. Store output (`feature_store*.jsonl`) is gitignored and
+reproducible.
+
+Verdict (2026-10): nothing clears the gate. M15 (live) loses in both halves; H1
+turns positive out-of-sample but fails in-sample; on H4 the aligned conditions
+are positive R on both halves but below the Wilson bar. No session/weekday/
+direction/regime filter has an edge alone. Full write-up:
+`docs/research/PLAN_A_FEATURE_STORE_AND_GATE.md`.
+
