@@ -33,3 +33,20 @@ This repository is a fork of `alimazna/asp` — **never push upstream** (see
 historical, see **`docs/INDEX.md`**. Build, test, and ship instructions live in
 `AGENTS.md`.
 
+## Get it
+
+| Surface | Link |
+| --- | --- |
+| Phone PWA (live) | https://astra-xlp9.onrender.com/ |
+| Android app (`.apk`) | https://github.com/msy898931-boop/asp/releases/download/android/astra.apk |
+| Telegram bot | https://t.me/Uhxsuigf_bot |
+| Windows desktop (full bundle) | https://github.com/msy898931-boop/asp/releases/download/desktop/ASTRA-full.zip |
+| Windows desktop (UI only) | https://github.com/msy898931-boop/asp/releases/download/desktop/ASTRA-windows.zip |
+
+The two phone downloads are the same build: the PWA installs from the browser,
+the `.apk` installs from the file. On first launch the `.apk` asks for the
+server address; enter the live PWA URL. The desktop bundles are a separate Qt
+build and are not part of the container image.
+
+_All links are published by an AI agent (OpenHands) on behalf of @msy898931-boop._
+
