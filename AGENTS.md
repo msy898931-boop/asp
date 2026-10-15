@@ -240,6 +240,22 @@ The watchdog's repo comes from `GITHUB_REPOSITORY`, which GitHub sets in Actions
 automatically. Defaults remain the current Render host and fork, so nothing
 changes until the variables are set. `bot/test_astra_env.py` locks this down.
 
+**Blank means unset.** A workflow that writes `ASTRA_URL: ${{ vars.ASTRA_URL }}`
+sets it to the empty string when the repo variable is absent. `astra_env` treats
+blank or whitespace as unset, and every workflow that passes the variable also
+carries a `|| 'https://…'` fallback. Both guards exist because a blank host once
+built a relative URL and killed the daily report (`7cd58a8`).
+
+### Daily report
+
+`bot/daily_report.py` (workflow `astra-daily`) sends one Telegram message a day,
+at **21:00 UTC = 00:00 UTC+3** (local midnight), covering the UTC day that just
+ended. Each closed and open idea shows direction, entry, outcome and R, followed
+by the basis the rules saw — trend bias, market regime and RSI — so the reader
+can see *why*. It only reads the tracker, so it can never invent a result, and
+it refuses to state a rate below `MIN_SCORED`. Re-send any day with
+`gh workflow run astra-daily.yml -f date=YYYY-MM-DD -f force=true`.
+
 ### Synthetic data source
 
 Without a Windows terminal the bridge reports MT5 as unavailable and the system
