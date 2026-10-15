@@ -525,6 +525,20 @@ volatility-only rather than crashing when the advisor is absent.
 calendar, so unlike the volatility model its effect cannot be backtested. The
 `/vol` reading and its alerts say so.
 
+**Plan B - the historical calendar, now built.** The caveat above was true of
+the Forex Factory mirror (one week, no `actual`). The advisor's TradingView
+calendar also serves the *past* with `actual` populated, so
+`research/features_real/build_news_ledger.py` fetches it month by month into a
+committed **27,398-event ledger over 2,147 days (2021-2026)**
+(`news_ledger.jsonl.gz`), in the same append-only shape `akoan/events.py` reads.
+`news_study.py` joins it to the feature store and gates every news condition.
+Result: **nothing clears the gate**, but the loss structure is the finding -
+almost all of the -598R lives in the *quiet* window (-573R); news-in-play is
+net-flat, "after a release" is +30R and "before a release" is the worst bucket
+(-0.148 R/trade). The "after a release" lead survived ATR-matching, split-year
+and window-sensitivity checks and still fails on sample size. Report:
+`docs/research/PLAN_B_HISTORICAL_NEWS.md`. The engine is untouched.
+
 ### akoan ŌĆö the news Ōåö statistics bridge (the caveat above, closed)
 
 `akoan/` is an additive engine that turns the caveat above into a test. It
