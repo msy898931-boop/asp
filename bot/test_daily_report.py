@@ -21,9 +21,11 @@ import daily_report as dr  # noqa: E402
 
 
 def sig(t, direction="SHORT", outcome="TARGET", r_net=1.6, entry=4150.0,
-        stop=4155.0, target=4140.0):
+        stop=4155.0, target=4140.0, bias="BEARISH", regime="TRENDING_DOWN",
+        rsi=46.7):
     return {"time": t, "direction": direction, "outcome": outcome,
-            "r_net": r_net, "entry": entry, "stop": stop, "target": target}
+            "r_net": r_net, "entry": entry, "stop": stop, "target": target,
+            "bias": bias, "regime": regime, "rsi": rsi}
 
 
 def ts(day, hour, minute=0):
@@ -75,6 +77,29 @@ class ReportTests(unittest.TestCase):
         text = dr.format_report([sig(ts(14, 5))], "2026-10-14")
         self.assertIn("4150.0", text)
         self.assertIn("هدف", text)
+
+
+class ReasonTests(unittest.TestCase):
+    def test_reason_states_bias_regime_and_rsi(self):
+        text = dr.format_report([sig(ts(14, 5))], "2026-10-14")
+        self.assertIn("ميل هابط", text)
+        self.assertIn("سوق اتجاه هابط", text)
+        self.assertIn("RSI 47", text)
+
+    def test_reason_shown_for_an_open_idea(self):
+        rows = [sig(ts(14, 5), outcome="OPEN", r_net=None)]
+        text = dr.format_report(rows, "2026-10-14")
+        self.assertIn("مفتوحة", text)
+        self.assertIn("ميل هابط", text)
+
+    def test_reason_omits_what_is_missing(self):
+        row = sig(ts(14, 5))
+        row.pop("bias")
+        row.pop("rsi")
+        self.assertEqual(dr._reason(row), "سوق اتجاه هابط")
+
+    def test_reason_empty_when_nothing_known(self):
+        self.assertEqual(dr._reason({}), "")
 
 
 if __name__ == "__main__":

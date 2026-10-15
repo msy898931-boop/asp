@@ -44,6 +44,9 @@ _USER_AGENT = "ASTRA-daily/1.0"
 
 OUTCOME_AR = {"TARGET": "✅ هدف", "STOP": "❌ وقف", "TIMEOUT": "⌛ انتهت",
               "OPEN": "⏳ مفتوحة"}
+BIAS_AR = {"BULLISH": "صاعد", "BEARISH": "هابط", "NEUTRAL": "محايد"}
+REGIME_AR = {"TRENDING_UP": "اتجاه صاعد", "TRENDING_DOWN": "اتجاه هابط",
+             "QUIET": "هادئ", "VOLATILE": "متقلّب"}
 
 
 def today_key(now: datetime | None = None) -> str:
@@ -99,6 +102,27 @@ def _hhmm(sec: int) -> str:
     return datetime.fromtimestamp(sec, timezone.utc).strftime("%H:%M")
 
 
+def _reason(row: dict) -> str:
+    """The basis the engine used: trend, market regime and RSI at the entry.
+
+    It is the same context the signal carries (bias/regime/rsi), stated so the
+    reader can see *why* the idea was taken — never a claim of skill. Direction
+    has no measured edge (research/PHASE0_VOLATILITY_DECISION.md); this only
+    reports what the rules saw.
+    """
+    parts = []
+    bias = BIAS_AR.get(row.get("bias"))
+    regime = REGIME_AR.get(row.get("regime"))
+    rsi = row.get("rsi")
+    if bias:
+        parts.append("ميل %s" % bias)
+    if regime:
+        parts.append("سوق %s" % regime)
+    if rsi is not None:
+        parts.append("RSI %.0f" % rsi)
+    return " · ".join(parts)
+
+
 def _row_line(row: dict) -> str:
     head = OUTCOME_AR.get(row.get("outcome"), row.get("outcome"))
     r = row.get("r_net")
@@ -109,8 +133,12 @@ def _row_line(row: dict) -> str:
         tail = "  %+.2fR" % r
         if usd is not None:
             tail += " (%s%.2f$)" % ("+" if usd >= 0 else "-", abs(usd))
-    return "%s %s %s  %s%s" % (head, _hhmm(row["time"]), row.get("direction"),
+    line = "%s %s %s  %s%s" % (head, _hhmm(row["time"]), row.get("direction"),
                                row.get("entry"), tail)
+    reason = _reason(row)
+    if reason:
+        line += "\n    ↳ %s" % reason
+    return line
 
 
 def format_report(rows: list[dict], day: str, min_scored: int = MIN_SCORED) -> str:
@@ -139,6 +167,9 @@ def format_report(rows: list[dict], day: str, min_scored: int = MIN_SCORED) -> s
             lines.append("⏳ %s %s مفتوحة · وقف %s · هدف %s"
                          % (_hhmm(r["time"]), r.get("direction"),
                             r.get("stop"), r.get("target")))
+            reason = _reason(r)
+            if reason:
+                lines.append("    ↳ %s" % reason)
 
     scored = s["wins"] + s["losses"]
     lines.append("")
