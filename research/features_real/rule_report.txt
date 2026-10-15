@@ -1,0 +1,60 @@
+baseline book: 7084 trades, win=36.2%, R=-569.4, R/trade=-0.080
+
+========================================================================================
+RULE: THE RULE: H4-aligned AND within 120 min after a release
+========================================================================================
+  trades taken : 282 of 7084  (4.0% of the book)
+  all years    : n=208 win=43.8% R=+32.9 R/trade=+0.117
+  in-sample    : n=140 R=+26.4 R/trade=+0.188
+  out-of-sample: n=142 R=+6.5 R/trade=+0.046
+  permutation  : diff R/trade = +0.205, two-sided p = 0.0067
+  gate verdict : REJECT
+    - in-sample: win rate 48.5% (Wilson low 39.1%) does not clear break-even 39.9%
+    - out-of-sample: win rate 39.0% (Wilson low 30.3%) does not clear break-even 38.7%
+
+========================================================================================
+RULE: H4-aligned only
+========================================================================================
+  trades taken : 3624 of 7084  (51.2% of the book)
+  all years    : n=3210 win=36.9% R=-226.4 R/trade=-0.062
+  in-sample    : n=1827 R=-153.6 R/trade=-0.084
+  out-of-sample: n=1797 R=-72.9 R/trade=-0.041
+  permutation  : diff R/trade = +0.037, two-sided p = 0.2105
+  gate verdict : REJECT
+    - in-sample: win rate 37.1% (Wilson low 34.8%) does not clear break-even 41.4%
+    - in-sample: net R is -153.6 (not positive)
+
+========================================================================================
+RULE: post-news only (<=2h)
+========================================================================================
+  trades taken : 538 of 7084  (7.6% of the book)
+  all years    : n=409 win=40.1% R=+29.9 R/trade=+0.056
+  in-sample    : n=257 R=+17.8 R/trade=+0.069
+  out-of-sample: n=281 R=+12.1 R/trade=+0.043
+  permutation  : diff R/trade = +0.147, two-sided p = 0.0084
+  gate verdict : REJECT
+    - in-sample: win rate 41.5% (Wilson low 34.7%) does not clear break-even 39.9%
+    - out-of-sample: win rate 38.9% (Wilson low 32.6%) does not clear break-even 38.8%
+
+----------------------------------------------------------------------------------------
+ROBUSTNESS of THE RULE
+----------------------------------------------------------------------------------------
+  by year:
+    2021  n=21   R=    -2.4  R/trade=-0.112
+    2022  n=63   R=   +15.9  R/trade=+0.253
+    2023  n=56   R=   +12.8  R/trade=+0.229
+    2024  n=46   R=    -0.1  R/trade=-0.002
+    2025  n=56   R=   +11.4  R/trade=+0.204
+    2026  n=40   R=    -4.8  R/trade=-0.121
+  by post-news window:
+    <= 30 min  n=87   R=   +17.5  R/trade=+0.201
+    <= 60 min  n=181  R=   +32.1  R/trade=+0.178
+    <= 90 min  n=233  R=   +30.4  R/trade=+0.131
+    <=120 min  n=282  R=   +32.9  R/trade=+0.117
+    <=180 min  n=372  R=   +37.1  R/trade=+0.100
+    <=240 min  n=445  R=   +48.1  R/trade=+0.108
+
+========================================================================================
+Read the p-value with the count of rules tested in mind: three rules here,
+and a p below ~0.017 would survive a Bonferroni correction at 5%.
+========================================================================================

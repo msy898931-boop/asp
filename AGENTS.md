@@ -539,6 +539,17 @@ net-flat, "after a release" is +30R and "before a release" is the worst bucket
 and window-sensitivity checks and still fails on sample size. Report:
 `docs/research/PLAN_B_HISTORICAL_NEWS.md`. The engine is untouched.
 
+**Plan C - one rule, fixed before looking.** `research/features_real/rule_test.py`
+takes the single rule the two studies implied — *H4-aligned AND within 120 min
+after a release* — and gates it, plus a permutation test the gate cannot give.
+Result: 282 trades (4.0% of the book), R/trade **+0.117**, permutation
+**p = 0.0067** (survives a 3-test Bonferroni correction), positive in-sample
+(+0.188) and out-of-sample (+0.046), robust to the window (positive 30-240 min).
+But it is flat in 3 of 6 years, and the gate still returns **REJECT** (Wilson
+lower bound below break-even on both halves). So: a **real, significant lead,
+not a proven edge** — which earns a paper-trading trial, not live. Report:
+`docs/research/PLAN_C_PRESPECIFIED_RULE.md`.
+
 ### akoan ŌĆö the news Ōåö statistics bridge (the caveat above, closed)
 
 `akoan/` is an additive engine that turns the caveat above into a test. It

@@ -25,6 +25,7 @@ for extra in (FEATURES_REAL, os.path.join(REPO, "tracker")):
 
 import build_news_ledger as ledger  # noqa: E402
 import news_study  # noqa: E402
+import rule_test  # noqa: E402
 
 
 class EventKeyTests(unittest.TestCase):
@@ -114,6 +115,48 @@ class CandidateShapeTests(unittest.TestCase):
         pred = dict(news_study.candidates())["after a release"]
         self.assertTrue(pred({"recent_release": True}))
         self.assertFalse(pred({"recent_release": False}))
+
+
+class RuleTests(unittest.TestCase):
+    def test_the_rule_needs_both_conditions(self):
+        self.assertTrue(rule_test.the_rule({"h4_align": "ALIGNED",
+                                            "recent_release": True}))
+        self.assertFalse(rule_test.the_rule({"h4_align": "AGAINST",
+                                             "recent_release": True}))
+        self.assertFalse(rule_test.the_rule({"h4_align": "ALIGNED",
+                                             "recent_release": False}))
+
+    def test_permutation_is_deterministic_for_a_seed(self):
+        rows = [{"r_net": 1.0, "hit": True} for _ in range(20)]
+        rows += [{"r_net": -1.0, "hit": False} for _ in range(20)]
+        p1, d1 = rule_test.permutation_p(rows, lambda r: r["hit"], n_perm=500)
+        p2, d2 = rule_test.permutation_p(rows, lambda r: r["hit"], n_perm=500)
+        self.assertEqual((p1, d1), (p2, d2))
+
+    def test_permutation_finds_a_clean_separation(self):
+        # Perfectly separated groups: the gap cannot be produced by shuffling.
+        rows = [{"r_net": 1.0, "hit": True} for _ in range(30)]
+        rows += [{"r_net": -1.0, "hit": False} for _ in range(30)]
+        p, diff = rule_test.permutation_p(rows, lambda r: r["hit"], n_perm=2000)
+        self.assertLess(p, 0.01)
+        self.assertAlmostEqual(diff, 2.0)
+
+    def test_permutation_is_null_when_groups_are_identical(self):
+        # Each group has the same 25 wins and 25 losses, so no real difference.
+        rows = []
+        for _ in range(25):
+            rows.append({"r_net": 1.0, "hit": True})
+            rows.append({"r_net": -1.0, "hit": False})
+            rows.append({"r_net": 1.0, "hit": False})
+            rows.append({"r_net": -1.0, "hit": True})
+        p, _ = rule_test.permutation_p(rows, lambda r: r["hit"], n_perm=2000)
+        self.assertGreater(p, 0.05)
+
+    def test_empty_subset_returns_p_one(self):
+        rows = [{"r_net": 1.0, "hit": False}]
+        p, diff = rule_test.permutation_p(rows, lambda r: r["hit"], n_perm=100)
+        self.assertEqual(p, 1.0)
+        self.assertEqual(diff, 0.0)
 
 
 if __name__ == "__main__":
