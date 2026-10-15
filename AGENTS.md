@@ -256,6 +256,23 @@ can see *why*. It only reads the tracker, so it can never invent a result, and
 it refuses to state a rate below `MIN_SCORED`. Re-send any day with
 `gh workflow run astra-daily.yml -f date=YYYY-MM-DD -f force=true`.
 
+### Paper trial
+
+`bot/paper_trade.py` shadows the live bot: it fetches the same closed bars,
+replays the engine, and records the trades the pre-specified rule (H4-aligned,
+within 120 minutes of a news event) would have taken to an append-only ledger.
+It places no orders and touches no live state. The ledger and its state ride in
+the Actions cache under the `astra-paper-` scope, and the job speaks on Telegram
+only when the rule trades or the UTC day rolls over — it is a trial record, not
+a heartbeat.
+
+The observer runs as the `paper` job of `astra-bot.yml`, riding that workflow's
+five-minute cron. A standalone `astra-paper.yml` exists but its schedule did not
+fire for hours while `astra-bot` fired reliably all day, so the observer was
+moved onto the trigger that works; the standalone workflow is left disabled to
+keep one source of truth. GitHub's cron also lags (runs land at :21, :51, …), so
+the job must stay idempotent and must not gate on the wall-clock minute.
+
 ### Synthetic data source
 
 Without a Windows terminal the bridge reports MT5 as unavailable and the system
