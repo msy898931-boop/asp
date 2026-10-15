@@ -20,6 +20,18 @@ import os
 DEFAULT_URL = "https://astra-xlp9.onrender.com"
 DEFAULT_REPO = "msy898931-boop/asp"
 
+
+def _env(name: str, default: str) -> str:
+    """Return ``name`` if it is set and non-blank, else ``default``.
+
+    A workflow that writes ``ASTRA_URL: ${{ vars.ASTRA_URL }}`` sets the
+    variable to the empty string when the repo variable is absent; plain
+    ``os.environ.get(name, default)`` would then hand an empty host to the
+    callers. Blank means "not set".
+    """
+    return (os.environ.get(name) or "").strip() or default
+
+
 # Read once at import, matching how the callers already bind their constants.
-URL = os.environ.get("ASTRA_URL", DEFAULT_URL).rstrip("/")
-REPO = os.environ.get("GITHUB_REPOSITORY", DEFAULT_REPO)
+URL = _env("ASTRA_URL", DEFAULT_URL).rstrip("/")
+REPO = _env("GITHUB_REPOSITORY", DEFAULT_REPO)

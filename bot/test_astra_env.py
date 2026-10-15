@@ -53,6 +53,20 @@ class AstraEnvTest(unittest.TestCase):
                               GITHUB_REPOSITORY=None)
         self.assertEqual(url, "https://new.example.com")
 
+    def test_blank_env_falls_back_to_default(self):
+        # A workflow writing `ASTRA_URL: ${{ vars.ASTRA_URL }}` sets it to the
+        # empty string when the repo variable is absent; that must not become
+        # the host.
+        url, repo = self._reload(ASTRA_URL="", GITHUB_REPOSITORY="   ")
+        self.assertEqual(url, astra_env.DEFAULT_URL)
+        self.assertEqual(repo, astra_env.DEFAULT_REPO)
+
+    def test_blank_env_reports_default_to_callers(self):
+        # daily_report builds its URL from astra_env.URL; a blank env must not
+        # produce "/tracker/v1/signals".
+        self._reload(ASTRA_URL="", GITHUB_REPOSITORY=None)
+        self.assertTrue(astra_env.URL.startswith("https://"))
+
 
 if __name__ == "__main__":
     unittest.main()
