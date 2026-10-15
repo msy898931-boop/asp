@@ -3,6 +3,7 @@
 *.csv
 *.csv.gz
 .work/
+.work2026/
 fetch.log
 # ...but the small committed samples must survive the *.csv rule.
 !sample/
