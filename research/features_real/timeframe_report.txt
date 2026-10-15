@@ -1,0 +1,76 @@
+
+============================================================================================
+TIMEFRAME H1 (tf=3600s) — 1875 resolved trades
+============================================================================================
+[fail] all (baseline)             IS n=857  win= 36.1% wlo= 32.9% be= 39.2% R=   -58.8
+                                OOS n=886  win= 39.2% wlo= 36.0% be= 38.4% R=   +30.8
+[fail] H4 aligned                 IS n=503  win= 38.6% wlo= 34.4% be= 39.2% R=    -3.6
+                                OOS n=517  win= 37.7% wlo= 33.6% be= 38.4% R=    -2.4
+[fail] H4 against                 IS n=336  win= 31.5% wlo= 26.8% be= 39.3% R=   -59.8
+                                OOS n=353  win= 40.5% wlo= 35.5% be= 38.4% R=   +24.1
+[fail] regime: TRENDING_UP        IS n=253  win= 36.0% wlo= 30.3% be= 39.2% R=   -12.5
+                                OOS n=344  win= 43.0% wlo= 37.9% be= 38.4% R=   +48.5
+[fail] regime: TRENDING_DOWN      IS n=256  win= 38.3% wlo= 32.5% be= 39.1% R=    -9.6
+                                OOS n=235  win= 35.3% wlo= 29.5% be= 38.2% R=   -14.2
+[fail] regime: RANGING            IS n=242  win= 33.5% wlo= 27.8% be= 39.2% R=   -28.5
+                                OOS n=248  win= 39.5% wlo= 33.6% be= 38.3% R=   +10.1
+[thin] regime: QUIET              IS n=106  win= 36.8% wlo= 28.2% be= 39.7% R=    -8.1
+                                OOS n=59   win= 30.5% wlo= 20.3% be= 39.1% R=   -13.5
+[fail] session: LONDON            IS n=131  win= 34.4% wlo= 26.8% be= 39.6% R=   -17.3
+                                OOS n=147  win= 38.8% wlo= 31.3% be= 38.5% R=    +1.2
+[fail] session: LONDON_NY         IS n=146  win= 34.9% wlo= 27.7% be= 39.2% R=   -15.5
+                                OOS n=148  win= 37.2% wlo= 29.8% be= 38.4% R=    -4.6
+[fail] session: NY                IS n=244  win= 38.9% wlo= 33.0% be= 39.0% R=    +6.2
+                                OOS n=215  win= 37.2% wlo= 31.0% be= 38.3% R=    -1.2
+[fail] session: ASIA_LATE         IS n=108  win= 39.8% wlo= 31.1% be= 39.1% R=    +2.6
+                                OOS n=128  win= 43.8% wlo= 35.5% be= 38.3% R=   +21.5
+[fail] LONG only                  IS n=411  win= 36.3% wlo= 31.8% be= 39.3% R=   -18.7
+                                OOS n=481  win= 41.8% wlo= 37.5% be= 38.4% R=   +49.7
+[fail] SHORT only                 IS n=446  win= 35.9% wlo= 31.6% be= 39.2% R=   -40.1
+                                OOS n=405  win= 36.0% wlo= 31.5% be= 38.3% R=   -18.9
+[fail] weekday: TUE               IS n=191  win= 38.2% wlo= 31.6% be= 39.3% R=    -3.1
+                                OOS n=171  win= 42.1% wlo= 35.0% be= 38.3% R=   +19.2
+[fail] weekday: WED               IS n=169  win= 34.9% wlo= 28.1% be= 39.3% R=   -18.3
+                                OOS n=185  win= 37.3% wlo= 30.7% be= 38.3% R=    -2.7
+[fail] weekday: THU               IS n=197  win= 37.1% wlo= 30.6% be= 39.1% R=    -9.7
+                                OOS n=184  win= 37.0% wlo= 30.3% be= 38.4% R=    -4.0
+[fail] aligned + TRENDING         IS n=390  win= 37.9% wlo= 33.3% be= 39.1% R=   -10.2
+                                OOS n=429  win= 38.2% wlo= 33.8% be= 38.4% R=    +5.6
+
+============================================================================================
+TIMEFRAME H4 (tf=14400s) — 570 resolved trades
+============================================================================================
+[fail] all (baseline)             IS n=289  win= 37.7% wlo= 32.3% be= 38.4% R=    -2.0
+                                OOS n=263  win= 37.6% wlo= 32.0% be= 37.9% R=    +1.8
+[fail] H4 aligned                 IS n=208  win= 39.9% wlo= 33.5% be= 38.4% R=   +10.0
+                                OOS n=209  win= 39.2% wlo= 32.9% be= 37.9% R=    +8.1
+[thin] H4 against                 IS n=81   win= 32.1% wlo= 22.9% be= 38.4% R=   -12.0
+                                OOS n=54   win= 31.5% wlo= 20.7% be= 38.0% R=    -6.3
+[thin] regime: TRENDING_UP        IS n=99   win= 39.4% wlo= 30.3% be= 38.4% R=    +3.0
+                                OOS n=134  win= 41.0% wlo= 33.1% be= 38.0% R=   +11.4
+[thin] regime: TRENDING_DOWN      IS n=94   win= 42.6% wlo= 33.0% be= 38.4% R=   +11.7
+                                OOS n=66   win= 37.9% wlo= 27.1% be= 37.8% R=    +0.4
+[thin] regime: RANGING            IS n=96   win= 31.2% wlo= 22.9% be= 38.4% R=   -16.7
+                                OOS n=63   win= 30.2% wlo= 20.2% be= 38.0% R=   -10.1
+[thin] regime: QUIET              IS n=0
+                                OOS n=0
+[thin] session: LONDON            IS n=47   win= 21.3% wlo= 12.0% be= 38.4% R=   -19.6
+                                OOS n=44   win= 31.8% wlo= 20.0% be= 37.9% R=    -6.9
+[thin] session: LONDON_NY         IS n=24   win= 41.7% wlo= 24.5% be= 38.3% R=    +2.2
+                                OOS n=26   win= 34.6% wlo= 19.4% be= 37.9% R=    -2.3
+[thin] session: NY                IS n=33   win= 30.3% wlo= 17.4% be= 38.4% R=    -7.1
+                                OOS n=32   win= 43.8% wlo= 28.2% be= 37.9% R=    +5.8
+[thin] session: ASIA_LATE         IS n=52   win= 40.4% wlo= 28.2% be= 38.4% R=    +2.7
+                                OOS n=47   win= 34.0% wlo= 22.2% be= 38.0% R=    -4.6
+[fail] LONG only                  IS n=142  win= 37.3% wlo= 29.8% be= 38.4% R=    -3.1
+                                OOS n=161  win= 40.4% wlo= 33.1% be= 38.0% R=   +11.4
+[fail] SHORT only                 IS n=147  win= 38.1% wlo= 30.6% be= 38.4% R=    +1.1
+                                OOS n=102  win= 33.3% wlo= 24.9% be= 37.9% R=    -9.6
+[thin] weekday: TUE               IS n=46   win= 41.3% wlo= 28.3% be= 38.4% R=    +4.7
+                                OOS n=55   win= 43.6% wlo= 31.4% be= 37.9% R=    +8.6
+[thin] weekday: WED               IS n=58   win= 43.1% wlo= 31.2% be= 38.4% R=    +7.9
+                                OOS n=48   win= 29.2% wlo= 18.2% be= 38.0% R=   -10.8
+[thin] weekday: THU               IS n=61   win= 31.1% wlo= 20.9% be= 38.4% R=   -10.9
+                                OOS n=46   win= 21.7% wlo= 12.3% be= 37.9% R=   -18.6
+[fail] aligned + TRENDING         IS n=193  win= 40.9% wlo= 34.2% be= 38.4% R=   +14.7
+                                OOS n=200  win= 40.0% wlo= 33.5% be= 37.9% R=   +11.8

@@ -1,0 +1,3 @@
+# Generated feature stores are reproducible from build_store.py + the corpus;
+# do not commit the data, only the code that makes it and the reports it yields.
+feature_store*.jsonl
