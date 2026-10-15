@@ -1,0 +1,122 @@
+============================================================================================
+ASTRA news study — split at 2024, min_n=100
+store: 7084 trades | ledger: 27398 events | news_in_play: 700 | blackout: 109
+============================================================================================
+
+[fail] all (baseline)
+    IS : n=3180 win= 35.8% wlo= 34.1% be= 41.5% R=  -413.8
+    OOS: n=3120 win= 36.7% wlo= 35.0% be= 39.4% R=  -155.6
+    - in-sample: win rate 35.8% (Wilson low 34.1%) does not clear break-even 41.5%
+    - in-sample: net R is -413.8 (not positive)
+
+[fail] no news in play
+    IS : n=2914 win= 35.3% wlo= 33.6% be= 41.6% R=  -428.6
+    OOS: n=2821 win= 36.8% wlo= 35.0% be= 39.4% R=  -144.6
+    - in-sample: win rate 35.3% (Wilson low 33.6%) does not clear break-even 41.6%
+    - in-sample: net R is -428.6 (not positive)
+
+[fail] news in play
+    IS : n=266  win= 40.6% wlo= 34.9% be= 40.2% R=   +14.8
+    OOS: n=299  win= 36.1% wlo= 30.9% be= 38.8% R=   -11.0
+    - in-sample: win rate 40.6% (Wilson low 34.9%) does not clear break-even 40.2%
+    - out-of-sample: win rate 36.1% (Wilson low 30.9%) does not clear break-even 38.8%
+
+[fail] quiet (no blackout)
+    IS : n=3137 win= 35.7% wlo= 34.0% be= 41.5% R=  -418.1
+    OOS: n=3068 win= 36.6% wlo= 34.9% be= 39.4% R=  -161.7
+    - in-sample: win rate 35.7% (Wilson low 34.0%) does not clear break-even 41.5%
+    - in-sample: net R is -418.1 (not positive)
+
+[thin] blackout window
+    IS : n=43   win= 41.9% wlo= 28.4% be= 40.2% R=    +4.4
+    OOS: n=52   win= 40.4% wlo= 28.2% be= 38.8% R=    +6.0
+    - in-sample: 43 scored trades, need 100
+    - out-of-sample: 52 scored trades, need 100
+
+[fail] after a release
+    IS : n=193  win= 41.5% wlo= 34.7% be= 39.9% R=   +17.8
+    OOS: n=216  win= 38.9% wlo= 32.6% be= 38.8% R=   +12.1
+    - in-sample: win rate 41.5% (Wilson low 34.7%) does not clear break-even 39.9%
+    - out-of-sample: win rate 38.9% (Wilson low 32.6%) does not clear break-even 38.8%
+
+[fail] no recent release
+    IS : n=2987 win= 35.4% wlo= 33.7% be= 41.6% R=  -431.5
+    OOS: n=2904 win= 36.5% wlo= 34.8% be= 39.4% R=  -167.7
+    - in-sample: win rate 35.4% (Wilson low 33.7%) does not clear break-even 41.6%
+    - in-sample: net R is -431.5 (not positive)
+
+[thin] before a release
+    IS : n=76   win= 38.2% wlo= 28.1% be= 40.8% R=    -4.4
+    OOS: n=89   win= 30.3% wlo= 21.8% be= 39.0% R=   -20.7
+    - in-sample: 76 scored trades, need 100
+    - out-of-sample: 89 scored trades, need 100
+
+[thin] trade WITH the news
+    IS : n=95   win= 36.8% wlo= 27.8% be= 39.8% R=    -5.4
+    OOS: n=101  win= 32.7% wlo= 24.3% be= 38.7% R=    -9.9
+    - in-sample: 95 scored trades, need 100
+
+[thin] trade AGAINST the news
+    IS : n=65   win= 52.3% wlo= 40.4% be= 39.9% R=   +25.9
+    OOS: n=65   win= 40.0% wlo= 29.0% be= 38.8% R=    +5.7
+    - in-sample: 65 scored trades, need 100
+    - out-of-sample: 65 scored trades, need 100
+
+[fail] news-neutral
+    IS : n=3020 win= 35.4% wlo= 33.7% be= 41.6% R=  -434.3
+    OOS: n=2954 win= 36.8% wlo= 35.0% be= 39.4% R=  -151.4
+    - in-sample: win rate 35.4% (Wilson low 33.7%) does not clear break-even 41.6%
+    - in-sample: net R is -434.3 (not positive)
+
+============================================================================================
+PRE-SPECIFIED COMBINATIONS (H4 lead + news lead)
+============================================================================================
+
+[fail] H4-aligned + after release
+    IS : n=103  win= 48.5% wlo= 39.1% be= 39.9% R=   +26.4
+    OOS: n=105  win= 39.0% wlo= 30.3% be= 38.7% R=    +6.5
+    - in-sample: win rate 48.5% (Wilson low 39.1%) does not clear break-even 39.9%
+    - out-of-sample: win rate 39.0% (Wilson low 30.3%) does not clear break-even 38.7%
+
+[fail] H4-aligned + no news
+    IS : n=1468 win= 36.1% wlo= 33.7% be= 41.6% R=  -185.8
+    OOS: n=1456 win= 36.6% wlo= 34.2% be= 39.4% R=   -74.5
+    - in-sample: win rate 36.1% (Wilson low 33.7%) does not clear break-even 41.6%
+    - in-sample: net R is -185.8 (not positive)
+
+[fail] H4-aligned + news in play
+    IS : n=146  win= 47.3% wlo= 39.3% be= 40.2% R=   +32.2
+    OOS: n=140  win= 37.9% wlo= 30.2% be= 38.8% R=    +1.6
+    - in-sample: win rate 47.3% (Wilson low 39.3%) does not clear break-even 40.2%
+    - out-of-sample: win rate 37.9% (Wilson low 30.2%) does not clear break-even 38.8%
+
+--------------------------------------------------------------------------------------------
+net R by news state (all years, resolved trades)
+--------------------------------------------------------------------------------------------
+  news in play       n=700   win=38.2%  R=     +3.8  R/trade=+0.005
+  quiet (no news)    n=6384  win=36.0%  R=   -573.2  R/trade=-0.090
+  after a release    n=538   win=40.1%  R=    +29.9  R/trade=+0.056
+  before a release   n=170   win=33.9%  R=    -25.1  R/trade=-0.148
+  blackout           n=109   win=41.1%  R=    +10.4  R/trade=+0.095
+
+--------------------------------------------------------------------------------------------
+ATR-matched check: is 'after a release' news, or just high volatility?
+--------------------------------------------------------------------------------------------
+  ATR band   after release          not after release      diff R/trade
+  Q1 calm    n=14    +0.074        n=1730  -0.165        +0.239
+  Q2         n=50    +0.352        n=1657  -0.075        +0.426
+  Q3         n=135   +0.082        n=1373  -0.066        +0.148
+  Q4 volatile n=210   -0.011        n=1131  -0.051        +0.039
+
+--------------------------------------------------------------------------------------------
+window sensitivity: R/trade after a release, by lookback window
+--------------------------------------------------------------------------------------------
+  window     in-sample                      out-of-sample
+  30 min     n=72    -0.023 R/trade      n=67    +0.120 R/trade
+  60 min     n=123   +0.068 R/trade      n=140   +0.058 R/trade
+  120 min    n=193   +0.069 R/trade      n=216   +0.043 R/trade
+  240 min    n=261   +0.075 R/trade      n=333   +0.007 R/trade
+
+============================================================================================
+CLEARED THE GATE: none. No news condition beats break-even out-of-sample at the Wilson lower bound.
+============================================================================================

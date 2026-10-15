@@ -1,3 +1,9 @@
-# Generated feature stores are reproducible from build_store.py + the corpus;
-# do not commit the data, only the code that makes it and the reports it yields.
+# Generated feature stores are reproducible offline from build_store.py + the
+# committed corpus; do not commit the data, only the code that makes it.
 feature_store*.jsonl
+
+# The news ledger IS committed on purpose: it is the historical economic
+# calendar the corpus never had (AGENTS.md), it is decision-critical research
+# input, and it is NOT reproducible offline -- it takes ~6 years of network
+# fetches from the TradingView calendar. Small enough (~750 KB gz) to carry.
+!news_ledger.jsonl.gz
