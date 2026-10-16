@@ -36,19 +36,32 @@ ADVISOR_URL = (os.environ.get("ASTRA_REVIEW_URL") or
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_REVIEW_TIMEOUT", "30"))
 _USER_AGENT = "ASTRA-review/1.0"
 
+# Returned when the access gate answers 401: the advisor may be perfectly
+# healthy, this run just has no key. Distinct from None ("unreachable").
+_GATE = object()
+
 
 def _get_json(url: str):
     try:
         req = urllib.request.Request(
-            url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+            url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT,
+                          **astra_env.auth_headers()})
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            # The access gate is on and this run has no (or a wrong) token.
+            sys.stderr.write("[review] access gate without a token (HTTP %d)\n" % exc.code)
+            return _GATE
+        return None
     except (urllib.error.URLError, OSError, ValueError):
         return None
 
 
 def fetch_review(url: str = ADVISOR_URL) -> dict | None:
     payload = _get_json(url)
+    if payload is _GATE:
+        return _GATE
     if not isinstance(payload, dict):
         return None
     return payload.get("review") or None
@@ -62,7 +75,8 @@ def poke(url: str = ADVISOR_URL) -> bool:
     when the app is never opened. Best-effort: a failure never blocks the digest.
     """
     base = url.rsplit("/review", 1)[0]
-    return _get_json(base + "/advisor?refresh=1") is not None
+    res = _get_json(base + "/advisor?refresh=1")
+    return res is not None and res is not _GATE
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -83,6 +97,12 @@ def main(argv: list[str] | None = None) -> int:
     if poked:
         # A fresh call just landed in the log, so re-read for the newest numbers.
         review = fetch_review() or review
+
+    # The gate is on but this run has no token: the advisor may be fine, so do
+    # not alert "advisor unavailable" — just stay quiet and exit zero.
+    if review is _GATE:
+        sys.stderr.write("[review] skipping: access gate is on without a token\n")
+        return 0
 
     if review is None:
         sys.stderr.write("[review] advisor unreachable at %s\n" % ADVISOR_URL)

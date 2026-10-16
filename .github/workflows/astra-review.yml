@@ -47,6 +47,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ASTRA_REVIEW_URL: ${{ vars.ASTRA_REVIEW_URL }}
+          ASTRA_ACCESS_TOKEN: ${{ secrets.ASTRA_ACCESS_TOKEN }}
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             python3 bot/review_digest.py --dry-run

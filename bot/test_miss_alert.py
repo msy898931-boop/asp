@@ -138,6 +138,53 @@ class FetchOutcomesTests(unittest.TestCase):
         finally:
             urllib.request.urlopen = orig
 
+    def test_gate_401_is_quiet_not_a_crash(self):
+        # With the gate on and no token the advisor answers 401. That must be
+        # an empty list (job exits zero), not None ("advisor unreachable").
+        import urllib.error
+        import urllib.request
+        orig = urllib.request.urlopen
+
+        def gate(req, timeout=None):
+            raise urllib.error.HTTPError("u", 401, "unauth", {}, None)
+
+        urllib.request.urlopen = gate
+        try:
+            self.assertEqual(ma.fetch_outcomes("http://example/v1/review"), [])
+        finally:
+            urllib.request.urlopen = orig
+
+    def test_the_cookie_is_sent_when_a_token_is_set(self):
+        # The gate is opened by the astra_key cookie, so the request must carry
+        # it or every scored call would be silently skipped.
+        import urllib.request
+        orig_urlopen = urllib.request.urlopen
+        orig_headers = ma.astra_env.auth_headers
+        ma.astra_env.auth_headers = lambda: {"Cookie": "astra_key=tok"}
+        seen = {}
+
+        class Fake:
+            def __enter__(self_):
+                return self_
+
+            def __exit__(self_, *a):
+                return False
+
+            def read(self_):
+                return b'{"review": {"summary": {}}}'
+
+        def capture(req, timeout=None):
+            seen["cookie"] = req.get_header("Cookie")
+            return Fake()
+
+        urllib.request.urlopen = capture
+        try:
+            ma.fetch_outcomes("http://example/v1/review")
+        finally:
+            urllib.request.urlopen = orig_urlopen
+            ma.astra_env.auth_headers = orig_headers
+        self.assertEqual(seen.get("cookie"), "astra_key=tok")
+
     def test_missing_keys_is_empty_list(self):
         import urllib.request
 

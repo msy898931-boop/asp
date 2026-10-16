@@ -44,9 +44,18 @@ _USER_AGENT = "ASTRA-miss/1.0"
 def fetch_outcomes(url: str = ADVISOR_URL) -> list[dict] | None:
     try:
         req = urllib.request.Request(
-            url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+            url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT,
+                          **astra_env.auth_headers()})
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            # The access gate is on and this run has no (or a wrong) token.
+            # That is a missing credential, not a broken advisor: return no
+            # outcomes so the job stays quiet instead of failing 96 times a day.
+            sys.stderr.write("[miss] access gate without a token (HTTP %d)\n" % exc.code)
+            return []
+        return None
     except (urllib.error.URLError, OSError, ValueError):
         return None
     if not isinstance(payload, dict):

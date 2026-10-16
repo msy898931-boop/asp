@@ -49,6 +49,36 @@ class FetchReviewTests(unittest.TestCase):
         finally:
             urllib.request.urlopen = orig
 
+    def test_gate_401_is_reported_as_the_gate(self):
+        # A 401 means "gate on, no key", not "advisor down": the digest must
+        # distinguish the two so it never cries "unavailable" while gated.
+        import urllib.error
+        import urllib.request
+        orig = urllib.request.urlopen
+
+        def gate(req, timeout=None):
+            raise urllib.error.HTTPError("u", 401, "unauth", {}, None)
+
+        urllib.request.urlopen = gate
+        try:
+            self.assertIs(rd.fetch_review("http://example/v1/review"), rd._GATE)
+        finally:
+            urllib.request.urlopen = orig
+
+    def test_gate_401_makes_poke_false(self):
+        import urllib.error
+        import urllib.request
+        orig = urllib.request.urlopen
+
+        def gate(req, timeout=None):
+            raise urllib.error.HTTPError("u", 403, "forbidden", {}, None)
+
+        urllib.request.urlopen = gate
+        try:
+            self.assertFalse(rd.poke("http://example/v1/review"))
+        finally:
+            urllib.request.urlopen = orig
+
     def test_missing_review_key_returns_none(self):
         import urllib.request
 
