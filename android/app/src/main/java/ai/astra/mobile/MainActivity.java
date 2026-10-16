@@ -50,6 +50,9 @@ public class MainActivity extends Activity {
     // True once /unlock has been followed to a clean "/" after a key entry, so
     // onPageFinished does not redirect again.
     private boolean onUnlockLoaded;
+    // True once a page has ever loaded. Distinguishes a first-load 401 (auto
+    // unlock with the saved key) from a later one (the key is wrong — ask).
+    private boolean loadedOnce;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -84,24 +87,19 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
+                loadedOnce = true;
                 error.setVisibility(View.GONE);
                 web.setVisibility(View.VISIBLE);
                 // Persist any cookie the gate just set so the session survives
                 // the app being closed; the WebView flush is async and easy to
                 // lose on a process that is killed.
                 CookieManager.getInstance().flush();
-                // With a stored key, establish the gate's cookie once the host
-                // is reachable. The HttpOnly cookie persists after this single
-                // visit; when the gate is off, /unlock redirects straight to "/".
+                // With a stored or baked-in key, establish the gate's cookie
+                // once the host is reachable. The HttpOnly cookie persists
+                // after this single visit; when the gate is off, /unlock
+                // redirects straight to "/".
                 if (!onUnlockLoaded && !accessKey().isEmpty()) {
-                    onUnlockLoaded = true;
-                    Uri base = Uri.parse(serverUrl());
-                    String unlock = base.buildUpon()
-                            .encodedPath("/unlock")
-                            .encodedQuery("k=" + accessKey()).build().toString();
-                    if (!url.startsWith(unlock)) {
-                        view.loadUrl(unlock);
-                    }
+                    loadUnlock();
                 }
             }
 
@@ -122,11 +120,14 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest request,
                                             android.webkit.WebResourceResponse response) {
-                // The gate answers 401 for the whole app. That is not a network
-                // failure, so offer the key screen rather than a retry loop.
+                // The gate answers 401 for the whole app. On the first load the
+                // saved key auto-unlocks, so wait for that instead of racing it
+                // with a prompt; a 401 after a page has loaded means the key is
+                // wrong, so ask for a new one rather than loop.
                 if (request != null && request.isForMainFrame()
                         && response != null
-                        && response.getStatusCode() == 401) {
+                        && response.getStatusCode() == 401
+                        && loadedOnce) {
                     promptForKey();
                 }
             }
@@ -203,6 +204,19 @@ public class MainActivity extends Activity {
         return saved.isEmpty() ? DEFAULT_KEY : saved;
     }
 
+    /** Follow the gate's /unlock with the current key; the cookie lands there. */
+    private void loadUnlock() {
+        onUnlockLoaded = true;
+        error.setVisibility(View.GONE);
+        web.setVisibility(View.VISIBLE);
+        Uri base = Uri.parse(serverUrl());
+        String unlock = base.buildUpon()
+                .encodedPath("/unlock")
+                .encodedQuery("k=" + Uri.encode(accessKey())).build().toString();
+        Toast.makeText(this, "جارٍ الدخول…", Toast.LENGTH_SHORT).show();
+        web.loadUrl(unlock);
+    }
+
     /**
      * Ask for the server's access key and store the cookie via /unlock?k=.
      *
@@ -226,17 +240,15 @@ public class MainActivity extends Activity {
                     }
                     getSharedPreferences(PREFS, MODE_PRIVATE)
                             .edit().putString(KEY_ACCESS, key).apply();
-                    error.setVisibility(View.GONE);
-                    web.setVisibility(View.VISIBLE);
-                    onUnlockLoaded = true;
-                    Uri base = Uri.parse(serverUrl());
-                    String unlock = base.buildUpon()
-                            .encodedPath("/unlock")
-                            .encodedQuery("k=" + Uri.encode(key)).build().toString();
-                    Toast.makeText(this, "جارٍ الدخول…", Toast.LENGTH_SHORT).show();
-                    web.loadUrl(unlock);
+                    loadUnlock();
                 })
-                .setNegativeButton("إلغاء", null)
+                // Cancelling a wrong-key prompt must not leave a blank WebView
+                // with no way out: fall back to the tap-to-retry error screen.
+                .setNegativeButton("إلغاء", (d, w) -> {
+                    if (!loadedOnce) {
+                        showError();
+                    }
+                })
                 .show();
     }
 
