@@ -121,6 +121,16 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
 
 ## Notes / gotchas
 
+- **The access gate is on and every consumer must carry the cookie.** Setting
+  `ASTRA_ACCESS_TOKEN` makes `serve_mobile` answer 401 on every route but
+  `/api/v1/health`; a first `/?k=KEY` visit stores an HttpOnly `astra_key`
+  cookie. Turning it on silently breaks anything that reads the server without
+  a cookie: the keepalive canary (`/version.json`, `/akoan.json`), the watchdog
+  (engine + poller), the daily report (tracker), and the Android WebView shell.
+  Monitoring builds its headers from `astra_env.auth_headers()`; the workflows
+  pass `ASTRA_ACCESS_TOKEN` to it. The APK asks for the key once on a 401 and
+  establishes the cookie itself, and `sw.js` refuses to cache `/unlock?k=` or
+  any 401. When adding a new server reader, send the cookie or exempt the route.
 - The backend build is self-contained; the MT5 bridge is loopback-only by design.
 - `HttpClient` in `src/foundation/` deliberately refuses non-loopback hosts, so
   it cannot reach Telegram's HTTPS API ŌĆö that is why the bot is Python, not C++.
