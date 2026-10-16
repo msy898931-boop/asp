@@ -850,6 +850,28 @@ class AndroidShellTest(unittest.TestCase):
         man = self._read("android", "app", "src", "main", "AndroidManifest.xml")
         self.assertIn('android:name="android.permission.INTERNET"', man)
 
+    def test_shell_accepts_the_access_cookie(self):
+        # The server's gate sets an HttpOnly astra_key cookie on /unlock?k=.
+        # Without accepting cookies the WebView answers 401 on every route and
+        # the app looks broken whenever the gate is on.
+        java = self._read("android", "app", "src", "main", "java",
+                          "ai", "astra", "mobile", "MainActivity.java")
+        self.assertIn("setAcceptCookie(true)", java)
+        self.assertIn("CookieManager", java)
+
+    def test_shell_can_enter_the_access_key(self):
+        java = self._read("android", "app", "src", "main", "java",
+                          "ai", "astra", "mobile", "MainActivity.java")
+        self.assertIn("/unlock", java)
+        self.assertIn("KEY_ACCESS", java)
+        self.assertIn("promptForKey", java)
+
+    def test_shell_treats_401_as_a_key_prompt_not_a_network_error(self):
+        java = self._read("android", "app", "src", "main", "java",
+                          "ai", "astra", "mobile", "MainActivity.java")
+        self.assertIn("onReceivedHttpError", java)
+        self.assertIn("getStatusCode() == 401", java)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,16 +3,19 @@ package ai.astra.mobile;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -32,10 +35,14 @@ public class MainActivity extends Activity {
 
     private static final String PREFS = "astra";
     private static final String KEY_URL = "server_url";
+    private static final String KEY_ACCESS = "access_key";
 
     private WebView web;
     private FrameLayout root;
     private TextView error;
+    // True once /unlock has been followed to a clean "/" after a key entry, so
+    // onPageFinished does not redirect again.
+    private boolean onUnlockLoaded;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -57,11 +64,34 @@ public class MainActivity extends Activity {
             s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         }
 
+        // The server may gate every route behind a key and hand out an
+        // HttpOnly astra_key cookie on a first /unlock?k= visit. Let the WebView
+        // accept and keep that cookie: without this the app answers 401 and
+        // looks broken whenever the gate is on. Cookies stay on the device.
+        CookieManager cm = CookieManager.getInstance();
+        cm.setAcceptCookie(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            cm.setAcceptThirdPartyCookies(web, true);
+        }
+
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
                 error.setVisibility(View.GONE);
                 web.setVisibility(View.VISIBLE);
+                // With a stored key, establish the gate's cookie once the host
+                // is reachable. The HttpOnly cookie persists after this single
+                // visit; when the gate is off, /unlock redirects straight to "/".
+                if (!onUnlockLoaded && !accessKey().isEmpty()) {
+                    onUnlockLoaded = true;
+                    Uri base = Uri.parse(serverUrl());
+                    String unlock = base.buildUpon()
+                            .encodedPath("/unlock")
+                            .encodedQuery("k=" + accessKey()).build().toString();
+                    if (!url.startsWith(unlock)) {
+                        view.loadUrl(unlock);
+                    }
+                }
             }
 
             @Override
@@ -76,6 +106,18 @@ public class MainActivity extends Activity {
             @SuppressWarnings("deprecation")
             public void onReceivedError(WebView view, int code, String desc, String url) {
                 showError();
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request,
+                                            android.webkit.WebResourceResponse response) {
+                // The gate answers 401 for the whole app. That is not a network
+                // failure, so offer the key screen rather than a retry loop.
+                if (request != null && request.isForMainFrame()
+                        && response != null
+                        && response.getStatusCode() == 401) {
+                    promptForKey();
+                }
             }
         });
 
@@ -127,7 +169,8 @@ public class MainActivity extends Activity {
 
     // A free host sleeps when idle, so the first open after a while can fail
     // even though the address is right. Offer a retry before asking the user
-    // to retype anything.
+    // to retype anything. The key is a separate action: a 401 is not a network
+    // failure, and conflating the two sends the user to the wrong screen.
     private void onErrorTap() {
         new android.app.AlertDialog.Builder(this)
                 .setTitle("تعذّر الوصول إلى خادم ASTRA")
@@ -137,7 +180,51 @@ public class MainActivity extends Activity {
                     web.setVisibility(View.VISIBLE);
                     web.loadUrl(serverUrl());
                 })
+                .setNeutralButton("مفتاح الوصول", (d, w) -> promptForKey())
                 .setNegativeButton("تغيير العنوان", (d, w) -> promptForUrl())
+                .show();
+    }
+
+    /** The access key the server's gate expects, or "" when none was entered. */
+    private String accessKey() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getString(KEY_ACCESS, "");
+    }
+
+    /**
+     * Ask for the server's access key and store the cookie via /unlock?k=.
+     *
+     * The key is kept on the device so changing the address can re-establish
+     * the cookie without retyping it. HttpOnly means the WebView, not this code,
+     * holds the actual cookie; this is only the seed for the first visit.
+     */
+    private void promptForKey() {
+        final android.widget.EditText input = new android.widget.EditText(this);
+        input.setText(accessKey());
+        input.setHint("مفتاح الوصول");
+        input.setTextDirection(View.TEXT_DIRECTION_LTR);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("مفتاح الوصول إلى ASTRA")
+                .setMessage("أدخله مرة واحدة؛ يُحفظ على الجهاز ويُنشئ جلسة آمنة.")
+                .setView(input)
+                .setPositiveButton("دخول", (d, w) -> {
+                    String key = input.getText().toString().trim();
+                    if (key.isEmpty()) {
+                        return;
+                    }
+                    getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .edit().putString(KEY_ACCESS, key).apply();
+                    error.setVisibility(View.GONE);
+                    web.setVisibility(View.VISIBLE);
+                    onUnlockLoaded = true;
+                    Uri base = Uri.parse(serverUrl());
+                    String unlock = base.buildUpon()
+                            .encodedPath("/unlock")
+                            .encodedQuery("k=" + Uri.encode(key)).build().toString();
+                    Toast.makeText(this, "جارٍ الدخول…", Toast.LENGTH_SHORT).show();
+                    web.loadUrl(unlock);
+                })
+                .setNegativeButton("إلغاء", null)
                 .show();
     }
 
