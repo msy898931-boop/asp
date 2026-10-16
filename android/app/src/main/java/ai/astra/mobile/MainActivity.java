@@ -26,8 +26,9 @@ import android.widget.Toast;
  */
 public class MainActivity extends Activity {
 
-    // Default target; overridden by build.sh --url.
-    private static final String DEFAULT_URL = "http://127.0.0.1:12001/";
+    // Default target; overridden by build.sh --url. Points at the live server:
+    // loopback would be the phone itself and open an empty screen.
+    private static final String DEFAULT_URL = "https://astra-xlp9.onrender.com/";
 
     private static final String PREFS = "astra";
     private static final String KEY_URL = "server_url";

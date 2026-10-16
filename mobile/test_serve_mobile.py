@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -818,6 +819,36 @@ class PwaManifestTest(unittest.TestCase):
     def test_light_manifest_is_precached(self):
         sw = self._read("sw.js")
         self.assertIn("./manifest-light.webmanifest", sw)
+
+
+class AndroidShellTest(unittest.TestCase):
+    """The APK is a WebView shell that opens the hosted app. Its baked-in target
+    must be the live server, never loopback: 127.0.0.1 on a phone is the phone
+    itself, so the app opened an empty error screen and looked broken."""
+
+    def _read(self, *parts):
+        root = os.path.dirname(sm.HERE)
+        with open(os.path.join(root, *parts), encoding="utf-8") as fh:
+            return fh.read()
+
+    def _url(self, text):
+        m = re.search(r'DEFAULT_URL\s*=\s*"([^"]+)"', text)
+        return m.group(1) if m else None
+
+    def test_source_and_build_default_to_the_live_server(self):
+        java = self._read("android", "app", "src", "main", "java",
+                          "ai", "astra", "mobile", "MainActivity.java")
+        self.assertEqual(self._url(java), "https://astra-xlp9.onrender.com/")
+
+    def test_build_script_does_not_bake_loopback(self):
+        sh = self._read("android", "build.sh")
+        m = re.search(r'^\s*SERVER_URL="([^"]*)"', sh, re.M)
+        self.assertIsNotNone(m, "build.sh must set a default SERVER_URL")
+        self.assertEqual(m.group(1), "https://astra-xlp9.onrender.com/")
+
+    def test_shell_allows_network(self):
+        man = self._read("android", "app", "src", "main", "AndroidManifest.xml")
+        self.assertIn('android:name="android.permission.INTERNET"', man)
 
 
 if __name__ == "__main__":

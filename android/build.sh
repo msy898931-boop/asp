@@ -28,7 +28,11 @@ PLATFORM_VER="${PLATFORM_VER:-34}"
 BUILD_TOOLS="$ANDROID_HOME/build-tools/$BT_VER"
 ANDROID_JAR="$ANDROID_HOME/platforms/android-$PLATFORM_VER/android.jar"
 
-SERVER_URL="http://127.0.0.1:12001/"
+# The phone app is a shell around the hosted web app, so the default target is
+# the live server. A blank --url (or no ASTRA_URL variable) must NOT fall back
+# to loopback: 127.0.0.1 on a phone is the phone itself, which made the APK
+# open an empty error screen and look broken. --url still overrides.
+SERVER_URL="https://astra-xlp9.onrender.com/"
 APP_NAME="ASTRA"
 while [ $# -gt 0 ]; do
   case "$1" in
