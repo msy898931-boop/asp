@@ -183,11 +183,15 @@ curl -s https://astra-xlp9.onrender.com/version.json
 # {"commit":"07a21a8...","shell":"c48cf55964","started_at":...,"uptime_s":...}
 ```
 
-Two checks watch the live service, both free (GitHub Actions cron):
+Two checks watch the live service, both free (GitHub Actions):
 
-- `astra-keepalive` (every 5 min) pings `/api/v1/health`, prints
-  `/version.json`, and **fails the run** if `/akoan.json` answers with
-  `available:false` ŌĆö the exact bug that once shipped the News tab blank.
+- `astra-keepalive` keeps the Render service awake **and** checks it. It runs
+  for ~5h41m, pinging `/api/v1/health` every 5 minutes, then re-arms itself
+  with a `workflow_dispatch` so the next run takes over. It opens with a
+  canary that prints `/version.json` and **fails** if `/akoan.json` answers
+  `available:false` — the exact bug that once shipped the News tab blank.
+  The long run exists because the cron trigger is too slow to beat the
+  15-minute sleep window (see "Never let the server sleep" below).
 - `astra-watchdog` (hourly) reads the same body via `check_engine()` and alerts
   on Telegram when the engine serves empty. A 404 or dead connection is treated
   as "unavailable", never as trouble, so an older deploy does not cry wolf.
@@ -887,20 +891,27 @@ than quoting a position that cannot be traded. Money figures use the minimum
 Two always-on pieces, and they are independent:
 
 * **The bot** runs on GitHub Actions (`.github/workflows/astra-bot.yml`) and
-  reads candles straight from the upstream via `LiveMt5Client` ŌĆö it does **not**
+  reads candles straight from the upstream via `LiveMt5Client` — it does **not**
   touch the Render server, so it is always on with nothing to keep warm. Do not
   add a Render dependency to `bot/scan_once.py`; that would couple the never-
   sleeping half to the one that naps.
-* **The phone app** points at the live Render server, and Render's free plan
-  spins a service down after ~15 minutes idle, so a request paid a 30-60s cold
-  start. `.github/workflows/astra-keepalive.yml` pings `/api/v1/health` every 5
-  minutes (well inside the window) to keep it awake. The repo is public, so the
-  Actions minutes are free.
+* **The phone app and the interactive bot** both live on the Render service,
+  and Render's free plan spins a service down after ~15 minutes idle. The bot
+  is not a separate process to keep warm — the backend launches it whenever
+  `TELEGRAM_BOT_TOKEN` is set — so keeping the service awake keeps the bot
+  answering too.
+* **Cron cannot keep it awake.** GitHub's cron is best-effort: on this repo a
+  5-minute schedule has landed 20–75 minutes apart, longer than the sleep
+  window. `astra-keepalive` therefore runs for ~5h41m (under the 6-hour job
+  limit), pinging every 5 minutes, and re-arms itself with a
+  `workflow_dispatch` (needs `actions: write`) so each run starts the next.
+  The cron trigger remains as a safety net if a re-arm is ever missed.
 
-`render.yaml` says `plan: starter` (paid, never sleeps), but the live service is
-on the free plan ŌĆö hence the keep-alive. If the service is ever upgraded, the
-keep-alive is harmless and can stay. The health path is `/api/v1/health`; the
-bare `/health` and `/api/health` both 404.
+`render.yaml` says `plan: starter` (paid, never sleeps), but the live service
+is on the free plan — hence the warm chain. One always-on service still fits
+Render's free allowance (750 instance-hours; a month is ~730). If the service
+is ever upgraded the chain is harmless and can stay. The health path is
+`/api/v1/health`; the bare `/health` and `/api/health` both 404.
 
 ### The AI advisor must be started, not just built
 

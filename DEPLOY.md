@@ -51,10 +51,12 @@ turn on the AI advisor tab, also set `GROQ_API_KEY` to a free Groq key — witho
 it the tab honestly says "not configured".
 
 **Free plan caveat:** a free web service sleeps after 15 minutes idle, so the
-phone app cold-starts (~1 min) on the next open. The repo ships a keep-alive
-(`.github/workflows/astra-keepalive.yml`) that pings `/api/v1/health` every 5
-minutes to keep it awake, so the app stays warm; the bot never depended on this
-because it runs on GitHub Actions. Do not attach a persistent disk to a free
+phone app cold-starts (~1 min) on the next open and the interactive bot stops
+answering. Cron cannot hold it awake — GitHub's 5-minute schedule lands
+20–75 minutes apart here — so `.github/workflows/astra-keepalive.yml` runs
+a ~5h41m job that pings `/api/v1/health` every 5 minutes and re-arms itself,
+keeping the service warm around the clock. Do not attach a persistent disk to
+a free service (disks require a paid plan).
 service (disks require a paid plan).
 
 **One instance per bot token.** Running the same token on two services (or a
@@ -100,13 +102,20 @@ The compose stack restarts unless stopped and survives reboots, so the bot stays
 up with no keepalive cron. Point `ASTRA_URL` (and the Render service, if kept)
 at the VM's public IP or a domain.
 
-## Option E — free, no card: GitHub Actions as the always-on host
+## Option E — free, no card: the warm chain (shipped)
 
 The repo is public, so Actions minutes are unmetered. The bot already runs there
-on a cron; to make it continuous, a job can run for up to ~6 hours and re-arm
-itself at the end (`workflow_dispatch` or a fresh schedule). No credit card, no
-sleep, but it is a workaround: a dead run must be noticed and restarted, and the
-phone app still needs a host for the PWA. Pair it with Render for the app.
+on a cron, but a cron cannot hold the Render service awake (its 5-minute
+schedule lands 20–75 minutes apart here, longer than the 15-minute sleep
+window). `astra-keepalive.yml` solves this without a card: one job runs for
+~5h41m, pinging `/api/v1/health` every 5 minutes, then re-arms itself with a
+`workflow_dispatch` so the next run takes over. The service never sleeps, so the
+phone app opens instantly and the interactive bot stays up. One always-on
+service still fits Render's free 750 instance-hours (a month is ~730).
+
+Nothing to configure — it runs on `main`. If it ever stops, the cron trigger
+restarts the chain; if the service is upgraded to paid, the chain is harmless
+and can stay.
 
 ## After deploy
 
