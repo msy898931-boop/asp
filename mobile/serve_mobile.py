@@ -366,6 +366,57 @@ def akoan_body(now: float | None = None) -> bytes:
     return body
 
 
+# ── news reading ─────────────────────────────────────────────────────────
+#
+# The phone cannot reach the calendar or the RSS feeds. This route runs the
+# news engine on the server (which can) and returns the digest: the blackout
+# window, the upcoming schedule, the just-printed releases with their gold
+# read, and the day's headlines. Cached for minutes — the feeds change slowly
+# and one run serves every phone.
+
+_NEWS_CACHE_TTL = 180.0
+_news_cache = {"at": 0.0, "body": None}
+_news_lock = threading.Lock()
+
+
+def _load_news_engine():
+    """The news engine, imported from its real location, or None."""
+    for cand in (os.environ.get("ASTRA_NEWS_DIR", ""), os.path.join(ROOT, "advisor")):
+        if cand and os.path.isfile(os.path.join(cand, "news_engine.py")):
+            if cand not in sys.path:
+                sys.path.insert(0, cand)
+            break
+    try:
+        import news_engine
+        return news_engine
+    except ImportError:
+        return None
+
+
+def _compute_news() -> dict:
+    mod = _load_news_engine()
+    if mod is None:
+        return {"engine": "news", "available": False,
+                "reason": "news engine unavailable"}
+    try:
+        return mod.digest()
+    except Exception as exc:  # noqa: BLE001 - a feed failure must not 500
+        return {"engine": "news", "available": False,
+                "reason": "news engine error", "detail": str(exc)}
+
+
+def news_body(now: float | None = None) -> bytes:
+    """Cached JSON body for /news.json."""
+    now = time.time() if now is None else now
+    with _news_lock:
+        if _news_cache["body"] is not None and now - _news_cache["at"] < _NEWS_CACHE_TTL:
+            return _news_cache["body"]
+    body = json.dumps(_compute_news(), ensure_ascii=False).encode("utf-8")
+    with _news_lock:
+        _news_cache["at"], _news_cache["body"] = now, body
+    return body
+
+
 def warm_akoan_cache() -> None:
     """Populate the akoan cache once, in the background, at startup.
 
@@ -425,6 +476,8 @@ class Handler(BaseHTTPRequestHandler):
             self._volatility()
         elif path == "/akoan.json":
             self._akoan()
+        elif path == "/news.json":
+            self._news()
         elif path.startswith("/api/v1/"):
             self._proxy(self.api_base + path[len("/api/v1"):], self.path)
         elif path.startswith("/bridge/"):
@@ -575,6 +628,13 @@ class Handler(BaseHTTPRequestHandler):
         Cached for minutes; the replay is heavy, so one run serves every phone.
         """
         body = akoan_body()
+        self._send(200, body, "application/json; charset=utf-8")
+
+    # -- news reading -------------------------------------------------------
+
+    def _news(self) -> None:
+        """The live news digest, computed by the same engine the CLI runs."""
+        body = news_body()
         self._send(200, body, "application/json; charset=utf-8")
 
     # -- APK download -------------------------------------------------------

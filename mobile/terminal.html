@@ -152,6 +152,41 @@
     <div class="callout" data-i18n="mk_caveat">هذا نظام ظلّي: المستويات والمراكز والنتائج كلها محاكاة، ولا يملك تفويض تنفيذ.</div>
   </section>
 
+  <!-- ══ NEWS & GOLD ══════════════════════════════════════════════════ -->
+  <section class="panel" id="view-news" hidden aria-labelledby="nw-title">
+    <div class="panel-head">
+      <h2 class="panel-title" id="nw-title" data-i18n="nav_news">الأخبار والذهب</h2>
+      <span class="panel-sub" data-i18n="nw_sub">قراءة الأخبار العالمية وتأثيرها على الذهب لحظة بلحظة</span>
+    </div>
+
+    <!-- Blackout window: the one thing to know before touching a trade. -->
+    <div class="nw-window unknown" id="nw-window">
+      <span class="nw-window-state" id="nw-window-state">--</span>
+      <span class="nw-window-text" id="nw-window-text">--</span>
+      <span class="metric-src" id="nw-window-src">news.json</span>
+    </div>
+
+    <div class="panel-head sub-head">
+      <h3 class="panel-title sm" data-i18n="nw_upcoming">أحداث قادمة عالية التأثير</h3>
+      <span class="panel-sub" data-i18n="nw_upcoming_sub">التقويم الاقتصادي · بالتوقيت العالمي</span>
+    </div>
+    <div class="nw-list" id="nw-upcoming"></div>
+
+    <div class="panel-head sub-head">
+      <h3 class="panel-title sm" data-i18n="nw_released">نتائج صدرت للتو</h3>
+      <span class="panel-sub" data-i18n="nw_released_sub">الفعلي مقابل التقدير → الأثر على الذهب</span>
+    </div>
+    <div class="nw-list" id="nw-released"></div>
+
+    <div class="panel-head sub-head">
+      <h3 class="panel-title sm" data-i18n="nw_headlines">عناوين الذهب</h3>
+      <span class="panel-sub" data-i18n="nw_headlines_sub">آخر ما كُتب عن XAUUSD</span>
+    </div>
+    <div class="nw-list" id="nw-headlines"></div>
+
+    <div class="callout" data-i18n="nw_caveat">قراءة ميكانيكية للأخبار: الفعلي مقابل التقدير، والأثر على الذهب مباشر مع الدولار فقط. أثر الأخبار على نتائج النظام ما انقاس بعد، فلا يُدَّعى حافة.</div>
+  </section>
+
   <!-- ══ TIMEFRAMES ═══════════════════════════════════════════════════ -->
   <section class="panel" id="view-timeframes" hidden aria-labelledby="tf-title">
     <div class="panel-head">
@@ -223,6 +258,7 @@
 <nav class="tabs" role="tablist" aria-label="Sections">
   <button class="tab" data-view="overview" aria-selected="true" type="button" data-i18n="nav_overview">النظرة العامة</button>
   <button class="tab" data-view="market" type="button" data-i18n="nav_market">السوق والصفقات</button>
+  <button class="tab" data-view="news" type="button" data-i18n="nav_news">الأخبار والذهب</button>
   <button class="tab" data-view="timeframes" type="button" data-i18n="nav_timeframes">الإطارات</button>
   <button class="tab" data-view="services" type="button" data-i18n="nav_services">الخدمات</button>
   <button class="tab" data-view="audit" type="button" data-i18n="nav_audit">التدقيق</button>

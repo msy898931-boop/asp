@@ -153,9 +153,9 @@ class MarketPanelTest(unittest.TestCase):
         self.assertIn('id="mk-positions"', html)
         self.assertIn('id="mk-outcomes"', html)
 
-    def test_the_bar_has_seven_tabs(self):
+    def test_the_bar_has_eight_tabs(self):
         html = _read(TERMINAL)
-        self.assertEqual(html.count('class="tab"'), 7)
+        self.assertEqual(html.count('class="tab"'), 8)
 
     def test_market_is_a_route(self):
         js = _read(TERMINAL_JS)
@@ -236,6 +236,65 @@ class MarketPanelTest(unittest.TestCase):
         # A 401 on analysis/latest is a key gate, not a missing decision.
         self.assertIn("analysisLocked", js)
         self.assertIn("why_locked", js)
+
+
+class NewsPanelTest(unittest.TestCase):
+    """The news & gold view: the blackout window, the schedule, the gold read.
+
+    The panel is where a news claim is easiest to overstate, so these pin the
+    honesty: the window word comes from the engine's state, the gold read is
+    asserted only for the dollar, and the panel is wired to the /news.json route
+    rather than a raw external origin.
+    """
+
+    def test_the_section_and_tab_exist(self):
+        html = _read(TERMINAL)
+        self.assertIn('id="view-news"', html)
+        self.assertIn('data-view="news"', html)
+        for el in ("nw-window", "nw-upcoming", "nw-released", "nw-headlines"):
+            with self.subTest(el=el):
+                self.assertIn('id="%s"' % el, html)
+
+    def test_news_is_a_route(self):
+        js = _read(TERMINAL_JS)
+        self.assertRegex(js, r'const ROUTES = \[[^\]]*"news"')
+        self.assertIn('if (route === "news") renderNews();', js)
+
+    def test_the_panel_reads_the_news_route(self):
+        js = _read(TERMINAL_JS)
+        # The digest comes from the app's own origin, never an external host.
+        self.assertIn('getJson("news.json"', js)
+        self.assertNotRegex(js, r'https?://[^"\']*news\.json')
+
+    def test_the_window_word_comes_from_the_engine_state(self):
+        js = _read(TERMINAL_JS)
+        self.assertIn("win.state", js)
+        for key in ("nw_window_ACTIVE", "nw_window_UPCOMING", "nw_window_CLEAR"):
+            with self.subTest(key=key):
+                self.assertIn(key + ":", js)
+
+    def test_the_gold_read_is_asserted_only_for_the_dollar(self):
+        js = _read(TERMINAL_JS)
+        # `certain` is the engine's own flag; without it the panel says the link
+        # is indirect rather than inventing a direction.
+        fn = re.search(r"function nwImpact[\s\S]*?\n\}", js).group(0)
+        self.assertIn("r.certain", fn)
+        self.assertIn('T("nw_impact_indirect")', fn)
+        self.assertIn("r.gold_dir", fn)
+
+    def test_every_list_has_an_empty_state(self):
+        js = _read(TERMINAL_JS)
+        for key in ("nw_empty_upcoming", "nw_empty_released", "nw_empty_headlines"):
+            with self.subTest(key=key):
+                self.assertIn(key + ":", js)
+
+    def test_news_styles_are_scoped_to_the_terminal(self):
+        css = _read(TERMINAL_CSS)
+        for cls in (".nw-window", ".nw-card", ".nw-list"):
+            with self.subTest(cls=cls):
+                self.assertIn(cls, css)
+        shared = _read(os.path.join(HERE, "styles.css"))
+        self.assertNotIn(".nw-window", shared)
 
 
 class GateTest(unittest.TestCase):

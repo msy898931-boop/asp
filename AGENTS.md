@@ -378,12 +378,12 @@ by the same server (and stamped/gated with the rest of the shell), so it adds no
 risk to the phone shell — if it were folded into `index.html` it would have to
 be in the offline shell and every phone would pay for a view it never opens.
 
-Seven sections: Overview (aggregate state, a metric matrix with each reading's
+Eight sections: Overview (aggregate state, a metric matrix with each reading's
 source endpoint, the two honesty badges, degraded reasons), Market & trades,
-Timeframes (all nine, each with a tap-for-detail dialog), Services (a live
-latency board over the same endpoints, plus the bridge readout), Audit, Risk &
-System, and Console — a raw endpoint runner so "what does the app actually
-receive?" is one click.
+News & gold, Timeframes (all nine, each with a tap-for-detail dialog), Services
+(a live latency board over the same endpoints, plus the bridge readout), Audit,
+Risk & System, and Console — a raw endpoint runner so "what does the app
+actually receive?" is one click.
 
 **Market & trades** is the one panel built from the decision engine's own
 output rather than a state flag. It reads `analysis/latest` for the direction
@@ -399,7 +399,7 @@ one, and an absent analysis document reads "unavailable", never a direction of
 when `signal.probability_calibrated === true`, otherwise the raw score is
 labelled a score, never dressed as a probability. Its CSS lives in
 `terminal.css` only — the shared `styles.css` the phone app depends on is not
-touched, and the tab bar is widened to seven in `terminal.css`.
+touched, and the tab bar is widened to eight in `terminal.css`.
 
 When no plan is drawn, the panel does not leave a blank "waiting" line: it
 names the gate the values are consistent with (`whyNoTrade`), read from the
@@ -418,6 +418,33 @@ everywhere reports "backend locked", not "unreachable" — the two send an
 operator down different paths. `mobile/test_terminal.py` pins all of this
 (asset wiring, the stamp, gate coverage, bilingual key parity, no `eval`, no
 absolute origins, and the unknown-is-not-safe rule).
+
+**News & gold** is the live news read. `advisor/news_engine.py` assembles a
+digest from keyless public sources — the TradingView economic calendar
+(`advisor/calendar_feed.py`, which owns the release fetch and the mechanical
+surprise read) and the Google News RSS gold search (the same reader the advisor
+uses). It reuses, never re-implements: `news_window.blackout_event` /
+`upcoming_event` own the blackout logic and the Arabic one-liner, and
+`calendar_feed.classify` owns the gold direction, so the bot, the advisor and
+this panel cannot disagree. The digest is the blackout window (state + reason),
+the upcoming schedule, the just-released events with their gold read, and the
+day's headlines. `serve_mobile.py` exposes it as `/news.json`, cached ~180 s;
+the engine is imported from `advisor/` the same way `/akoan.json` imports
+`akoan/` and `/vol.json` imports `bridge/telegram_bot`. The route is
+best-effort and never 500s: a dead feed yields empty lists and the panel shows
+its empty states.
+
+The honesty rules carry over from the sources and are worth restating: a
+release with no forecast and no previous has no baseline, so no direction is
+asserted; the gold link is asserted only for a US release (elsewhere it is
+labelled indirect, because only the dollar has a mechanical link to gold); the
+wording is "pressure" / "support", never "will fall"; and the caveat says the
+news effect on system results is not measured, so no edge is claimed. The panel
+is fetched in `refresh()` **before** the "all endpoints dead" early return, so
+the news still renders when the backend is down — it reads public feeds, not
+the backend. `advisor/test_news_engine.py` and the `NewsPanelTest` class in
+`mobile/test_terminal.py` pin the window logic, the baseline honesty, the
+dollar-only gold read, and the route wiring, all offline.
 
 Arabic-first but locale-following, like the app: no saved choice means the
 phone's language decides; `?lang=ar` / `?lang=en` forces one (and persists it).

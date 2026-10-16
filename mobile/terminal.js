@@ -83,6 +83,32 @@ const STRINGS = {
     v_open: "مفتوح", v_closed: "مغلق", v_none: "لا شيء",
     /* market & trades */
     nav_market: "السوق والصفقات",
+    nav_news: "الأخبار والذهب",
+    nw_sub: "قراءة الأخبار العالمية وتأثيرها على الذهب لحظة بلحظة",
+    nw_upcoming: "أحداث قادمة عالية التأثير",
+    nw_upcoming_sub: "التقويم الاقتصادي · بالتوقيت العالمي",
+    nw_released: "نتائج صدرت للتو",
+    nw_released_sub: "الفعلي مقابل التقدير → الأثر على الذهب",
+    nw_headlines: "عناوين الذهب",
+    nw_headlines_sub: "آخر ما كُتب عن XAUUSD",
+    nw_caveat: "قراءة ميكانيكية للأخبار: الفعلي مقابل التقدير، والأثر على الذهب مباشر مع الدولار فقط. أثر الأخبار على نتائج النظام ما انقاس بعد، فلا يُدَّعى حافة.",
+    nw_window_ACTIVE: "نافذة خبر نشطة",
+    nw_window_UPCOMING: "خبر مهم قريب",
+    nw_window_CLEAR: "السوق خالي من الأخبار المهمة",
+    nw_window_UNKNOWN: "حالة الأخبار غير معروفة",
+    nw_minutes: "{n} د",
+    nw_in_minutes: "بعد {n} د",
+    nw_ago_minutes: "قبل {n} د",
+    nw_empty_upcoming: "لا أحداث عالية التأثير في المدى القريب.",
+    nw_empty_released: "لا نتائج صدرت حديثاً.",
+    nw_empty_headlines: "لا عناوين متاحة الآن.",
+    nw_impact_gold_pressure: "ضغط على الذهب",
+    nw_impact_gold_support: "دعم للذهب",
+    nw_impact_indirect: "الأثر على الذهب غير مباشر",
+    nw_impact_none: "مطابق للتقدير — بلا مفاجأة",
+    nw_impact_unknown: "بلا تقدير ولا سابق — ما في قراءة",
+    nw_act: "الفعلي", nw_fc: "التقدير", nw_prev: "السابق",
+    nw_vs_forecast: "مقابل التقدير", nw_vs_previous: "مقابل السابق",
     mk_sub: "الاتجاه وخطة الصفقة من محرّك القرار نفسه",
     mk_plan: "خطة الصفقة",
     mk_plan_wait: "بانتظار قرار مُقيَّم…",
@@ -179,6 +205,32 @@ const STRINGS = {
     v_yes: "yes", v_no: "no", v_na: "unavailable",
     v_open: "open", v_closed: "closed", v_none: "none",
     nav_market: "Market & trades",
+    nav_news: "News & gold",
+    nw_sub: "A live read of world news and what it means for gold",
+    nw_upcoming: "Upcoming high-impact events",
+    nw_upcoming_sub: "Economic calendar · all times UTC",
+    nw_released: "Just released",
+    nw_released_sub: "Actual vs forecast → the gold read",
+    nw_headlines: "Gold headlines",
+    nw_headlines_sub: "The latest on XAUUSD",
+    nw_caveat: "A mechanical news read: actual vs forecast, with the gold link asserted only for the dollar. The news effect on system results is not measured yet, so no edge is claimed.",
+    nw_window_ACTIVE: "Blackout window active",
+    nw_window_UPCOMING: "High-impact event near",
+    nw_window_CLEAR: "Clear of high-impact events",
+    nw_window_UNKNOWN: "News state unknown",
+    nw_minutes: "{n} min",
+    nw_in_minutes: "in {n} min",
+    nw_ago_minutes: "{n} min ago",
+    nw_empty_upcoming: "No high-impact events in the near term.",
+    nw_empty_released: "Nothing released recently.",
+    nw_empty_headlines: "No headlines available right now.",
+    nw_impact_gold_pressure: "pressure on gold",
+    nw_impact_gold_support: "support for gold",
+    nw_impact_indirect: "gold link indirect",
+    nw_impact_none: "inline with forecast — no surprise",
+    nw_impact_unknown: "no forecast or previous — no read",
+    nw_act: "Actual", nw_fc: "Forecast", nw_prev: "Previous",
+    nw_vs_forecast: "vs forecast", nw_vs_previous: "vs previous",
     mk_sub: "Direction and the trade plan, straight from the decision engine",
     mk_plan: "Trade plan",
     mk_plan_wait: "waiting for an evaluated decision…",
@@ -362,6 +414,7 @@ const state = {
   health: null, system: null, bridge: null, analysis: null,
   timeframes: null, risk: null, governance: null, research: null,
   market: null, signals: null, analysisLocked: false,
+  news: null,
   lastUpdated: null, route: "overview",
 };
 
@@ -419,7 +472,8 @@ function renderOverview() {
 
   const sc = $("shortcuts");
   sc.textContent = "";
-  [["market", T("nav_market")], ["timeframes", T("nav_timeframes")],
+  [["market", T("nav_market")], ["news", T("nav_news")],
+   ["timeframes", T("nav_timeframes")],
    ["services", T("nav_services")], ["audit", T("nav_audit")],
    ["risk", T("nav_risk")], ["console", T("nav_console")]
   ].forEach(([route, label]) => {
@@ -702,6 +756,135 @@ function renderMarket() {
   }
 }
 
+/* ── panel: news & gold ─────────────────────────────────────────────── */
+
+/* A plain text badge (no label/value split), for country tags and reads. */
+function nwChip(text, cls) {
+  const el = document.createElement("span");
+  el.className = "chip" + (cls ? " " + cls : "");
+  el.textContent = text;
+  return el;
+}
+
+/* A titled list row: a headline or an event. `meta` is the small right-hand
+   line, `chips` an optional list of [text, cls]. */
+function nwRow(title, meta, chips) {
+  const card = document.createElement("div");
+  card.className = "nw-card";
+  const head = document.createElement("div");
+  head.className = "nw-card-head";
+  const t = document.createElement("span");
+  t.className = "nw-card-title";
+  t.textContent = title || T("v_na");
+  const m = document.createElement("span");
+  m.className = "nw-card-meta";
+  m.textContent = meta || "";
+  head.append(t, m);
+  card.appendChild(head);
+  if (chips && chips.length) {
+    const row = document.createElement("div");
+    row.className = "nw-chips";
+    chips.forEach(([text, cls]) => {
+      if (text) row.appendChild(nwChip(text, cls || null));
+    });
+    card.appendChild(row);
+  }
+  return card;
+}
+
+/* The mechanical gold read for one released event, as a short labelled chip. */
+function nwImpact(r) {
+  if (r.surprise === "unknown") return [T("nw_impact_unknown"), "warn"];
+  if (r.currency_dir === 0) return [T("nw_impact_none"), null];
+  if (!r.certain) return [T("nw_impact_indirect"), null];
+  return r.gold_dir < 0
+    ? [T("nw_impact_gold_pressure"), "down"]
+    : [T("nw_impact_gold_support"), "up"];
+}
+
+function nwEmpty(el, text) {
+  const e = document.createElement("div");
+  e.className = "nw-empty";
+  e.textContent = text;
+  el.appendChild(e);
+}
+
+function renderNews() {
+  const d = state.news || {};
+  const win = d.window || {};
+  const box = $("nw-window");
+
+  // Window hero: the state word plus the Arabic reason the engine produced.
+  const stateWord = String(win.state || "UNKNOWN").toUpperCase();
+  box.className = "nw-window " + (stateWord === "ACTIVE" ? "bad"
+    : stateWord === "UPCOMING" ? "warn" : stateWord === "CLEAR" ? "ok" : "unknown");
+  $("nw-window-state").textContent = T("nw_window_" + stateWord);
+  $("nw-window-text").textContent = win.reason || (win.event
+    ? (win.event.title_ar || win.event.title) : "");
+  $("nw-window-src").textContent = d.available === false
+    ? (d.reason || "news.json") : "news.json";
+
+  // Upcoming schedule.
+  const up = Array.isArray(d.upcoming) ? d.upcoming : [];
+  const ul = $("nw-upcoming");
+  ul.textContent = "";
+  if (!up.length) {
+    nwEmpty(ul, T("nw_empty_upcoming"));
+  } else {
+    up.forEach((e) => {
+      const when = e.in_minutes != null
+        ? T("nw_in_minutes").replace("{n}", e.in_minutes)
+        : (e.at_utc ? fmtEpochUTC(e.at_utc) : "");
+      ul.appendChild(nwRow(
+        e.title_ar || e.title,
+        [e.country, when].filter(Boolean).join(" · "),
+        [[e.country || "", null]],
+      ));
+    });
+  }
+
+  // Just-released events with the gold read.
+  const rel = Array.isArray(d.released) ? d.released : [];
+  const rl = $("nw-released");
+  rl.textContent = "";
+  if (!rel.length) {
+    nwEmpty(rl, T("nw_empty_released"));
+  } else {
+    rel.forEach((r) => {
+      const when = r.minutes_ago != null
+        ? T("nw_ago_minutes").replace("{n}", r.minutes_ago) : "";
+      const vals = [
+        T("nw_act") + " " + (r.actual == null ? "—" : r.actual),
+        T("nw_fc") + " " + (r.forecast == null ? "—" : r.forecast),
+        T("nw_prev") + " " + (r.previous == null ? "—" : r.previous),
+      ].join(" · ");
+      const [impact, cls] = nwImpact(r);
+      rl.appendChild(nwRow(
+        r.title_ar || r.title,
+        [r.country, when].filter(Boolean).join(" · "),
+        [[vals, null], [impact, cls]],
+      ));
+    });
+  }
+
+  // Headlines.
+  const hl = Array.isArray(d.headlines) ? d.headlines : [];
+  const hll = $("nw-headlines");
+  hll.textContent = "";
+  if (!hl.length) {
+    nwEmpty(hll, T("nw_empty_headlines"));
+  } else {
+    hl.forEach((h) => {
+      const src = h.source || "";
+      // The RSS title often already ends with " - Source"; drop the repeat
+      // rather than printing the source twice.
+      const title = (src && h.title.endsWith(" - " + src))
+        ? h.title.slice(0, -(src.length + 3)) : h.title;
+      hll.appendChild(nwRow(title, src || h.published || ""));
+    });
+  }
+}
+
 /* ── panel: timeframes ──────────────────────────────────────────────── */
 
 function renderTimeframes() {
@@ -936,7 +1119,7 @@ async function runConsole() {
 
 /* ── routing ────────────────────────────────────────────────────────── */
 
-const ROUTES = ["overview", "market", "timeframes", "services", "audit", "risk", "console"];
+const ROUTES = ["overview", "market", "news", "timeframes", "services", "audit", "risk", "console"];
 
 function go(route) {
   if (!ROUTES.includes(route)) route = "overview";
@@ -953,6 +1136,7 @@ function go(route) {
   window.scrollTo({ top: 0 });
   if (route === "services") renderServices();
   if (route === "market") renderMarket();
+  if (route === "news") renderNews();
 }
 
 function initTabs() {
@@ -1003,6 +1187,11 @@ async function refresh() {
   state.market = state.analysis;
   state.analysisLocked = analysisLocked;
 
+  // News is its own origin route and its own concern: it reads public feeds,
+  // not the backend, so a dead backend must not blank it. Fetched once, before
+  // the early return below, and best-effort throughout.
+  try { state.news = await getJson("news.json", 25000); } catch (e) { state.news = null; }
+
   if (!anyOk) {
     // Name the real failure. A 401 is a locked backend, not a dead one, and
     // saying "unreachable" for a gate would send the operator down the wrong
@@ -1012,6 +1201,7 @@ async function refresh() {
     else banner("offline", T("banner_offline"));
     renderOverview();
     renderMarket();
+    renderNews();
     renderTimeframes();
     renderRisk();
     return;
@@ -1029,6 +1219,7 @@ async function refresh() {
 
   renderOverview();
   renderMarket();
+  renderNews();
   renderTimeframes();
   renderAudit(audit);
   renderRisk();
@@ -1058,6 +1249,7 @@ function boot() {
     applyLang();
     renderOverview();
     renderMarket();
+    renderNews();
     renderTimeframes();
     renderRisk();
     if (state.route === "services") renderServices();
