@@ -256,3 +256,40 @@ concentrated in three places: the deployment is single-instance with ephemeral
 state, the public surface has no authentication, and some identity/portability
 strings are hardcoded to one fork. None of these is architectural; each is a
 bounded, low-risk change.
+
+---
+
+## 6. Addendum — changes since this audit (2026-10-16)
+
+Kept as a delta rather than rewriting the sections above, so the point-in-time
+measurement stays intact.
+
+**Authentication (security §3, previously the top weakness).** The phone
+surface is no longer open. `mobile/serve_mobile.py` gained an optional access
+gate: when `ASTRA_ACCESS_TOKEN` is set, every route but `/api/v1/health` and
+`/unlock` requires the `astra_key` cookie, compared with `hmac.compare_digest`.
+A 401 serves a phone-sized RTL page with a one-time form (the cookie is stored
+for a year). `/astra.apk` is deliberately exempt — it is the same artifact as
+the public rolling release, and gating it broke the in-app download. The gate is
+off when the variable is unset, so dev and CI are unchanged.
+
+**Monitoring that survives the gate.** The advisor/akoan/bot routes are behind
+the gate, so the watchdog, keepalive canary, `miss_alert` and `review_digest`
+would have read a 401 as an outage. All four now send
+`astra_env.auth_headers()` and treat a 401/403 as "gate on, no token" — a
+missing credential, not a dead engine — so they stay quiet instead of paging.
+
+**Watchdog liveness (reliability §4).** `check_bot`'s 90-minute threshold
+assumed GitHub's cron fires every 5 minutes. Measured over 96 runs, the median
+gap was ~28 min and the worst 4.6 h, so the check fired false "bot offline"
+alarms on every stall. Liveness now rides `check_keepalive` — the self-re-arming
+keepalive chain, which pings every 5 minutes — and `check_bot` stays as a loose
+(6 h) secondary signal.
+
+**Dead weight removed.** The standalone `astra-paper.yml` (the paper observer's
+earlier home, superseded by the `paper` job of `astra-bot.yml`) fired only twice
+in total and was deleted.
+
+**Documentation.** `AGENTS.md` had been saved through a CP775 round-trip; 95
+lines of em dashes, section signs and Arabic direction words were mojibake and
+were decoded back to UTF-8 with the ASCII skeleton unchanged.
