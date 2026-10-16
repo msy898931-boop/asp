@@ -306,6 +306,8 @@ let akoanData;      // last akoan reading, so a language switch can re-render it
 let lastSignalKey = null;
 let lastPrice = null;
 let priceLevels = []; // { value, crossed }
+let refreshing = false;   // an in-flight live poll; stops slow polls from stacking
+let currentView = "status"; // the visible tab, so polling only fetches what is shown
 const LEVELS_KEY = "astra-levels";
 const connStats = {}; // path -> { ok, ms }
 
@@ -1231,6 +1233,11 @@ function checkLevels(price) {
 
 async function refresh() {
   const btn = $("refresh");
+  // A slow backend (a cold start, say) can outlast the 15s poll interval.
+  // Without this guard the next poll starts on top of the last one, requests
+  // pile up, and the phone keeps a stale answer coming. One at a time.
+  if (refreshing) return;
+  refreshing = true;
   btn.classList.add("busy");
   try {
     const [health, system, br, analysis] = await Promise.all([
@@ -1248,10 +1255,14 @@ async function refresh() {
     banner("offline", "backend unreachable");
   } finally {
     btn.classList.remove("busy");
+    refreshing = false;
   }
+  // Secondary panels cost the most data (the candle history is the biggest
+  // payload) and only matter while they are on screen. Refresh them on their
+  // own cadence, and only for the tab the user is actually looking at.
   loadTicker();
-  loadChart();
-  loadVolatility();
+  if (currentView === "chart") loadChart();
+  if (currentView === "vol") loadVolatility();
   renderConn();
 }
 
@@ -1553,6 +1564,7 @@ function bindTabs() {
       tabs.forEach((t) =>
         t.setAttribute("aria-selected", t === tab ? "true" : "false"));
       const view = tab.dataset.view;
+      currentView = view;
       document.querySelectorAll(".panel").forEach((p) =>
         (p.hidden = p.id !== `view-${view}`));
       updateTabFades();

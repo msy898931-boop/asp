@@ -4,6 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0B0E13">
+<script>
+/* Pre-paint boot. The theme and the reading direction are set here, before the
+   first stylesheet parse, so a light-mode phone or an Arabic reader never sees
+   a dark/LTR flash on cold launch. app.js reads the same keys at startup and
+   keeps them in sync from then on. */
+(function () {
+  var d = document.documentElement;
+  try {
+    var t = localStorage.getItem("astra-theme");
+    if (!t) t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    d.setAttribute("data-theme", t);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute("content", t === "light" ? "#F4F0E6" : "#0B0E13");
+  } catch (e) { /* private mode */ }
+  try {
+    var l = localStorage.getItem("astra-lang");
+    if (!l) l = (navigator.language || "en").toLowerCase().indexOf("ar") === 0 ? "ar" : "en";
+    d.lang = l;
+    d.dir = l === "ar" ? "rtl" : "ltr";
+  } catch (e) { /* private mode */ }
+})();
+</script>
 <meta name="description" content="ASTRA shadow-mode gold analysis, on your phone. Decision support only.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">

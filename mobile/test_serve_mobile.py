@@ -680,5 +680,66 @@ class AccessControlTest(unittest.TestCase):
         self.assertTrue(sm._auth_required())
 
 
+class RefreshGuardTest(unittest.TestCase):
+    """The 15s poll must not stack on a slow backend, and must only fetch the
+    heavy panels that are actually on screen — this is a phone on cell data."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_poll_is_guarded_against_re_entry(self):
+        js = self._read("app.js")
+        self.assertIn("let refreshing = false", js)
+        # The guard must wrap the live fetch and be cleared no matter what.
+        self.assertIn("if (refreshing) return", js)
+        self.assertIn("refreshing = true", js)
+        self.assertIn("refreshing = false", js)
+
+    def test_heavy_panels_follow_the_visible_tab(self):
+        js = self._read("app.js")
+        self.assertIn("let currentView", js)
+        # Candle history only refreshes while the chart tab is open.
+        self.assertIn('if (currentView === "chart") loadChart()', js)
+        self.assertIn('if (currentView === "vol") loadVolatility()', js)
+        # The ticker stays live everywhere; it is the price the user watches.
+        self.assertIn("loadTicker()", js)
+
+    def test_tab_switch_records_the_view(self):
+        js = self._read("app.js")
+        self.assertIn("currentView = view", js)
+
+
+class BootPaintTest(unittest.TestCase):
+    """Theme and reading direction must be set before first paint, so a
+    light-mode phone or an Arabic reader sees no dark/LTR flash."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_boot_script_precedes_the_stylesheet(self):
+        html = self._read("index.html")
+        script = html.index("astra-theme")
+        css = html.index('href="styles.css"')
+        self.assertLess(script, css, "the boot script must run before styles.css")
+
+    def test_boot_sets_theme_and_direction(self):
+        html = self._read("index.html")
+        self.assertIn('setAttribute("data-theme"', html)
+        self.assertIn(".dir = l ===", html)
+
+    def test_numeric_readouts_are_isolated_in_rtl(self):
+        """A signed number like −12.34R must not read as 12.34R− in Arabic."""
+        css = self._read("styles.css")
+        anchor = 'html[dir="rtl"] .readout dd'
+        block = css[css.index(anchor):]
+        block = block[:block.index("}")]
+        for sel in (".readout dd", ".levels dd", ".bar b",
+                    ".trk-stat-value", ".trk-r", ".conn td"):
+            self.assertIn(sel, block, f"{sel} must stay LTR in RTL")
+        self.assertIn("unicode-bidi: embed", block)
+
+
 if __name__ == "__main__":
     unittest.main()
