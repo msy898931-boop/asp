@@ -60,7 +60,8 @@ def day_of(sec: int) -> str:
 def fetch_signals(url: str = TRACKER_URL) -> dict | None:
     try:
         req = urllib.request.Request(
-            url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+            url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT,
+                          **astra_env.auth_headers()})
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError):

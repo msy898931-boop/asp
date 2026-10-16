@@ -47,6 +47,10 @@ jobs:
     timeout-minutes: 345
     env:
       ASTRA_URL: ${{ vars.ASTRA_URL || 'https://astra-xlp9.onrender.com' }}
+      # Blank when the access gate is off. When set, the canary sends it as the
+      # astra_key cookie so /version.json and /akoan.json stay readable (only
+      # /api/v1/health is exempt from the gate).
+      ASTRA_ACCESS_TOKEN: ${{ secrets.ASTRA_ACCESS_TOKEN }}
     steps:
       - name: Canary — the deploy must serve real data, not just answer 200
         run: |
@@ -56,13 +60,13 @@ jobs:
           # after the previous run's last ping.
           curl -s -o /dev/null -w "warm-up health HTTP %{http_code}\n" -m 60 "$ASTRA_URL/api/v1/health" || true
           echo "deployed version:"
-          curl -s -m 60 "$ASTRA_URL/version.json" || true
+          curl -s -m 60 -H "Cookie: astra_key=${ASTRA_ACCESS_TOKEN}" "$ASTRA_URL/version.json" || true
           echo
           # A 200 with an empty engine is the exact bug that shipped the News
           # tab broken. Read the body and fail the run if it is empty. Retry,
           # because the study replays the corpus and a cold instance is slow.
           for attempt in 1 2 3 4 5; do
-            body=$(curl -s -m 120 "$ASTRA_URL/akoan.json" || echo "")
+            body=$(curl -s -m 120 -H "Cookie: astra_key=${ASTRA_ACCESS_TOKEN}" "$ASTRA_URL/akoan.json" || echo "")
             if echo "$body" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('available'); assert d.get('scored',0)>0; print('engine ok:', d['verdict'], d['scored'], 'scored')" 2>/dev/null; then
               exit 0
             fi

@@ -67,6 +67,30 @@ class AstraEnvTest(unittest.TestCase):
         self._reload(ASTRA_URL="", GITHUB_REPOSITORY=None)
         self.assertTrue(astra_env.URL.startswith("https://"))
 
+    def _reload_auth(self, token):
+        saved = os.environ.get("ASTRA_ACCESS_TOKEN")
+        try:
+            if token is None:
+                os.environ.pop("ASTRA_ACCESS_TOKEN", None)
+            else:
+                os.environ["ASTRA_ACCESS_TOKEN"] = token
+            return importlib.reload(astra_env).auth_headers()
+        finally:
+            if saved is None:
+                os.environ.pop("ASTRA_ACCESS_TOKEN", None)
+            else:
+                os.environ["ASTRA_ACCESS_TOKEN"] = saved
+
+    def test_no_token_sends_no_cookie(self):
+        # The gate is dormant by default; monitoring must stay unauthenticated.
+        self.assertEqual(self._reload_auth(None), {})
+        self.assertEqual(self._reload_auth("   "), {})
+
+    def test_token_becomes_the_access_cookie(self):
+        # The cookie name must match what serve_mobile.py sets on a ?k= visit.
+        self.assertEqual(self._reload_auth("s3cret"),
+                         {"Cookie": "astra_key=s3cret"})
+
 
 if __name__ == "__main__":
     unittest.main()

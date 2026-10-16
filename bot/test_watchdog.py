@@ -129,6 +129,24 @@ class CheckEngineTests(unittest.TestCase):
         ok, _ = wd.check_engine()
         self.assertFalse(ok)
 
+    def test_access_cookie_is_sent_when_a_token_is_set(self):
+        # With the phone server's gate on, the poll must carry the cookie or it
+        # reads a 401 as "trouble" and cries wolf every hour.
+        import astra_env
+        seen = {}
+        def capture(req, *a, **k):
+            seen["cookie"] = req.get_header("Cookie")
+            return _Resp({"available": True, "verdict": "OK"})
+        wd.urllib.request.urlopen = capture
+        saved = os.environ.get("ASTRA_ACCESS_TOKEN")
+        try:
+            astra_env.TOKEN = "tok-123"
+            ok, _ = wd.check_engine()
+            self.assertTrue(ok)
+            self.assertEqual(seen["cookie"], "astra_key=tok-123")
+        finally:
+            astra_env.TOKEN = (saved or "").strip()
+
 
 
 

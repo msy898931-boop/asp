@@ -35,3 +35,21 @@ def _env(name: str, default: str) -> str:
 # Read once at import, matching how the callers already bind their constants.
 URL = _env("ASTRA_URL", DEFAULT_URL).rstrip("/")
 REPO = _env("GITHUB_REPOSITORY", DEFAULT_REPO)
+
+# The phone server's optional access gate. Blank means the gate is off and the
+# server is open, so monitoring needs no cookie; set, it must send one or every
+# route but /api/v1/health answers 401. The name matches the cookie the server
+# sets on a first `?k=` visit (see mobile/serve_mobile.py).
+TOKEN = (os.environ.get("ASTRA_ACCESS_TOKEN") or "").strip()
+COOKIE_NAME = "astra_key"
+
+
+def auth_headers() -> dict[str, str]:
+    """Headers that pass the phone server's access gate.
+
+    Monitoring must keep working whether the gate is on or off, so this returns
+    an empty mapping when no token is configured and a cookie when one is.
+    """
+    if TOKEN:
+        return {"Cookie": "%s=%s" % (COOKIE_NAME, TOKEN)}
+    return {}

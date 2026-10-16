@@ -92,7 +92,8 @@ def check_engine() -> tuple[bool, str]:
     """
     req = urllib.request.Request(
         ASTRA_URL + "/akoan.json",
-        headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+        headers={"Accept": "application/json", "User-Agent": _USER_AGENT,
+                 **astra_env.auth_headers()})
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             body = json.loads(resp.read().decode("utf-8"))
@@ -118,7 +119,8 @@ def check_poller() -> tuple[bool, str]:
     """
     req = urllib.request.Request(
         ASTRA_URL + "/bot.json",
-        headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+        headers={"Accept": "application/json", "User-Agent": _USER_AGENT,
+                 **astra_env.auth_headers()})
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             body = json.loads(resp.read().decode("utf-8"))

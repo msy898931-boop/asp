@@ -58,6 +58,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ASTRA_URL: ${{ vars.ASTRA_URL || 'https://astra-xlp9.onrender.com' }}
+          # The phone server's optional access gate. Present only when the
+          # operator set it; a blank secret leaves monitoring unauthenticated,
+          # which is correct when the gate is off.
+          ASTRA_ACCESS_TOKEN: ${{ secrets.ASTRA_ACCESS_TOKEN }}
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             python3 bot/watchdog.py --dry-run
