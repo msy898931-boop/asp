@@ -13,7 +13,7 @@
   --muted: #7C8794;
   --up: #4FB477;
   --down: #D1584F;
-  --flat: #6B7683;
+  --flat: #7F8A96;
   --mono: "IBM Plex Mono", "IBM Plex Sans Arabic", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
 }
@@ -602,13 +602,13 @@ html[data-theme="light"] {
   --ink-2: #FBF8F1;
   --ink-3: #E9E2D3;
   --edge: #D8CFBC;
-  --gold: #9A6B12;
+  --gold: #82580C;
   --gold-dim: #C39A45;
   --paper: #1A1F27;
   --muted: #6E6A5E;
   --up: #1F7A4D;
   --down: #B23B32;
-  --flat: #8A8578;
+  --flat: #746F60;
 }
 html[data-theme="light"] .grain {
   opacity: .35;

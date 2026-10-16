@@ -741,5 +741,58 @@ class BootPaintTest(unittest.TestCase):
         self.assertIn("unicode-bidi: embed", block)
 
 
+class ThemeContrastTest(unittest.TestCase):
+    """Both themes must clear WCAG AA on the phone. The light palette is where
+    the gold-on-beige pairs used to slip under 4.5:1."""
+
+    def _lum(self, hexcolor):
+        h = hexcolor.lstrip("#")
+        rgb = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        f = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+        return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]
+
+    def _ratio(self, a, b):
+        la, lb = self._lum(a), self._lum(b)
+        hi, lo = max(la, lb), min(la, lb)
+        return (hi + 0.05) / (lo + 0.05)
+
+    def _read(self):
+        with open(os.path.join(sm.HERE, "styles.css"), encoding="utf-8") as fh:
+            return fh.read()
+
+    def _var(self, css, name, scope=None):
+        block = css
+        if scope:
+            block = css[css.index(scope):]
+            block = block[:block.index("}")]
+        for line in block.splitlines():
+            line = line.strip()
+            if line.startswith(name + ":"):
+                return line.split(":", 1)[1].split(";")[0].strip()
+        raise AssertionError(f"{name} not found")
+
+    def test_light_gold_and_flat_clear_aa(self):
+        css = self._read()
+        scope = 'html[data-theme="light"] {'
+        gold = self._var(css, "--gold", scope)
+        flat = self._var(css, "--flat", scope)
+        ink = self._var(css, "--ink", scope)
+        ink2 = self._var(css, "--ink-2", scope)
+        ink3 = self._var(css, "--ink-3", scope)
+        # The tab bar, toggles and the APK link all draw --gold on these fields.
+        for bg, label in ((ink, "--ink"), (ink2, "--ink-2"), (ink3, "--ink-3")):
+            self.assertGreaterEqual(self._ratio(gold, bg), 4.5,
+                                    f"light --gold on {label} must clear AA")
+        self.assertGreaterEqual(self._ratio(flat, ink2), 4.5,
+                                "light --flat (the change readout) must clear AA")
+
+    def test_dark_flat_clears_aa(self):
+        css = self._read()
+        flat = self._var(css, "--flat")
+        ink2 = self._var(css, "--ink-2")
+        self.assertGreaterEqual(self._ratio(flat, ink2), 4.5,
+                                "dark --flat must clear AA")
+
+
 if __name__ == "__main__":
     unittest.main()
