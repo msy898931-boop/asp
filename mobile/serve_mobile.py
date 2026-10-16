@@ -401,13 +401,18 @@ class Handler(BaseHTTPRequestHandler):
             # keepalive cron all poll it, and a 401 would read as "down".
             self._proxy(self.api_base + path[len("/api/v1"):], self.path)
             return
+        if path == "/astra.apk":
+            # The installable app is not a secret: this same APK is published
+            # on the public rolling release. Gating it 401s the in-app download
+            # button (and the phone browser behind it) exactly when the gate is
+            # on, which reads as "the download is broken".
+            self._apk()
+            return
         if _auth_required() and not self._authorized():
             self._unauthorized()
             return
         if path == "/unlock":
             self._unlock()
-        elif path == "/astra.apk":
-            self._apk()
         elif path == "/upgrade.json":
             self._upgrade_json()
         elif path == "/version.json":

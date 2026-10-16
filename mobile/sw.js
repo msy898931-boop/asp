@@ -4,7 +4,7 @@
    up on the next load instead of the load after next, and the app still opens
    offline. */
 
-const SHELL = "astra-shell-v23";
+const SHELL = "astra-shell-v24";
 const ASSETS = [
   "./",
   "./index.html",
@@ -41,6 +41,10 @@ self.addEventListener("fetch", (event) => {
                url.pathname.includes("/tracker/") ||
                url.pathname.includes("/advisor/");
   if (live || event.request.method !== "GET") return; // network only
+
+  // The APK download must reach the network untouched: serving a cached copy
+  // would mask a fresh build, and a binary has no business in the shell cache.
+  if (url.pathname.endsWith(".apk")) return;
 
   // Never touch the gate's handshake. /unlock?k=KEY carries the access key in
   // its URL; caching the request would persist that key in the device's cache

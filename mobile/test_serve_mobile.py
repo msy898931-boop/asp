@@ -618,10 +618,18 @@ class AccessControlTest(unittest.TestCase):
     def test_every_route_needs_the_key_once_set(self):
         sm.ACCESS_TOKEN = "s3cret"
         for path in ("/", "/version.json", "/vol.json", "/akoan.json",
-                     "/astra.apk", "/upgrade.json", "/bot.json"):
+                     "/upgrade.json", "/bot.json"):
             with self.subTest(path=path):
                 status, _ = self._status(path)
                 self.assertEqual(status, 401, path)
+
+    def test_the_apk_download_is_never_gated(self):
+        # The in-app download button points at /astra.apk. Gating it 401s the
+        # download exactly when the gate is on, which reads as "broken link".
+        # The same APK is public on the rolling release, so it is not a secret.
+        sm.ACCESS_TOKEN = "s3cret"
+        status, _ = self._status("/astra.apk")
+        self.assertNotEqual(status, 401)
 
     def test_wrong_key_is_rejected(self):
         sm.ACCESS_TOKEN = "s3cret"
@@ -859,6 +867,11 @@ class ServiceWorkerGateTest(unittest.TestCase):
         # Caching a 401 would serve the gate page as the offline shell.
         sw = self._read("sw.js")
         self.assertIn("res && res.ok", sw)
+
+    def test_the_apk_download_is_not_intercepted(self):
+        # A cached APK would mask a fresh build and pollute the shell cache.
+        sw = self._read("sw.js")
+        self.assertIn('url.pathname.endsWith(".apk")', sw)
 
 
 class AndroidShellTest(unittest.TestCase):
