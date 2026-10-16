@@ -645,10 +645,21 @@ None — so it is fully unit-testable and pays no network cost of its own.
   named and gold direction is only asserted for a US event.
 
 `astra_bot.py` fetches the calendar **once per monitor cycle** (`news_snapshot`)
-and hands the same event list to both the volatility alert and the level alert.
-The advisor import is best-effort and probes several path shapes (repo
-`<root>/advisor`, container `/app/advisor`), so the bot degrades to
+and hands the same event list to the volatility alert, the level alert and the
+proactive `NewsWatch`. The advisor import is best-effort and probes several path
+shapes (repo `<root>/advisor`, container `/app/advisor`), so the bot degrades to
 volatility-only rather than crashing when the advisor is absent.
+
+**The news surface is shared across all three faces.** `/news` on the bot and
+the **News & gold** panel on the web terminal both render
+`advisor/news_engine.digest` — the window, the schedule, the just-released tape
+with its gold read, and the headlines — so the bot and the page cannot disagree
+about the same event. `NewsWatch` is the proactive half: it fires once when a
+blackout window opens on a *future* release (stop trading) and once when a
+release prints (here is the mechanical read), keyed by event identity and primed
+silently on the first poll so a restart mid-window does not replay an alert. The
+monitor pays for one calendar fetch per cycle and passes the same event list to
+every consumer.
 
 **Honesty caveat (stated in code and on the page):** the news-quiet window is a
 *safety heuristic*, not a measured signal — the corpus has no historical

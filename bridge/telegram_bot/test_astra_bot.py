@@ -513,5 +513,167 @@ class LevelNewsContextTests(unittest.TestCase):
         self.assertNotIn("📰", sent[0][1])
 
 
+class NewsCommandTests(unittest.TestCase):
+    """The /news reply: window word, schedule, tape, headlines, honesty."""
+
+    NOW = 5_000_000.0
+
+    def _digest(self):
+        return {
+            "engine": "news", "symbol": "XAUUSD",
+            "window": {"state": "active", "reason": "⏸ نافذة خبر: CPI بعد ~5 دقيقة",
+                       "event": {"title": "CPI", "country": "US", "in_minutes": 5}},
+            "upcoming": [{"title": "NFP", "title_ar": "الوظائف", "country": "US",
+                          "in_minutes": 30}],
+            "released": [{"title": "TIC Flows", "title_ar": "تدفقات",
+                          "country": "US", "minutes_ago": 12, "actual": 279.2,
+                          "forecast": 75.2, "previous": -27.9, "surprise": "above",
+                          "currency": "USD", "currency_dir": 1, "gold_dir": -1,
+                          "certain": True},
+                         {"title": "EU Trade", "title_ar": "تجارة أوروبا",
+                          "country": "EU", "minutes_ago": 40, "actual": -16.1,
+                          "forecast": None, "previous": 10.7, "surprise": "below",
+                          "currency": "EUR", "currency_dir": -1, "gold_dir": 0,
+                          "certain": False}],
+            "headlines": [{"title": "Gold holds support", "source": "FOREX.com",
+                           "published": ""}],
+            "counts": {"upcoming": 1, "released": 2, "headlines": 1, "events": 9},
+        }
+
+    def test_digest_renders_the_window_and_the_tape(self):
+        out = bot.format_news(self._digest())
+        self.assertIn("نافذة خبر", out)
+        self.assertIn("الوظائف", out)          # upcoming, Arabic title
+        self.assertIn("تدفقات", out)            # released, Arabic title
+        self.assertIn("279.2", out)             # the actual
+        self.assertIn("ضغط على الذهب", out)     # US gold read is asserted
+        self.assertIn("غير مباشر", out)         # EU read is not
+        self.assertIn("Gold holds support", out)
+        self.assertIn("لا يُدَّعى حافة", out)   # the honesty caveat
+
+    def test_no_baseline_says_so_and_asserts_nothing(self):
+        d = self._digest()
+        d["released"] = [{"title": "Mystery", "title_ar": "غامض", "country": "US",
+                          "minutes_ago": 5, "actual": 5.0, "forecast": None,
+                          "previous": None, "surprise": "unknown", "currency": None,
+                          "currency_dir": 0, "gold_dir": 0, "certain": False}]
+        out = bot.format_news(d)
+        self.assertIn("غير متوفرة", out)
+        self.assertNotIn("ضغط على الذهب", out)
+
+    def test_empty_digest_says_there_is_nothing(self):
+        d = self._digest()
+        d.update({"upcoming": [], "released": [], "headlines": [],
+                  "window": {"state": "clear", "reason": None, "event": None}})
+        out = bot.format_news(d)
+        self.assertIn("خالٍ من الأخبار", out)
+        self.assertIn("لا أخبار", out)
+
+    def test_news_command_degrades_when_the_engine_is_absent(self):
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        router, _ = RouterTests()._router(api)
+        saved = bot.news_engine
+        bot.news_engine = None
+        try:
+            out = router.handle("9", "/news")
+        finally:
+            bot.news_engine = saved
+        self.assertIn("غير متاحة", out)
+
+    def test_news_command_reads_the_digest(self):
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        router, _ = RouterTests()._router(api)
+        saved = bot.news_digest
+        bot.news_digest = lambda *a, **k: self._digest()
+        try:
+            out = router.handle("9", "/news")
+        finally:
+            bot.news_digest = saved
+        self.assertIn("نافذة خبر", out)
+
+    def test_a_headline_source_is_not_printed_twice(self):
+        d = self._digest()
+        d["headlines"] = [{"title": "Gold holds support - FOREX.com",
+                           "source": "FOREX.com", "published": ""}]
+        out = bot.format_news(d)
+        self.assertEqual(out.count("FOREX.com"), 1)
+
+    def test_the_keyboard_offers_news(self):
+        self.assertIn("📰 الأخبار والذهب", bot.BUTTON_COMMANDS)
+        self.assertEqual(bot.BUTTON_COMMANDS["📰 الأخبار والذهب"], "/news")
+        self.assertIn("/news", dict(bot.BOT_COMMANDS))
+
+    def test_help_lists_the_news_command(self):
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        router, _ = RouterTests()._router(api)
+        self.assertIn("/news", router.handle("9", "/help"))
+
+
+@unittest.skipUnless(bot.news_window is not None and bot.calendar_feed is not None,
+                     "advisor calendar modules not importable")
+class NewsWatchTests(unittest.TestCase):
+    """The proactive news alerts: window-open and just-printed, once each."""
+
+    T0 = 6_000_000.0
+
+    def _ev(self, at, title="CPI", country="US", imp=1, actual=None,
+            forecast=None, previous=None):
+        return {"at_utc": at, "title": title, "title_ar": title,
+                "country": country, "importance": imp, "actual": actual,
+                "forecast": forecast, "previous": previous}
+
+    def test_a_quiet_start_learns_nothing_and_alerts_nothing(self):
+        watch = bot.NewsWatch()
+        far = [self._ev(self.T0 + 3600)]
+        self.assertEqual(watch.poll(far, self.T0), [])   # prime
+        self.assertEqual(watch.poll(far, self.T0), [])   # still quiet
+
+    def test_the_window_opening_alerts_once(self):
+        watch = bot.NewsWatch()
+        watch.poll([], self.T0)                                  # prime quiet
+        soon = [self._ev(self.T0 + 600)]                         # 10 min ahead
+        first = watch.poll(soon, self.T0)
+        self.assertEqual(len(first), 1)
+        self.assertIn("نافذة خبر", first[0])
+        self.assertEqual(watch.poll(soon, self.T0), [])          # not twice
+
+    def test_a_print_alerts_once_with_the_read(self):
+        watch = bot.NewsWatch()
+        watch.poll([], self.T0)                                  # prime quiet
+        out = watch.poll([self._ev(self.T0 - 60, actual=3.2, forecast=3.0)],
+                         self.T0)
+        self.assertEqual(len(out), 1)
+        self.assertIn("صدر للتو", out[0])
+        self.assertIn("الذهب", out[0])
+
+    def test_prime_suppresses_an_already_open_window(self):
+        watch = bot.NewsWatch()
+        open_now = [self._ev(self.T0)]                            # window open
+        self.assertEqual(watch.poll(open_now, self.T0), [])       # prime
+        self.assertEqual(watch.poll(open_now, self.T0), [])       # no replay
+
+    def test_prime_suppresses_an_already_printed_release(self):
+        watch = bot.NewsWatch()
+        printed = [self._ev(self.T0 - 60, actual=3.2, forecast=3.0)]
+        self.assertEqual(watch.poll(printed, self.T0), [])        # prime
+        self.assertEqual(watch.poll(printed, self.T0), [])        # no replay
+
+    def test_a_low_impact_print_does_not_alert(self):
+        watch = bot.NewsWatch()
+        watch.poll([], self.T0)
+        low = [self._ev(self.T0 - 60, title="Minor", imp=-1, actual=1.0,
+                        forecast=0.5)]
+        self.assertEqual(watch.poll(low, self.T0), [])
+
+    def test_missing_advisor_disables_the_watch_cleanly(self):
+        watch = bot.NewsWatch()
+        saved = bot.news_window
+        bot.news_window = None
+        try:
+            self.assertEqual(watch.poll([self._ev(self.T0)], self.T0), [])
+        finally:
+            bot.news_window = saved
+
+
 if __name__ == "__main__":
     unittest.main()

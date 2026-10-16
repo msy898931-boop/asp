@@ -14,6 +14,7 @@ dependencies.
   `astra_bot.py`, registered with Telegram via `setMyCommands`):
   - `/start` — start and show the menu
   - `/price` — live gold price
+  - `/news` — the world's news and its gold read right now
   - `/level` — add a price level to watch
   - `/levels` — list your levels and their state
   - `/clearlevels` — delete all your levels
@@ -23,8 +24,17 @@ dependencies.
   - `/subscribe` / `/unsubscribe` — push alerts on/off
   - `/help` — command list
 - **Push alerts** (checked every `--interval` seconds): health transitions,
-  MT5 bridge online/offline, and new recorded signals. The first reading is
-  primed silently, so starting the bot does not spam the chat.
+  MT5 bridge online/offline, new recorded signals, and — via `NewsWatch` —
+  the two moments that matter around a high-impact release: the blackout
+  window opening (a release is imminent) and a release printing (with the
+  mechanical gold read). The first reading is primed silently, so starting the
+  bot does not spam the chat, and each event alerts at most once.
+
+The news read is shared with the web terminal and the advisor: `news_engine`
+assembles the digest (window, schedule, tape, headlines) from the same
+`calendar_feed` / `news_window` pieces, so the bot and the page cannot disagree.
+`/news` renders it; the monitor hands the same per-cycle calendar fetch to the
+blackout logic, the level alerts and `NewsWatch`.
 
 ## Run
 

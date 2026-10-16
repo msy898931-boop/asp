@@ -56,9 +56,17 @@ for _cand in _ADVISOR_CANDIDATES:
             sys.path.insert(0, _abs)
         break
 try:
+    import calendar_feed
+except ImportError:  # pragma: no cover - deployment-shape dependent
+    calendar_feed = None
+try:
     import news_window
 except ImportError:  # pragma: no cover - deployment-shape dependent
     news_window = None
+try:
+    import news_engine
+except ImportError:  # pragma: no cover - deployment-shape dependent
+    news_engine = None
 
 TELEGRAM_API = "https://api.telegram.org"
 _POLL_TIMEOUT_SECONDS = 25
@@ -71,14 +79,15 @@ _stop = threading.Event()
 # router understands the label as well as the token, so a tap works like typing.
 REPLY_KEYBOARD: List[List[str]] = [
     ["💰 سعر الذهب", "📊 حالة السوق"],
-    ["🔔 مستوى جديد", "📋 مستوياتي"],
-    ["🗑 مسح المستويات", "⭐ خطتي"],
-    ["❓ مساعدة"],
+    ["📰 الأخبار والذهب", "🔔 مستوى جديد"],
+    ["📋 مستوياتي", "🗑 مسح المستويات"],
+    ["⭐ خطتي", "❓ مساعدة"],
 ]
 
 BUTTON_COMMANDS: Dict[str, str] = {
     "💰 سعر الذهب": "/price",
     "📊 حالة السوق": "/status",
+    "📰 الأخبار والذهب": "/news",
     "🔔 مستوى جديد": "/level",
     "📋 مستوياتي": "/levels",
     "🗑 مسح المستويات": "/clearlevels",
@@ -91,6 +100,7 @@ BUTTON_COMMANDS: Dict[str, str] = {
 BOT_COMMANDS: List[tuple] = [
     ("/start", "بدء الاستخدام والقائمة"),
     ("/price", "سعر الذهب الحي"),
+    ("/news", "الأخبار وتأثيرها على الذهب الآن"),
     ("/level", "إضافة مستوى سعري للتنبيه"),
     ("/levels", "مستوياتي وحالتها"),
     ("/clearlevels", "حذف كل مستوياتي"),
@@ -308,6 +318,95 @@ def format_bridge(data: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# ─────────────────────────── news formatting ────────────────────────────────
+
+_NEWS_WINDOW_AR: Dict[str, str] = {
+    "active": "⏸ نافذة خبر مفتوحة — السوق عادةً عنيف",
+    "upcoming": "⏳ خبر مهم قريب",
+    "clear": "✅ السوق خالٍ من الأخبار المهمة",
+}
+
+
+def _num(value: Any) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return "%g" % value if isinstance(value, (int, float)) else str(value)
+
+
+def _release_read(event: Dict[str, Any]) -> str:
+    """The mechanical gold read for one released event, as one Arabic line."""
+    surprise = event.get("surprise")
+    if surprise in (None, "unknown"):
+        return "القراءة غير متوفرة (بلا تقدير ولا سابق)."
+    if event.get("currency_dir", 0) == 0:
+        return "مطابق للتوقّع — بلا مفاجأة."
+    stronger = event["currency_dir"] > 0
+    ccy = event.get("currency") or "—"
+    if event.get("certain"):
+        gold = ("ضغط على الذهب (دولار أقوى)" if stronger
+                else "دعم للذهب (دولار أضعف)")
+    else:
+        gold = "الأثر على الذهب غير مباشر"
+    return ("الفعلي %s → %s %s → %s" % (
+        "أعلى" if surprise == "above" else "أدنى", ccy,
+        "أقوى" if stronger else "أضعف", gold))
+
+
+def format_news(d: Dict[str, Any]) -> str:
+    """The /news reply: the window, the schedule, the tape, the headlines.
+
+    Reads the same digest the web panel reads, so the bot, the advisor and the
+    page cannot disagree about the same event.
+    """
+    win = d.get("window") or {}
+    lines = ["📰 الأخبار والذهب — الآن",
+             _NEWS_WINDOW_AR.get(win.get("state"), "—")]
+    if win.get("reason"):
+        lines.append(win["reason"])
+
+    upcoming = d.get("upcoming") or []
+    if upcoming:
+        lines += ["", "⏳ أحداث قادمة عالية التأثير:"]
+        for e in upcoming[:5]:
+            lines.append("  • %s (%s) بعد %d د" % (
+                e.get("title_ar") or e.get("title"), e.get("country"),
+                e.get("in_minutes", 0)))
+
+    released = d.get("released") or []
+    if released:
+        lines += ["", "💱 صدر للتو:"]
+        for e in released[:5]:
+            lines.append("  • %s (%s) قبل %d د" % (
+                e.get("title_ar") or e.get("title"), e.get("country"),
+                e.get("minutes_ago", 0)))
+            lines.append("    الفعلي %s · التقدير %s · السابق %s" % (
+                _num(e.get("actual")), _num(e.get("forecast")),
+                _num(e.get("previous"))))
+            lines.append("    " + _release_read(e))
+
+    headlines = d.get("headlines") or []
+    if headlines:
+        lines += ["", "🗞 عناوين الذهب:"]
+        for h in headlines[:5]:
+            src = h.get("source") or ""
+            title = h.get("title") or ""
+            # The RSS title often already ends with " - Source"; drop the
+            # repeat rather than printing the source twice.
+            if src and title.endswith(" - " + src):
+                title = title[:-(len(src) + 3)]
+            lines.append("  • %s%s" % (title, (" — " + src) if src else ""))
+
+    if not (upcoming or released or headlines):
+        lines += ["", "لا أخبار عالية التأثير في المدى القريب، ولا عناوين الآن."]
+
+    lines += ["", "قراءة ميكانيكية: الفعلي مقابل التقدير، والأثر على الذهب "
+                  "مباشر مع الدولار فقط. أثر الأخبار على نتائج النظام ما انقاس "
+                  "بعد — لا يُدَّعى حافة."]
+    return "\n".join(lines)
+
+
 # ────────────────────────────── alert engine ────────────────────────────────
 
 
@@ -385,6 +484,7 @@ class CommandRouter:
     HELP = (
         "[ASTRA] الأوامر\n"
         "💰 /price - سعر الذهب الحالي\n"
+        "📰 /news - الأخبار العالمية وأثرها على الذهب الآن\n"
         "🔔 /level <سعر> [فوق|تحت|أي] - تنبيه عند اختراق مستوى\n"
         "📋 /levels - مستوياتك\n"
         "🗑 /clearlevels - حذف كل مستوياتك\n"
@@ -469,6 +569,13 @@ class CommandRouter:
             lines.append(news)
         return "\n".join(lines)
 
+    def _news_command(self) -> str:
+        """The live news read: window, schedule, tape and headlines."""
+        d = news_digest()
+        if d is None:
+            return "📰 الأخبار غير متاحة على هذا الخادم (المستشار غير منصّب)."
+        return format_news(d)
+
     def _list_levels(self, chat_id: str) -> str:
         if self.levels is None:
             return "المستويات السعرية غير متاحة."
@@ -534,6 +641,8 @@ class CommandRouter:
                 return format_status(self.api.snapshot())
             if cmd == "/vol":
                 return self._vol_command()
+            if cmd == "/news":
+                return self._news_command()
             if cmd == "/health":
                 return ("[ASTRA] الصحة\n" +
                         json.dumps(self.api.health(), indent=2, ensure_ascii=False))
@@ -598,6 +707,34 @@ def poll_updates(client: TelegramClient, router: CommandRouter) -> None:
                     print(f"[warn] reply to {chat_id} failed: {exc}", file=sys.stderr)
 
 
+def _fetch_news_events(now: float):
+    """One calendar fetch covering both the blackout window and the digest."""
+    if calendar_feed is None:
+        return []
+    lookback = getattr(news_engine, "LOOKBACK_H", 12) if news_engine else 12
+    lookahead = getattr(news_engine, "LOOKAHEAD_H", 48) if news_engine else 48
+    try:
+        return calendar_feed.fetch_events(now - lookback * 3600,
+                                          now + lookahead * 3600)
+    except Exception:
+        return []
+
+
+def news_digest(now: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    """The full news read (window, schedule, tape, headlines), or None.
+
+    Shares `news_engine.digest` with the web panel, so the bot and the page
+    cannot disagree. Best-effort: a missing engine yields None, never a crash.
+    """
+    if news_engine is None:
+        return None
+    now = time.time() if now is None else now
+    try:
+        return news_engine.digest(now, events=_fetch_news_events(now))
+    except Exception:
+        return None
+
+
 def news_snapshot(now: Optional[float] = None):
     """One calendar fetch -> (blackout_reason, recent_context).
 
@@ -606,11 +743,9 @@ def news_snapshot(now: Optional[float] = None):
     """
     if news_window is None:
         return None, None
-    try:
-        import calendar_feed as cal
-        now = time.time() if now is None else now
-        events = cal.fetch_events(now - 3600, now + news_window.UPCOMING_MIN * 60)
-    except Exception:
+    now = time.time() if now is None else now
+    events = _fetch_news_events(now)
+    if not events:
         return None, None
     return (news_window.blackout_reason(events, now),
             news_window.recent_context(events, now))
@@ -625,12 +760,89 @@ def news_blackout_now(now: Optional[float] = None) -> Optional[str]:
     return news_snapshot(now)[0]
 
 
+class NewsWatch:
+    """Edge-triggered alerts around a high-impact release.
+
+    Two alerts, each fired once per event: when the blackout window *opens*
+    (a release is imminent — stop trading), and when a release *prints* (the
+    actual is out — here is the mechanical gold read). Keyed by event identity,
+    so a release is never announced twice, and primed on first poll so starting
+    the bot mid-window does not replay an alert the operator already saw.
+
+    The calendar is fetched by the monitor and passed in, so the watch adds no
+    network cost of its own.
+    """
+
+    def __init__(self) -> None:
+        self._primed = False
+        self._warned: Set[Any] = set()
+        self._reported: Set[Any] = set()
+
+    @staticmethod
+    def _key(event: Dict[str, Any]) -> Any:
+        return (event.get("at_utc"), event.get("title"), event.get("country"))
+
+    def poll(self, events: Optional[List[Dict[str, Any]]] = None,
+             now: Optional[float] = None) -> List[str]:
+        if news_window is None:
+            return []
+        now = time.time() if now is None else now
+        if events is None:
+            events = _fetch_news_events(now)
+
+        active = news_window.blackout_event(events, now)
+        if not self._primed:
+            # Learn the current state silently: an already-open window (or an
+            # already-printed release) must not fire the moment the bot starts.
+            if active is not None:
+                self._warned.add(self._key(active))
+            for event in events:
+                if calendar_feed is not None and calendar_feed.classify(event):
+                    self._reported.add(self._key(event))
+            self._primed = True
+            return []
+
+        out: List[str] = []
+        # The warning is for a release still ahead (an open window already
+        # announced, or one that just printed, is covered by the print alert
+        # below). Keying both alerts by event identity means one release never
+        # produces two messages.
+        if active is not None:
+            at = active.get("at_utc")
+            if at is not None and at > now:
+                key = self._key(active)
+                if key not in self._warned:
+                    self._warned.add(key)
+                    label = active.get("title_ar") or active.get("title") or "خبر"
+                    mins = int(round((at - now) / 60.0))
+                    out.append(
+                        "⏸ نافذة خبر: %s (%s) بعد ~%d دقيقة.\n"
+                        "السوق عادةً عنيف حول الصدور — يُفضَّل عدم فتح صفقة "
+                        "ضيقة الآن." % (label, active.get("country") or "—", mins))
+
+        if calendar_feed is not None:
+            for event in events:
+                read = calendar_feed.classify(event)
+                if not read or read.get("surprise") == "unknown":
+                    continue
+                key = self._key(event)
+                if key in self._reported:
+                    continue
+                self._reported.add(key)
+                if news_window.is_relevant(event):
+                    out.append("💱 صدر للتو — %s\n%s" % (
+                        event.get("title_ar") or event.get("title"),
+                        calendar_feed.format_release(event, read)))
+        return out
+
+
 def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                     interval: int, levels: Optional[LevelStore] = None,
                     ent: Optional[Entitlements] = None,
                     vol_model: Optional[VolatilityModel] = None) -> None:
     engine = AlertEngine(api)
     engine.prime()
+    watch = NewsWatch()
     vol_was_high = False
     while not _stop.is_set():
         if _stop.wait(interval):
@@ -641,6 +853,11 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
         except Exception as exc:  # never let the monitor thread die silently
             print(f"[warn] monitor: {exc}", file=sys.stderr)
         news_reason, news_context = news_snapshot()
+        try:
+            for alert in watch.poll():
+                _broadcast(client, subs, alert)
+        except Exception as exc:
+            print(f"[warn] news watch: {exc}", file=sys.stderr)
         if levels is not None:
             try:
                 _check_levels(api, levels, ent, client, news_context)
