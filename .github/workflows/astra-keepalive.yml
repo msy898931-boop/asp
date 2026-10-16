@@ -49,6 +49,10 @@ jobs:
       - name: Canary — the deploy must serve real data, not just answer 200
         run: |
           set -u
+          # Warm the service first: the canary can spend minutes retrying, and
+          # this run must not leave a gap longer than the 15-minute sleep window
+          # after the previous run's last ping.
+          curl -s -o /dev/null -w "warm-up health HTTP %{http_code}\n" -m 60 "$ASTRA_URL/api/v1/health" || true
           echo "deployed version:"
           curl -s -m 60 "$ASTRA_URL/version.json" || true
           echo
