@@ -34,15 +34,14 @@ jobs:
           set -u
           api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
           auth="Authorization: Bearer ${GH_TOKEN}"
+          runs_url="$api/actions/workflows/astra-keepalive.yml/runs?per_page=20"
           # Any run that is not finished (queued, in_progress, waiting, pending)
-          # means the chain is alive; the guard stays out of the way.
+          # means the chain is alive; the guard stays out of the way. The status
+          # is read with grep so the step needs no inline interpreter.
           active=$(curl -sS -H "$auth" -H "Accept: application/vnd.github+json" \
-            "$api/actions/workflows/astra-keepalive.yml/runs?per_page=20" \
-            | python3 -c '
-import json, sys
-runs = json.load(sys.stdin).get("workflow_runs", [])
-print(sum(1 for r in runs if r.get("status") != "completed"))
-')
+            "$runs_url" \
+            | grep -o '"status": *"[a-z_]*"' \
+            | grep -vc '"completed"')
           echo "active keepalive runs: $active"
           if [ "$active" -gt 0 ]; then
             echo "chain is alive; nothing to do"
