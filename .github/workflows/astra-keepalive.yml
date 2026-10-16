@@ -39,9 +39,10 @@ concurrency:
 jobs:
   keepalive:
     runs-on: ubuntu-latest
-    # The warm loop runs ~5h41m; the cap leaves room for the canary and the
-    # re-arm, and stays under the hard 6-hour job limit.
-    timeout-minutes: 355
+    # Worst case: canary ~12 min + warm loop ~5h17m + one overshoot iteration
+    # (~6 min) + re-arm. The 345-minute cap keeps the total under the hard
+    # 6-hour job limit with margin.
+    timeout-minutes: 345
     env:
       ASTRA_URL: ${{ vars.ASTRA_URL || 'https://astra-xlp9.onrender.com' }}
     steps:
@@ -72,8 +73,8 @@ jobs:
         if: always()
         run: |
           set -u
-          # ~5h41m. Well inside the job's 355-minute cap and the 6-hour limit.
-          deadline=$(( $(date +%s) + 20500 ))
+          # ~5h17m. Leaves room for the canary and the re-arm under the cap.
+          deadline=$(( $(date +%s) + 19000 ))
           while [ "$(date +%s)" -lt "$deadline" ]; do
             code=$(curl -s -o /dev/null -w "%{http_code}" -m 60 "$ASTRA_URL/api/v1/health" || echo "000")
             echo "$(date -u +%H:%M:%S) health HTTP $code"

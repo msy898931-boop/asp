@@ -186,7 +186,7 @@ curl -s https://astra-xlp9.onrender.com/version.json
 Two checks watch the live service, both free (GitHub Actions):
 
 - `astra-keepalive` keeps the Render service awake **and** checks it. It runs
-  for ~5h41m, pinging `/api/v1/health` every 5 minutes, then re-arms itself
+  for ~5h17m, pinging `/api/v1/health` every 5 minutes, then re-arms itself
   with a `workflow_dispatch` so the next run takes over. It opens with a
   canary that prints `/version.json` and **fails** if `/akoan.json` answers
   `available:false` — the exact bug that once shipped the News tab blank.
@@ -902,7 +902,7 @@ Two always-on pieces, and they are independent:
   answering too.
 * **Cron cannot keep it awake.** GitHub's cron is best-effort: on this repo a
   5-minute schedule has landed 20–75 minutes apart, longer than the sleep
-  window. `astra-keepalive` therefore runs for ~5h41m (under the 6-hour job
+  window. `astra-keepalive` therefore runs for ~5h17m (under the 6-hour job
   limit), pinging every 5 minutes, and re-arms itself with a
   `workflow_dispatch` (needs `actions: write`) so each run starts the next.
   The cron trigger remains as a safety net if a re-arm is ever missed.

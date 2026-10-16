@@ -54,7 +54,7 @@ it the tab honestly says "not configured".
 phone app cold-starts (~1 min) on the next open and the interactive bot stops
 answering. Cron cannot hold it awake — GitHub's 5-minute schedule lands
 20–75 minutes apart here — so `.github/workflows/astra-keepalive.yml` runs
-a ~5h41m job that pings `/api/v1/health` every 5 minutes and re-arms itself,
+a ~5h17m job that pings `/api/v1/health` every 5 minutes and re-arms itself,
 keeping the service warm around the clock. Do not attach a persistent disk to
 a free service (disks require a paid plan).
 service (disks require a paid plan).
@@ -108,7 +108,7 @@ The repo is public, so Actions minutes are unmetered. The bot already runs there
 on a cron, but a cron cannot hold the Render service awake (its 5-minute
 schedule lands 20–75 minutes apart here, longer than the 15-minute sleep
 window). `astra-keepalive.yml` solves this without a card: one job runs for
-~5h41m, pinging `/api/v1/health` every 5 minutes, then re-arms itself with a
+~5h17m, pinging `/api/v1/health` every 5 minutes, then re-arms itself with a
 `workflow_dispatch` so the next run takes over. The service never sleeps, so the
 phone app opens instantly and the interactive bot stays up. One always-on
 service still fits Render's free 750 instance-hours (a month is ~730).
