@@ -11,6 +11,11 @@ loopback. This tiny standard-library server bridges the two:
 It is read-only by construction: only GET/HEAD are proxied, and the upstream is
 fixed to loopback, so the app cannot be used to reach anything else.
 
+Access control is optional. Set ASTRA_ACCESS_TOKEN (or --access-token) and every
+route but /api/v1/health needs the key; leave it unset and the server is open
+exactly as it always was. A first visit with `?k=KEY` sets a cookie and
+redirects to a clean URL, so the key is not left in the address bar.
+
 Run: python3 mobile/serve_mobile.py --port 12000
 """
 
@@ -18,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -25,6 +31,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -53,6 +60,38 @@ _CONTENT_TYPES = {
 }
 
 _PROXY_TIMEOUT = 6.0
+
+# Access control. Unset by default, and an unset token means the server is
+# open exactly as it was before this gate existed — so nothing changes until
+# the operator sets it. Set ASTRA_ACCESS_TOKEN to require it. This mirrors the
+# ASTRA_UPGRADE_URL convention: a dormant gate, not a new default.
+ACCESS_TOKEN = os.environ.get("ASTRA_ACCESS_TOKEN", "").strip()
+_COOKIE_NAME = "astra_key"
+
+
+def _token_matches(given: str) -> bool:
+    """Constant-time compare, so a wrong token leaks no timing signal."""
+    if not ACCESS_TOKEN:
+        return True
+    return hmac.compare_digest(given or "", ACCESS_TOKEN)
+
+
+def _auth_required() -> bool:
+    return bool(ACCESS_TOKEN)
+
+
+def _cookie_value(header: str) -> str:
+    for part in (header or "").split(";"):
+        name, _, value = part.strip().partition("=")
+        if name == _COOKIE_NAME:
+            return value
+    return ""
+
+
+def _parse_query(path: str) -> dict:
+    _, _, query = path.partition("?")
+    return {k: v[0] for k, v in urllib.parse.parse_qs(query).items()}
+
 
 
 def _build_stamp() -> str:
@@ -357,7 +396,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path == "/astra.apk":
+        if path == "/api/v1/health":
+            # Liveness must never need a credential: Render, Fly and the
+            # keepalive cron all poll it, and a 401 would read as "down".
+            self._proxy(self.api_base + path[len("/api/v1"):], self.path)
+            return
+        if _auth_required() and not self._authorized():
+            self._unauthorized()
+            return
+        if path == "/unlock":
+            self._unlock()
+        elif path == "/astra.apk":
             self._apk()
         elif path == "/upgrade.json":
             self._upgrade_json()
@@ -382,6 +431,46 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):  # noqa: N802
         self.do_GET()
+
+    # -- access control -----------------------------------------------------
+
+    def _authorized(self) -> bool:
+        """A valid cookie, or the token on the URL (for the first visit)."""
+        if not _auth_required():
+            return True
+        given = _cookie_value(self.headers.get("Cookie", ""))
+        if not _token_matches(given):
+            given = _parse_query(self.path).get("k", "")
+        return _token_matches(given)
+
+    def _unauthorized(self) -> None:
+        body = ("<meta charset=utf-8><h1>ASTRA</h1>"
+                "<p>Access requires a key. Append <code>?k=YOUR_KEY</code> to "
+                "the address once, or set the key in the app settings.</p>"
+                ).encode("utf-8")
+        self._send(401, body, "text/html; charset=utf-8")
+
+    def _unlock(self) -> None:
+        """Exchange ?k= for a cookie, then redirect to a clean URL.
+
+        This keeps the key out of the address bar, history and Referer after
+        the first visit — the same reason a login page posts a form instead of
+        keeping credentials in the URL.
+        """
+        if not _auth_required():
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.end_headers()
+            return
+        if not _token_matches(_parse_query(self.path).get("k", "")):
+            self._unauthorized()
+            return
+        self.send_response(302)
+        self.send_header("Location", "/")
+        self.send_header("Set-Cookie",
+                         f"{_COOKIE_NAME}={ACCESS_TOKEN}; Path=/; Max-Age=31536000; "
+                         "HttpOnly; SameSite=Lax")
+        self.end_headers()
 
     # -- static shell -------------------------------------------------------
 
@@ -519,6 +608,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(argv=None) -> int:
+    global ACCESS_TOKEN
     parser = argparse.ArgumentParser(description="ASTRA mobile PWA server")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=12000)
@@ -529,7 +619,13 @@ def main(argv=None) -> int:
     parser.add_argument("--apk", default=os.path.join(
         os.path.dirname(HERE), "android", "dist", "astra.apk"),
         help="APK to offer at /astra.apk (optional)")
+    parser.add_argument("--access-token", default=ACCESS_TOKEN,
+                        help="require this key on every route except "
+                             "/api/v1/health and /unlock (env ASTRA_ACCESS_TOKEN; "
+                             "empty = open, the historical behaviour)")
     args = parser.parse_args(argv)
+
+    ACCESS_TOKEN = (args.access_token or "").strip()
 
     Handler.api_base = f"http://127.0.0.1:{args.api_port}/api/v1"
     Handler.bridge_base = f"http://127.0.0.1:{args.bridge_port}"
@@ -541,6 +637,8 @@ def main(argv=None) -> int:
     server.daemon_threads = True
     print(f"[OK] ASTRA mobile app on http://{args.host}:{args.port} "
           f"(api -> {Handler.api_base})", flush=True)
+    print("[OK] access control: "
+          + ("on (key required)" if ACCESS_TOKEN else "off (open)"), flush=True)
     # Warm the heavy akoan study in the background so the first phone that
     # opens the News tab reads a cached result instead of waiting ~100 s.
     threading.Thread(target=warm_akoan_cache, name="akoan-warmup",

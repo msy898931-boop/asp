@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -22,6 +23,12 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import serve_mobile as sm  # noqa: E402
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Surface the 302 instead of following it, so the cookie can be read."""
+    def redirect_request(self, *a, **k):
+        return None
 
 
 def _bars(n=220, base=1800.0):
@@ -571,6 +578,106 @@ class FetchTimeoutTest(unittest.TestCase):
         js = self._js()
         self.assertIn("akoan_slow", js)
         self.assertIn("setInterval", js)
+
+
+class AccessControlTest(unittest.TestCase):
+    """The gate is opt-in: unset means open, set means every route but health.
+
+    Each test sets sm.ACCESS_TOKEN directly (the value the env/flag would
+    produce) and restores it, so the suite never leaks state into another test.
+    """
+
+    def setUp(self):
+        self._saved = sm.ACCESS_TOKEN
+        sm.ACCESS_TOKEN = ""
+
+    def tearDown(self):
+        sm.ACCESS_TOKEN = self._saved
+
+    def _serve_app(self):
+        return _serve(sm.Handler)
+
+    def _status(self, path, headers=None):
+        app = self._serve_app()
+        try:
+            url = "http://127.0.0.1:%d%s" % (app.server_address[1], path)
+            req = urllib.request.Request(url, headers=headers or {})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return resp.status, dict(resp.headers)
+            except urllib.error.HTTPError as exc:
+                return exc.code, dict(exc.headers)
+        finally:
+            _stop(app)
+
+    def test_open_when_no_token_is_configured(self):
+        status, _ = self._status("/version.json")
+        self.assertEqual(status, 200)
+
+    def test_every_route_needs_the_key_once_set(self):
+        sm.ACCESS_TOKEN = "s3cret"
+        for path in ("/", "/version.json", "/vol.json", "/akoan.json",
+                     "/astra.apk", "/upgrade.json", "/bot.json"):
+            with self.subTest(path=path):
+                status, _ = self._status(path)
+                self.assertEqual(status, 401, path)
+
+    def test_wrong_key_is_rejected(self):
+        sm.ACCESS_TOKEN = "s3cret"
+        status, _ = self._status("/version.json?k=wrong")
+        self.assertEqual(status, 401)
+
+    def test_key_on_the_url_authorizes(self):
+        sm.ACCESS_TOKEN = "s3cret"
+        status, _ = self._status("/version.json?k=s3cret")
+        self.assertEqual(status, 200)
+
+    def test_cookie_authorizes_a_later_visit(self):
+        sm.ACCESS_TOKEN = "s3cret"
+        status, _ = self._status("/version.json",
+                                 headers={"Cookie": "astra_key=s3cret"})
+        self.assertEqual(status, 200)
+
+    def test_unlock_sets_a_cookie_and_redirects_off_the_url(self):
+        sm.ACCESS_TOKEN = "s3cret"
+        opener = urllib.request.build_opener(_NoRedirect)
+        app = self._serve_app()
+        try:
+            url = "http://127.0.0.1:%d/unlock?k=s3cret" % app.server_address[1]
+            try:
+                opener.open(url, timeout=10)
+                self.fail("expected a 302 redirect")
+            except urllib.error.HTTPError as exc:
+                self.assertEqual(exc.code, 302)
+                self.assertEqual(exc.headers.get("Location"), "/")
+                self.assertIn("astra_key=s3cret", exc.headers.get("Set-Cookie", ""))
+                self.assertIn("HttpOnly", exc.headers.get("Set-Cookie", ""))
+        finally:
+            _stop(app)
+
+    def test_unlock_rejects_a_wrong_key(self):
+        sm.ACCESS_TOKEN = "s3cret"
+        status, _ = self._status("/unlock?k=nope")
+        self.assertEqual(status, 401)
+
+    def test_health_is_never_gated(self):
+        """Render, Fly and the keepalive cron poll health with no credential."""
+        sm.ACCESS_TOKEN = "s3cret"
+        saved = sm.Handler.api_base
+        api = _serve(_StubBridge)
+        sm.Handler.api_base = "http://127.0.0.1:%d/api/v1" % api.server_address[1]
+        try:
+            status, _ = self._status("/api/v1/health")
+        finally:
+            _stop(api)
+            sm.Handler.api_base = saved
+        self.assertEqual(status, 200)
+
+    def test_unset_token_is_not_a_requirement(self):
+        sm.ACCESS_TOKEN = ""
+        self.assertFalse(sm._auth_required())
+        sm.ACCESS_TOKEN = "x"
+        self.assertTrue(sm._auth_required())
 
 
 if __name__ == "__main__":

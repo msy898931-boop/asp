@@ -235,6 +235,9 @@ so a clone can move to a new deployment by setting two variables:
   `watchdog`), the keepalive and watchdog workflows, and `check_deploy.sh`.
 - `ASTRA_REPO` ŌĆö `owner/repo`, used by `serve_mobile.py` to build the
   `/astra.apk` fallback link (or set `ASTRA_APK_URL` to override the link whole).
+- `ASTRA_ACCESS_TOKEN` — optional. Set it and every phone-app route needs the
+  key; leave it unset (the default) and the server is open exactly as before.
+  See *Access control* under the phone app below.
 
 The watchdog's repo comes from `GITHUB_REPOSITORY`, which GitHub sets in Actions
 automatically. Defaults remain the current Render host and fork, so nothing
@@ -322,6 +325,17 @@ instrument-panel shell that reads the same loopback API through its own origin.
 `/bridge/*` and `/advisor/*` to 127.0.0.1 (GET only, upstream fixed to loopback).
 Run it on a public port; icons are generated with `mobile/icons/make_icons.py`
 (stdlib only). Install on the phone via the browser's "Add to Home screen".
+
+Access control: the server is **open by default**. Set `ASTRA_ACCESS_TOKEN`
+(or pass `--access-token`) and every route but `/api/v1/health` answers `401`
+without the key. Health stays open on purpose — Render, Fly and the keepalive
+cron poll it with no credential, so gating it would read as "service down".
+A first visit with `?k=KEY` hits `/unlock`, which sets an `HttpOnly` cookie and
+redirects to a clean `/`, so the key does not linger in the address bar, history
+or `Referer`. The key is compared with `hmac.compare_digest` so a wrong guess
+leaks no timing signal. The gate is dormant until the variable is set, mirroring
+`ASTRA_UPGRADE_URL`: development, CI and the current deployment behave exactly
+as before. `mobile/test_serve_mobile.py::AccessControlTest` locks all of this.
 
 Shell caching: the shell is served `Cache-Control: no-cache` and the HTML has a
 content hash appended to `styles.css`/`app.js` (`?v=<build>`), while `sw.js`
