@@ -661,6 +661,27 @@ class AccessControlTest(unittest.TestCase):
         status, _ = self._status("/unlock?k=nope")
         self.assertEqual(status, 401)
 
+    def test_gate_page_offers_the_unlock_form(self):
+        # The gate page is reached from the phone app, so it must lead with the
+        # /unlock form that stores the cookie, styled for a phone.
+        sm.ACCESS_TOKEN = "s3cret"
+        app = self._serve_app()
+        try:
+            url = "http://127.0.0.1:%d/" % app.server_address[1]
+            try:
+                urllib.request.urlopen(url, timeout=10)
+                body = b""
+            except urllib.error.HTTPError as exc:
+                self.assertEqual(exc.code, 401)
+                body = exc.read()
+            html = body.decode("utf-8")
+            self.assertIn('action="/unlock"', html)
+            self.assertIn('name="k"', html)
+            self.assertIn('dir="rtl"', html)
+            self.assertIn('width=device-width', html)
+        finally:
+            _stop(app)
+
     def test_health_is_never_gated(self):
         """Render, Fly and the keepalive cron poll health with no credential."""
         sm.ACCESS_TOKEN = "s3cret"

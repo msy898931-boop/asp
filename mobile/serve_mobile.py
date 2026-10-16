@@ -444,10 +444,35 @@ class Handler(BaseHTTPRequestHandler):
         return _token_matches(given)
 
     def _unauthorized(self) -> None:
-        body = ("<meta charset=utf-8><h1>ASTRA</h1>"
-                "<p>Access requires a key. Append <code>?k=YOUR_KEY</code> to "
-                "the address once, or set the key in the app settings.</p>"
-                ).encode("utf-8")
+        # Shown to a phone that opened the app without the key. Lead with the
+        # /unlock form (it stores the cookie, so it is typed once); the bare
+        # ?k= form works too but is forgotten on every visit. Styled for a
+        # phone: 401s are reached from the app, not from a desktop.
+        body = (
+            "<!doctype html><html dir=\"rtl\" lang=\"ar\"><head>"
+            "<meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            "<title>ASTRA</title><style>"
+            "body{margin:0;min-height:100vh;display:flex;align-items:center;"
+            "justify-content:center;background:#0B0E13;color:#E8ECF2;"
+            "font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}"
+            "main{max-width:22rem;padding:2rem;text-align:center}"
+            "h1{margin:0 0 1rem;color:#C9A24B;letter-spacing:.12em}"
+            "p{margin:0 0 1.25rem;color:#A9B4C4}"
+            "input{width:100%;box-sizing:border-box;padding:.8rem;margin:0 0 .75rem;"
+            "border:1px solid #2A323F;border-radius:.6rem;background:#141922;"
+            "color:#E8ECF2;font-size:1rem}"
+            "button{width:100%;padding:.85rem;border:0;border-radius:.6rem;"
+            "background:#C9A24B;color:#0B0E13;font-size:1rem;font-weight:700}"
+            "</style></head><body><main>"
+            "<h1>ASTRA</h1>"
+            "<p>هذا التطبيق محمي. أدخل مفتاح الوصول مرة واحدة وسيُحفظ على جهازك.</p>"
+            "<form method=\"get\" action=\"/unlock\">"
+            "<input name=\"k\" type=\"password\" dir=\"ltr\" autocomplete=\"off\" "
+            "placeholder=\"مفتاح الوصول\" aria-label=\"مفتاح الوصول\">"
+            "<button type=\"submit\">دخول</button></form>"
+            "</main></body></html>"
+        ).encode("utf-8")
         self._send(401, body, "text/html; charset=utf-8")
 
     def _unlock(self) -> None:
