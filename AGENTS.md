@@ -1060,20 +1060,23 @@ nearer side and the distance left. It fires once per bar, so it cannot spam;
 ### The silent failures: watchdog and stale data
 
 `bot/watchdog.py` (the `astra-watchdog` cron, hourly) is a dead-man's switch
-over the failures the trading jobs cannot report on their own: the bot stopped
-running (`check_bot`, last successful `astra-bot` run older than
-`ASTRA_BOT_MAX_AGE_MIN`, 90 min), the web server is down (`check_server`, no 200
-from `/api/v1/health`), the engine serves empty (`check_engine`), the
-**interactive poller** stopped (`check_poller`, reads `/bot.json`), and the
-repository has gone idle long enough (`check_commit`, over
-`ASTRA_COMMIT_WARN_DAYS`, 55 days) that GitHub disables the scheduled workflows
-outright. It alerts on the transition into trouble,
-re-alerts every `ASTRA_WATCHDOG_REALERT_HOURS` (6) while the trouble lasts, and
-confirms recovery. `decide()` is pure over (verdict, state, now); the state
-rides in the Actions cache. An unreachable GitHub API never cries wolf — the
-check returns "unavailable" and stays quiet. So does a 404 (an older deploy
-without the route) or a missing heartbeat (a host with no token): only a
-*stale* beat, or a real 200-but-empty engine, is trouble.
+over the failures the trading jobs cannot report on their own: the keepalive
+chain died (`check_keepalive`, no `astra-keepalive` run in progress and the last
+one older than `ASTRA_KEEPALIVE_MAX_AGE_MIN`, 400 min — the real liveness
+signal), the scanner stalled (`check_bot`, last successful `astra-bot` run older
+than `ASTRA_BOT_MAX_AGE_MIN`, 360 min — a deliberately loose secondary signal,
+because the scanner rides GitHub's best-effort cron, which this repo has seen
+stall for up to 4.6 hours), the web server is down (`check_server`, no 200 from
+`/api/v1/health`), the engine serves empty (`check_engine`), the **interactive
+poller** stopped (`check_poller`, reads `/bot.json`), and the repository has gone
+idle long enough (`check_commit`, over `ASTRA_COMMIT_WARN_DAYS`, 55 days) that
+GitHub disables the scheduled workflows outright. It alerts on the transition
+into trouble, re-alerts every `ASTRA_WATCHDOG_REALERT_HOURS` (6) while the
+trouble lasts, and confirms recovery. `decide()` is pure over (verdict, state,
+now); the state rides in the Actions cache. An unreachable GitHub API never
+cries wolf — the check returns "unavailable" and stays quiet. So does a 404 (an
+older deploy without the route) or a missing heartbeat (a host with no token):
+only a *stale* beat, or a real 200-but-empty engine, is trouble.
 
 `scan_once.staleness()` guards the other silent failure: a bar older than
 `ASTRA_STALE_AFTER_MIN` (45) means the feed is quiet or the market is closed
