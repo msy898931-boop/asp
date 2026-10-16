@@ -211,6 +211,32 @@ class MarketPanelTest(unittest.TestCase):
         shared = _read(os.path.join(HERE, "styles.css"))
         self.assertNotIn(".dir-hero", shared)
 
+    def test_regime_labels_match_the_backend_vocabulary(self):
+        # The analysis surface emits TRENDING_UP / TRENDING_DOWN / RANGING; a
+        # label keyed on TREND_UP would silently fall back to the raw English
+        # word in the Arabic UI.
+        js = _read(TERMINAL_JS)
+        for key in ("rg_TRENDING_UP", "rg_TRENDING_DOWN", "rg_RANGING"):
+            with self.subTest(key=key):
+                self.assertIn(key, js)
+
+    def test_no_plan_names_the_gate_instead_of_waiting(self):
+        js = _read(TERMINAL_JS)
+        self.assertIn("function whyNoTrade(", js)
+        # Every branch must resolve to a real key, so the note is never blank.
+        for key in ("why_no_direction", "why_not_eligible", "why_risk_denied",
+                    "why_awaiting", "why_locked"):
+            with self.subTest(key=key):
+                self.assertIn(key + ":", js)
+        # The reason is written into the note when no plan is drawn.
+        self.assertIn('$("mk-plan-note").textContent = whyNoTrade(a);', js)
+
+    def test_a_locked_backend_is_named_not_guessed(self):
+        js = _read(TERMINAL_JS)
+        # A 401 on analysis/latest is a key gate, not a missing decision.
+        self.assertIn("analysisLocked", js)
+        self.assertIn("why_locked", js)
+
 
 class GateTest(unittest.TestCase):
     """The terminal is part of the app, so it lives behind the same gate."""

@@ -401,6 +401,15 @@ labelled a score, never dressed as a probability. Its CSS lives in
 `terminal.css` only — the shared `styles.css` the phone app depends on is not
 touched, and the tab bar is widened to seven in `terminal.css`.
 
+When no plan is drawn, the panel does not leave a blank "waiting" line: it
+names the gate the values are consistent with (`whyNoTrade`), read from the
+context the backend already sent — "the regime and structure did not agree on a
+direction", "the regime is not eligible under policy", or "the engine denied
+the trade". A locked analysis route (401) reads "backend is key-protected", not
+a decision of `NONE`. The regime label keys use the surface's real vocabulary
+(`rg_TRENDING_UP` / `rg_TRENDING_DOWN` / `rg_RANGING`); a key on the older
+`TREND_UP` would silently fall back to the raw English word in the Arabic UI.
+
 The rule that governs every panel: **show the backend's real answer, and when
 the answer is unknown say so.** A missing reading renders `غير متاح`, never a
 plausible-looking `0`. `refresh()` uses `Promise.allSettled`, so one dead

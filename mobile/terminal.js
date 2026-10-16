@@ -91,6 +91,11 @@ const STRINGS = {
     mk_outcomes: "آخر النتائج",
     mk_decision: "آخر قرار مُسجَّل",
     mk_decision_none: "لا قرارات مُسجَّلة في السجلّ بعد.",
+    why_no_direction: "النظام والبنية ما اتفقوا على اتجاه — لا حاجة للدخول.",
+    why_not_eligible: "النظام الحالي غير مؤهّل للدخول حسب السياسة.",
+    why_risk_denied: "المحرّك رفض الصفقة: المخاطرة أو جودة السوق دون الحد.",
+    why_awaiting: "لا قرار مُقيَّم من الباكند بعد.",
+    why_locked: "الباكند محمي بمفتاح — أدخل المفتاح لعرض القرار.",
     dc_signal: "الإشارة", dc_time: "الوقت", dc_tf: "الإطار", dc_score: "التقييم",
     dc_ref: "السعر المرجعي", dc_last: "آخر سعر", dc_drift: "الانحراف",
     dc_outcome: "النتيجة", dc_data: "البيانات", dc_structure: "البنية",
@@ -110,6 +115,7 @@ const STRINGS = {
     cp_m15: "زناد M15", cp_vol: "التقلّب", cp_agreement: "توافق الإطارات",
     cp_confidence: "الثقة", cp_score: "التقييم",
     cp_calibrated: "احتمال مُعايَر", cp_uncalibrated: "احتمال غير مُعايَر",
+    rg_TRENDING_UP: "صاعد", rg_TRENDING_DOWN: "هابط", rg_RANGING: "عرضي",
     rg_TREND_UP: "صاعد", rg_TREND_DOWN: "هابط", rg_RANGE: "عرضي",
     rg_VOLATILE: "متقلّب", rg_QUIET: "هادئ",
     pos_entry: "الدخول", pos_stop: "الوقف", pos_target: "الهدف",
@@ -181,6 +187,11 @@ const STRINGS = {
     mk_outcomes: "Recent outcomes",
     mk_decision: "Last recorded decision",
     mk_decision_none: "No decisions recorded in the ledger yet.",
+    why_no_direction: "The regime and structure did not agree on a direction — nothing to enter.",
+    why_not_eligible: "The current regime is not eligible for entry under policy.",
+    why_risk_denied: "The engine denied the trade: risk or market quality below the bound.",
+    why_awaiting: "No evaluated decision from the backend yet.",
+    why_locked: "The backend is key-protected — enter the key to see the decision.",
     dc_signal: "Signal", dc_time: "Time", dc_tf: "TF", dc_score: "Score",
     dc_ref: "Reference price", dc_last: "Last price", dc_drift: "Drift",
     dc_outcome: "Outcome", dc_data: "Data", dc_structure: "Structure",
@@ -200,6 +211,7 @@ const STRINGS = {
     cp_m15: "M15 trigger", cp_vol: "Volatility", cp_agreement: "MTF agreement",
     cp_confidence: "Confidence", cp_score: "Score",
     cp_calibrated: "calibrated probability", cp_uncalibrated: "uncalibrated probability",
+    rg_TRENDING_UP: "trending up", rg_TRENDING_DOWN: "trending down", rg_RANGING: "ranging",
     rg_TREND_UP: "trending up", rg_TREND_DOWN: "trending down", rg_RANGE: "ranging",
     rg_VOLATILE: "volatile", rg_QUIET: "quiet",
     pos_entry: "Entry", pos_stop: "Stop", pos_target: "Target",
@@ -349,7 +361,7 @@ function readoutRow(dl, label, value, cls) {
 const state = {
   health: null, system: null, bridge: null, analysis: null,
   timeframes: null, risk: null, governance: null, research: null,
-  market: null, signals: null,
+  market: null, signals: null, analysisLocked: false,
   lastUpdated: null, route: "overview",
 };
 
@@ -476,6 +488,24 @@ function eligLabel(word) {
   return STRINGS[lang][key] || STRINGS.en[key] || (word || null);
 }
 
+/* Why the panel is showing no trade plan. This is a heuristic read of the
+   context the backend already sent, never a fabricated reason: it names the
+   gate the values are consistent with and nothing more. */
+function whyNoTrade(a) {
+  if (a.locked) return T("why_locked");
+  const ctx = a.context || {};
+  const sig = a.signal || {};
+  if (a.available !== true) return T("why_awaiting");
+  const w = String(sig.direction || "NONE").toUpperCase();
+  if (w === "NONE") {
+    const r = String(ctx.regime || "UNKNOWN").toUpperCase();
+    if (r === "RANGING" || r === "VOLATILE" || r === "UNKNOWN")
+      return T("why_not_eligible");
+    return T("why_no_direction");
+  }
+  return T("why_risk_denied");
+}
+
 function chip(label, value, cls) {
   const el = document.createElement("span");
   el.className = "chip" + (cls ? " " + cls : "");
@@ -556,6 +586,10 @@ function renderMarket() {
   const ctx = a.context || {};
   const sig = a.signal || {};
   const levels = a.levels || {};
+  // Availability is the document's own presence: a 200 with a context is a real
+  // read even when it carries no direction; null is a locked or dead backend.
+  a.available = state.market != null;
+  a.locked = state.analysisLocked === true;
 
   // Direction hero. `signal.direction` is the engine's own word; when the
   // analysis surface is absent it is null, which reads as "unavailable" — not
@@ -608,6 +642,10 @@ function renderMarket() {
       planCell(T("pl_risk"), levels.suggested_risk_pct == null
         ? null : num(levels.suggested_risk_pct, 2) + "%"),
     );
+  } else {
+    // No plan: name the gate the engine is sitting on instead of leaving a
+    // blank "waiting" line the operator cannot act on.
+    $("mk-plan-note").textContent = whyNoTrade(a);
   }
 
   // Last recorded decision, straight from the prediction ledger. This is the
@@ -947,6 +985,7 @@ async function refresh() {
 
   let firstError = null;
   let anyOk = false;
+  let analysisLocked = false;
   settled.forEach((res, i) => {
     const key = specs[i][0];
     if (res.status === "fulfilled") {
@@ -954,12 +993,15 @@ async function refresh() {
       anyOk = true;
     } else {
       if (!firstError) firstError = res.reason;
+      if (key === "analysis" && res.reason && res.reason.status === 401)
+        analysisLocked = true;
       state[key] = null;
     }
   });
   // The market panel reads the same analysis document as the overview; keep one
   // fetch and one truth rather than calling the endpoint twice.
   state.market = state.analysis;
+  state.analysisLocked = analysisLocked;
 
   if (!anyOk) {
     // Name the real failure. A 401 is a locked backend, not a dead one, and
