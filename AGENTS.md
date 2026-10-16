@@ -648,7 +648,10 @@ reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
   `astra-weekly-akoan.yml`, Monday 06:00 UTC). Weekly, not daily: the answer
   moves slowly and a daily message would be noise. ISO-week state in the
   Actions cache makes a repeated cron slot idempotent. The ledger is accrued
-  first, then cached back, so the record only grows.
+  first, then cached back, so the record only grows. The workflow was added on a
+  Wednesday and so showed zero runs until its first Monday (`2026-10-20`) — a
+  schedule that has not reached its first slot is not a broken schedule. Verify
+  one by hand with `gh workflow run astra-weekly-akoan.yml -f dry_run=true`.
 
 **Shipping note.** Two things the source tree has that the image does not, and
 both once made the phone's News tab answer "engine unavailable" in production
