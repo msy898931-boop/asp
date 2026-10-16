@@ -514,20 +514,37 @@ main { flex: 1; padding: 8px 14px 108px; }
 .lvl button:active { color: var(--down); }
 
 /* ── tabs ───────────────────────────────────────────────────────────── */
-/* Nine tabs do not fit one phone-width row, so the bar is a two-row grid and
-   every tab is visible at once — no scrolling, no tabs hidden behind an edge.
-   A short gold bar over the selected label is the only selection cue. */
+/* One row of six on a phone: five primary views plus More, which opens the
+   secondary row above the bar. A short gold bar over the selected label is the
+   only selection cue. */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 1px;
+  /* A fixed height lets the More sheet anchor exactly above the bar without
+     guessing at the row's rendered size (which the safe-area inset changes). */
+  height: calc(46px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
   background: var(--edge);
   border-top: 1px solid var(--edge);
   padding-bottom: env(safe-area-inset-bottom);
   z-index: 10;
 }
 .tabs::-webkit-scrollbar { display: none; }
+/* The secondary views. Hidden until More is tapped, then a row sitting flush on
+   top of the bar. :not([hidden]) so the display rule does not defeat [hidden]. */
+.tabs-more {
+  position: fixed; left: 0; right: 0;
+  bottom: calc(46px + env(safe-area-inset-bottom));
+  gap: 1px;
+  background: var(--edge);
+  border-top: 1px solid var(--edge);
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, .28);
+  z-index: 10;
+}
+.tabs-more:not([hidden]) { display: grid; grid-template-columns: repeat(4, 1fr); }
+.tab-more[aria-expanded="true"] { color: var(--gold); }
 .tabs.more-left {
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 30px);
   mask-image: linear-gradient(90deg, transparent 0, #000 30px);
@@ -564,7 +581,7 @@ html[dir="rtl"] .tab { letter-spacing: normal; }
 
 .foot {
   text-align: center; font-size: 10px; letter-spacing: .1em;
-  color: var(--muted); padding: 0 18px 116px;
+  color: var(--muted); padding: 0 18px 76px;
 }
 .foot span { display: block; margin-top: 10px; }
 /* The APK and the two links are three destinations in one compact row, so the

@@ -354,16 +354,33 @@ class BotHeartbeatTest(unittest.TestCase):
 
 
 class TabBarTest(unittest.TestCase):
-    """Nine tabs do not fit one row; the bar is a two-row grid that shows them all."""
+    """Nine views: five primary tabs in one row plus a More sheet for the rest."""
 
     def _read(self, name):
         with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
             return fh.read()
 
-    def test_css_is_a_two_row_grid_with_arabic_spacing(self):
+    def test_html_splits_primary_from_secondary(self):
+        html = self._read("index.html")
+        # Five primary views plus the More button share the fixed bar.
+        nav = html[html.index('class="tabs"'):html.index("</nav>")]
+        self.assertEqual(nav.count('class="tab"'), 5)
+        self.assertIn('class="tab tab-more"', nav)
+        self.assertIn('aria-controls="tabs-more"', nav)
+        # The secondary row holds the other four views and starts hidden.
+        sheet = html[html.index('id="tabs-more"'):html.index("</div>", html.index('id="tabs-more"'))]
+        self.assertEqual(sheet.count('class="tab"'), 4)
+        for view in ("tracker", "ai", "conn", "bridge"):
+            self.assertIn('data-view="%s"' % view, sheet)
+        self.assertIn("hidden", html[html.index('class="tabs-more" id="tabs-more"'):html.index(">", html.index('id="tabs-more"'))])
+
+    def test_css_is_one_row_plus_a_sheet(self):
         css = self._read("styles.css")
-        self.assertIn("grid-template-columns: repeat(5, 1fr)", css)
+        self.assertIn("grid-template-columns: repeat(6, 1fr)", css)
         self.assertIn("display: grid", css)
+        # The More sheet anchors above the fixed-height bar, four across.
+        self.assertIn(".tabs-more:not([hidden])", css)
+        self.assertIn("grid-template-columns: repeat(4, 1fr)", css)
         # The overflow affordance stays for a wide screen that still overflows.
         self.assertIn(".tabs.more-left", css)
         self.assertIn(".tabs.more-right", css)
@@ -371,12 +388,18 @@ class TabBarTest(unittest.TestCase):
         # Arabic joins break under Latin letter-spacing.
         self.assertIn('html[dir="rtl"] .tab', css)
 
-    def test_js_keeps_the_overflow_affordance(self):
+    def test_js_toggles_more_and_keeps_the_overflow_affordance(self):
         js = self._read("app.js")
+        self.assertIn("function setMoreOpen", js)
+        self.assertIn("function selectView", js)
+        self.assertIn("SECONDARY_VIEWS", js)
+        self.assertIn('aria-expanded', js)
+        # Tapping outside the sheet closes it.
+        self.assertIn('e.target.closest("#tabs-more")', js)
+        # The fades must be recomputed when direction or viewport changes.
         self.assertIn("function updateTabFades", js)
         self.assertIn("more-left", js)
         self.assertIn("more-right", js)
-        # Fades must be recomputed when direction or viewport changes.
         self.assertIn('addEventListener("resize", updateTabFades)', js)
         self.assertIn("orientationchange", js)
 

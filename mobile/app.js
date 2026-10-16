@@ -26,6 +26,7 @@ const STRINGS = {
     title_sub: "XAUUSD · shadow mode",
     tab_status: "Status", tab_signal: "State", tab_vol: "Vol", tab_chart: "Chart",
     tab_conn: "Data", tab_bridge: "Bridge", tab_ai: "AI",
+    tab_more: "More", tab_more_aria: "More views",
     ai_title: "AI advisor",
     ai_warn: "Second opinion from an external model. Outside the validated system, not scored. Not financial advice.",
     ai_price: "Live price", ai_engine: "Engine read",
@@ -153,6 +154,7 @@ const STRINGS = {
     title_sub: "الذهب · وضع الظل",
     tab_status: "الحالة", tab_signal: "السوق", tab_vol: "التقلّب", tab_chart: "الشارت",
     tab_conn: "البيانات", tab_bridge: "الجسر", tab_ai: "الذكاء",
+    tab_more: "المزيد", tab_more_aria: "عروض إضافية",
     ai_title: "المستشار الذكي",
     ai_warn: "رأي ثانٍ من نموذج خارجي. خارج النظام المُتحقَّق منه، وغير مُقيَّم. ليس نصيحة مالية.",
     ai_price: "السعر اللحظي", ai_engine: "قراءة المحرك",
@@ -1561,24 +1563,61 @@ function updateTabFades() {
   el.classList.toggle("more-right", rtl ? !atStart : !atEnd);
 }
 
+// The secondary views live behind More so the bar is one row on a phone.
+const SECONDARY_VIEWS = ["tracker", "ai", "conn", "bridge"];
+
+function selectView(view) {
+  const tabs = [...document.querySelectorAll(".tab")];
+  const target = tabs.find((t) => t.dataset.view === view);
+  tabs.forEach((t) =>
+    t.setAttribute("aria-selected", t === target ? "true" : "false"));
+  // More reads as selected while one of its views is open, so the bar still
+  // says where you are once the sheet has closed.
+  const more = document.querySelector(".tab-more");
+  if (more) {
+    more.setAttribute("aria-selected",
+      SECONDARY_VIEWS.indexOf(view) !== -1 ? "true" : "false");
+  }
+  currentView = view;
+  document.querySelectorAll(".panel").forEach((p) =>
+    (p.hidden = p.id !== `view-${view}`));
+  updateTabFades();
+  if (view === "chart") loadChart();
+  if (view === "vol") loadVolatility();
+  if (view === "akoan") loadAkoan();
+  if (view === "conn") renderConn();
+  if (view === "tracker") loadTracker();
+  if (view === "ai") loadAdvisor(false);
+}
+
+function setMoreOpen(open) {
+  const sheet = document.querySelector("#tabs-more");
+  const more = document.querySelector(".tab-more");
+  if (!sheet || !more) return;
+  sheet.hidden = !open;
+  more.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
 function bindTabs() {
   const tabs = [...document.querySelectorAll(".tab")];
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      tabs.forEach((t) =>
-        t.setAttribute("aria-selected", t === tab ? "true" : "false"));
-      const view = tab.dataset.view;
-      currentView = view;
-      document.querySelectorAll(".panel").forEach((p) =>
-        (p.hidden = p.id !== `view-${view}`));
-      updateTabFades();
-      if (view === "chart") loadChart();
-      if (view === "vol") loadVolatility();
-      if (view === "akoan") loadAkoan();
-      if (view === "conn") renderConn();
-      if (view === "tracker") loadTracker();
-      if (view === "ai") loadAdvisor(false);
+      if (tab.classList.contains("tab-more")) {
+        const sheet = document.querySelector("#tabs-more");
+        setMoreOpen(sheet ? sheet.hidden : false);
+        return;
+      }
+      setMoreOpen(false);
+      selectView(tab.dataset.view);
     });
+  });
+  // A tap anywhere outside the sheet or the More button closes it.
+  document.addEventListener("click", (e) => {
+    const sheet = document.querySelector("#tabs-more");
+    if (sheet && !sheet.hidden
+        && !e.target.closest("#tabs-more") && !e.target.closest(".tab-more")) {
+      setMoreOpen(false);
+    }
   });
   const bar = document.querySelector(".tabs");
   if (bar) {

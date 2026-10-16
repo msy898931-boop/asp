@@ -297,11 +297,18 @@
   <button class="tab" data-view="chart" type="button" data-i18n="tab_chart">Chart</button>
   <button class="tab" data-view="vol" type="button" data-i18n="tab_vol">Vol</button>
   <button class="tab" data-view="akoan" type="button" data-i18n="tab_akoan">News</button>
+  <button class="tab tab-more" type="button" aria-haspopup="true" aria-expanded="false"
+          aria-controls="tabs-more" data-i18n="tab_more" data-i18n-aria="tab_more_aria">More</button>
+</nav>
+
+<!-- The secondary views. Five primary tabs cover the daily read; the rest live
+     behind More so the bar is one row on a phone instead of two. -->
+<div class="tabs-more" id="tabs-more" role="tablist" hidden>
   <button class="tab" data-view="tracker" type="button" data-i18n="tab_tracker">Signals</button>
   <button class="tab" data-view="ai" type="button" data-i18n="tab_ai">AI</button>
   <button class="tab" data-view="conn" type="button" data-i18n="tab_conn">Data</button>
   <button class="tab" data-view="bridge" type="button" data-i18n="tab_bridge">Bridge</button>
-</nav>
+</div>
 
 <footer class="foot">
   <div class="foot-row">
