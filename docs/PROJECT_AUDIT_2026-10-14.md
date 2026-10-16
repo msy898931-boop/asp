@@ -315,3 +315,13 @@ build can now also bake in the gate key (`build.sh --key`, or the workflow's
 skipped when a key is set — the rolling release is a public download and must
 never carry the key. A first-load race that could show the key prompt over the
 saved-key auto-unlock was also fixed.
+
+**Concurrency is not the fix for a weak edge (tracker).** A review question was
+whether the one-live-idea rule in `tracker/replay.py` is too strict. A new probe,
+`research/multi_trade_probe.py`, replays the same 2026 M15 bars at 1/2/3/5
+concurrent ideas. It is not the fix: concurrency multiplies the trade count
+roughly by N but does not raise the win rate (~31% at every level) and deepens
+the loss streak (12 → 37). Mean R per trade also falls. That is the inflation the
+single-idea rule prevents — the same move counted several times. The probe also
+shows the live rule is itself net-negative on this window (mean R -0.042), which
+is the project's own finding and a separate problem from concurrency.
