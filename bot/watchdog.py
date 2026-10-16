@@ -191,19 +191,21 @@ def check_keepalive(now: datetime) -> tuple[bool, str]:
 
     This is the real liveness signal. The chain holds one long run that pings
     every 5 minutes and dispatches its successor just before the 6-hour cap, so
-    a healthy chain always has a run either in progress or finished within the
-    cap. A completed latest run older than the cap means a re-arm was dropped
-    and the Render service is no longer being kept awake.
+    a healthy chain always has a run in progress (or one that finished within
+    the cap). A queued successor sits in the list while the current run
+    finishes, so look for the *running* one first; only when nothing is running
+    does the newest run's age decide. That way a run stuck 'pending' with no
+    runner behind it (a stalled queue) reads as trouble, not as health.
     """
     url = ("https://api.github.com/repos/%s/actions/workflows/"
-           "astra-keepalive.yml/runs?per_page=5" % REPO)
+           "astra-keepalive.yml/runs?per_page=10" % REPO)
     payload = _get_json(url, 30)
-    if not payload or not payload.get("workflow_runs"):
+    runs = (payload or {}).get("workflow_runs") or []
+    if not runs:
         return True, "unavailable"  # cannot judge: never cry wolf on this
-    latest = payload["workflow_runs"][0]
-    if latest.get("status") in ("queued", "in_progress", "waiting", "pending"):
+    if any(r.get("status") == "in_progress" for r in runs):
         return True, "running"
-    when = _parse_utc(latest.get("updated_at", ""))
+    when = _parse_utc(runs[0].get("updated_at", ""))
     if when is None:
         return True, "unavailable"
     age_min = (now - when).total_seconds() / 60.0

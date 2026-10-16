@@ -115,6 +115,27 @@ class CheckKeepaliveTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("chain", detail)
 
+    def test_a_stuck_pending_run_is_trouble(self):
+        # A lone successor can sit 'pending' for hours when no runner picks it
+        # up. Past the 6h job cap with nothing running that is a dead chain, so
+        # the 'pending' label must not buy it immunity.
+        stuck = (NOW - timedelta(hours=8)).isoformat().replace("+00:00", "Z")
+        wd._get_json = lambda url, timeout: {"workflow_runs": [
+            {"status": "pending", "conclusion": None, "updated_at": stuck}]}
+        ok, detail = wd.check_keepalive(NOW)
+        self.assertFalse(ok)
+        self.assertIn("chain", detail)
+
+    def test_a_queued_successor_does_not_mask_the_running_chain(self):
+        # Healthy shape: the current run is in_progress, its successor queued.
+        queued = (NOW - timedelta(minutes=2)).isoformat().replace("+00:00", "Z")
+        wd._get_json = lambda url, timeout: {"workflow_runs": [
+            {"status": "pending", "conclusion": None, "updated_at": queued},
+            {"status": "in_progress", "conclusion": None, "updated_at": queued}]}
+        ok, detail = wd.check_keepalive(NOW)
+        self.assertTrue(ok)
+        self.assertEqual(detail, "running")
+
     def test_unreachable_github_does_not_cry_wolf(self):
         wd._get_json = lambda url, timeout: None
         ok, detail = wd.check_keepalive(NOW)
