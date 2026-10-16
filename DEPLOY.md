@@ -113,9 +113,10 @@ window). `astra-keepalive.yml` solves this without a card: one job runs for
 phone app opens instantly and the interactive bot stays up. One always-on
 service still fits Render's free 750 instance-hours (a month is ~730).
 
-Nothing to configure — it runs on `main`. If it ever stops, the cron trigger
-restarts the chain; if the service is upgraded to paid, the chain is harmless
-and can stay.
+Nothing to configure — it runs on `main`. A second workflow,
+`astra-chain-guard.yml`, runs hourly and re-dispatches the chain if no run is
+in progress, so a dropped re-arm heals by itself. If the service is upgraded
+to paid, both are harmless and can stay.
 
 ## After deploy
 

@@ -192,6 +192,9 @@ Two checks watch the live service, both free (GitHub Actions):
   `available:false` — the exact bug that once shipped the News tab blank.
   The long run exists because the cron trigger is too slow to beat the
   15-minute sleep window (see "Never let the server sleep" below).
+- `astra-chain-guard` (hourly) is the safety net for the warm chain: if no
+  `astra-keepalive` run is in progress it re-dispatches one. It never
+  overlaps the chain, so there is no double-poller race.
 - `astra-watchdog` (hourly) reads the same body via `check_engine()` and alerts
   on Telegram when the engine serves empty. A 404 or dead connection is treated
   as "unavailable", never as trouble, so an older deploy does not cry wolf.
@@ -905,7 +908,10 @@ Two always-on pieces, and they are independent:
   window. `astra-keepalive` therefore runs for ~5h17m (under the 6-hour job
   limit), pinging every 5 minutes, and re-arms itself with a
   `workflow_dispatch` (needs `actions: write`) so each run starts the next.
-  The cron trigger remains as a safety net if a re-arm is ever missed.
+  It is dispatch-only — a cron on the same workflow would queue behind the
+  running chain and then start a redundant second one. `astra-chain-guard`
+  (hourly cron) is the safety net: it re-dispatches the keepalive when no
+  run is in progress, so a dropped re-arm heals within the hour.
 
 `render.yaml` says `plan: starter` (paid, never sleeps), but the live service
 is on the free plan — hence the warm chain. One always-on service still fits

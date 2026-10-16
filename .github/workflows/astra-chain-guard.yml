@@ -1,0 +1,58 @@
+# Safety net for the warm chain.
+#
+# `astra-keepalive.yml` keeps the Render service awake by re-arming itself every
+# ~5h17m. That works, but a chain that only re-arms itself is a single point of
+# failure: a dropped dispatch, a cancelled run, or an Actions incident leaves
+# the chain dead and the service asleep until someone notices.
+#
+# This guard runs on a cron (best-effort, but it only needs to run *eventually*)
+# and re-dispatches the keepalive when, and only when, no keepalive run is in
+# progress. It never overlaps the chain, so there is no double-poller race. It
+# uses the same GITHUB_TOKEN + `actions: write` mechanism the chain's own re-arm
+# uses, verified to return 204 in this repo.
+
+name: astra-chain-guard
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Re-dispatch the keepalive if the chain is down
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -u
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth="Authorization: Bearer ${GH_TOKEN}"
+          # Any run that is not finished (queued, in_progress, waiting, pending)
+          # means the chain is alive; the guard stays out of the way.
+          active=$(curl -sS -H "$auth" -H "Accept: application/vnd.github+json" \
+            "$api/actions/workflows/astra-keepalive.yml/runs?per_page=20" \
+            | python3 -c '
+import json, sys
+runs = json.load(sys.stdin).get("workflow_runs", [])
+print(sum(1 for r in runs if r.get("status") != "completed"))
+')
+          echo "active keepalive runs: $active"
+          if [ "$active" -gt 0 ]; then
+            echo "chain is alive; nothing to do"
+            exit 0
+          fi
+          echo "chain is down; re-dispatching"
+          code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
+            -H "$auth" -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api/actions/workflows/astra-keepalive.yml/dispatches" \
+            -d '{"ref":"main"}')
+          echo "dispatch HTTP $code (204 = queued)"
+          [ "$code" = "204" ]

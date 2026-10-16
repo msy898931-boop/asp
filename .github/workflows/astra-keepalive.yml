@@ -14,8 +14,8 @@
 # So this job does not depend on cron for its cadence. It runs for close to the
 # 6-hour job limit, pinging every 5 minutes, then re-arms itself with a
 # workflow_dispatch just before it ends. Each run re-arms the next, so the chain
-# keeps the service awake indefinitely. The cron trigger stays as a safety net:
-# if a re-arm is ever missed, the next scheduled run restarts the chain.
+# keeps the service awake indefinitely. `astra-chain-guard.yml` is the safety
+# net: it runs on a cron and re-dispatches this one if no run is in progress.
 #
 # Cost: free. Actions minutes are unmetered on a public repo, and the steady
 # pings keep the Render service inside its monthly free allowance (750
@@ -24,8 +24,10 @@
 name: astra-keepalive
 
 on:
-  schedule:
-    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
+  # Dispatch only. The chain re-arms itself; a separate guard
+  # (`astra-chain-guard.yml`) restarts it if a re-arm is ever missed. A cron
+  # here would share this workflow's concurrency group, queue behind the
+  # running chain, then start a redundant second chain when it finally ran.
   workflow_dispatch:
 
 permissions:
