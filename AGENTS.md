@@ -288,11 +288,12 @@ only when the rule trades or the UTC day rolls over — it is a trial record, no
 a heartbeat.
 
 The observer runs as the `paper` job of `astra-bot.yml`, riding that workflow's
-five-minute cron. A standalone `astra-paper.yml` exists but its schedule did not
-fire for hours while `astra-bot` fired reliably all day, so the observer was
-moved onto the trigger that works; the standalone workflow is left disabled to
-keep one source of truth. GitHub's cron also lags (runs land at :21, :51, …), so
-the job must stay idempotent and must not gate on the wall-clock minute.
+five-minute cron. A standalone `astra-paper.yml` was tried first, but its
+schedule fired only sporadically (twice in total) while `astra-bot` fired
+reliably all day, so the observer was moved onto the trigger that works and the
+standalone workflow was deleted to keep one source of truth. GitHub's cron also
+lags (runs land at :21, :51, …), so the job must stay idempotent and must not
+gate on the wall-clock minute.
 
 ### Synthetic data source
 
@@ -610,9 +611,9 @@ settle a rule that is significant but under-sampled: forward in time, on bars
 the backtest never saw. If the rule is wrong, the ledger will show it.
 
 The observer was first given its own `astra-paper.yml` on a 15-minute cron, but
-GitHub never fired that schedule while `astra-bot` fired reliably all day, so it
-was moved onto the bot workflow's five-minute cron and the standalone workflow
-left disabled (see the *Paper trial* section above).
+that schedule fired only twice in total while `astra-bot` fired reliably all
+day, so it was moved onto the bot workflow's five-minute cron and the standalone
+workflow was deleted (see the *Paper trial* section above).
 
 ### akoan — the news ↔ statistics bridge (the caveat above, closed)
 
