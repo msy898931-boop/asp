@@ -155,9 +155,10 @@ docker compose logs -f    # expect: "[entry] serving phone app" then bot online
 
 `docker-compose.yml` sets `restart: unless-stopped`, publishes the phone app on
 `8790:8080`, and keeps the API/bridge on loopback. Subscribers persist in the
-`astra-state` volume. For a managed host (no VPS to babysit), use Fly.io
-(`fly.toml`) or Render (`render.yaml`) ŌĆö both read the same Dockerfile. The
-`deploy-fly.yml` workflow deploys on demand once `FLY_API_TOKEN` is set.
+`astra-state` volume. For a managed host (no VPS to babysit), use Render
+(`render.yaml`, permanent free plan) or Fly.io (`fly.toml`, now paid: its free
+tier ended in 2024, so an always-on machine costs ~$2-5/month). Both read
+the same Dockerfile; Oracle Cloud Always Free is the only free-forever VPS. The `deploy-fly.yml` workflow deploys on demand once `FLY_API_TOKEN` and a Fly account are set up.
 
 Run exactly one instance per bot token: two pollers make Telegram answer
 `409 Conflict`.
