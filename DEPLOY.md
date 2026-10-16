@@ -14,11 +14,18 @@ bound to loopback.
 
 ## What you need
 
-- A container host account (Fly.io or Render both have a free/cheap tier).
+- A container host account. Render has a permanent free plan; Fly.io does not
+  (see Option A); Oracle Cloud Always Free is the only free-forever VPS (Option D).
 - The Telegram bot token and the operator chat id (ask the bot owner; they are
   not in the repo). Set them as **secrets** on the host — never commit them.
 
-## Option A — Fly.io
+## Option A — Fly.io (paid; no free tier)
+
+Fly.io removed its free allowances for new accounts in October 2024. A new
+signup gets a trial of **2 VM hours or 7 days**, whichever ends first, and after
+that an always-on machine costs roughly **$2–5/month** (shared-cpu-1x 256 MB is
+about $2.02/mo, plus ~$2 for a dedicated IPv4 and a little for storage). It is a
+good host if you are willing to pay for always-on; it is not a free one.
 
 ```sh
 fly launch --no-deploy            # edit `app` in fly.toml to a name you own
@@ -29,7 +36,9 @@ fly deploy
 `fly.toml` keeps the machine **always on** (`min_machines_running = 1`,
 `auto_stop_machines = false`) because the bot long-polls Telegram: a sleeping
 machine would drop messages. A persistent volume keeps the bot's subscriber
-list across deploys.
+list across deploys. The `Deploy (Fly.io)` workflow needs a `FLY_API_TOKEN`
+repo secret; without it the job fails at `flyctl auth` (the three runs before
+this note did exactly that).
 
 ## Option B — Render
 
@@ -70,6 +79,34 @@ docker compose up -d --build
 
 The compose file publishes `8790:8080` and a named volume for the subscriber
 list, and restarts the container unless stopped.
+
+## Option D — Oracle Cloud Always Free (free VPS, always on)
+
+The only provider that still gives a genuinely free, always-on VPS: 2 Arm
+Ampere cores + 12 GB RAM + 200 GB storage + 10 TB/month egress, at $0 for the
+life of the account (Oracle halved the Arm allowance in June 2026; the AMD micro
+shapes and storage are unchanged). It needs a card for identity verification and
+a manual setup, but once running it is a real machine that never sleeps.
+
+```sh
+# On the VM (Ubuntu 22.04 Arm image), after allowing 8080 in the VCN security list:
+sudo apt update && sudo apt install -y docker.io docker-compose-plugin git
+git clone https://github.com/msy898931-boop/asp && cd asp
+cp .env.example .env      # fill TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+sudo docker compose up -d --build
+```
+
+The compose stack restarts unless stopped and survives reboots, so the bot stays
+up with no keepalive cron. Point `ASTRA_URL` (and the Render service, if kept)
+at the VM's public IP or a domain.
+
+## Option E — free, no card: GitHub Actions as the always-on host
+
+The repo is public, so Actions minutes are unmetered. The bot already runs there
+on a cron; to make it continuous, a job can run for up to ~6 hours and re-arm
+itself at the end (`workflow_dispatch` or a fresh schedule). No credit card, no
+sleep, but it is a workaround: a dead run must be noticed and restarted, and the
+phone app still needs a host for the PWA. Pair it with Render for the app.
 
 ## After deploy
 
