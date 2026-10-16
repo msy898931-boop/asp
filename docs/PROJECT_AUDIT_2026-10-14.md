@@ -293,3 +293,25 @@ in total and was deleted.
 **Documentation.** `AGENTS.md` had been saved through a CP775 round-trip; 95
 lines of em dashes, section signs and Arabic direction words were mojibake and
 were decoded back to UTF-8 with the ASCII skeleton unchanged.
+
+**Watchdog and the pending run.** A keepalive successor can sit `pending` for
+hours when no runner picks it up (seen live: 3.6 h with no update while the real
+work happened in another run). `check_keepalive` treated any `queued`/`pending`/
+`in_progress` status as a running chain, so a dead chain whose last run was
+still labelled `pending` read as healthy. It now looks for an `in_progress` run
+explicitly and, when none is running, lets the newest run's age decide.
+
+**The phone's tab bar (frontend §8).** The audit flagged "nine tabs on one
+phone-width bar is a lot". The bar had since grown into a two-row grid that ate
+~80px of the bottom of every screen. It is now one row of six: the five views
+that carry the daily read (Status, State, Chart, Vol, News) plus **More**, which
+opens the other four (Signals, AI, Data, Bridge) in a sheet on top of the bar.
+More reads as selected while one of its views is open, and a tap outside
+dismisses the sheet.
+
+**Zero-tap Android build.** The APK already baked in the server URL; a personal
+build can now also bake in the gate key (`build.sh --key`, or the workflow's
+`access_key` input) so it opens straight to the data. The publish step is
+skipped when a key is set — the rolling release is a public download and must
+never carry the key. A first-load race that could show the key prompt over the
+saved-key auto-unlock was also fixed.

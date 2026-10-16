@@ -1543,10 +1543,10 @@ function buildTimeframes() {
   });
 }
 
-/* The tab bar is a two-row grid, so nothing is hidden and no edge fade is
-   needed. The function stays (and clears the classes) because a wide screen in
-   a landscape or desktop window can still make the grid overflow; when it does,
-   the fades return. */
+/* The bar is one row of six, so on a phone nothing is hidden and no edge fade
+   is needed. The function stays (and clears the classes) because a wide screen
+   in a landscape or desktop window can still make the row overflow; when it
+   does, the fades return. */
 function updateTabFades() {
   const el = document.querySelector(".tabs");
   if (!el) return;

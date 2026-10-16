@@ -727,20 +727,29 @@ keep them honest and in sync:
 The app is read-only: one origin (`serve_mobile.py`) reverse-proxies `/api/v1`
 to the backend and `/bridge` to the bridge. It never places trades.
 
-### The tab bar (nine tabs, one phone width)
+### The tab bar (five primary tabs plus a More sheet)
 
-Nine tabs at a readable size are wider than a phone (~594px vs 375–430px), so
-the bar scrolls horizontally. Because an overflowing bar with no cue reads as a
-bar with fewer tabs, two affordances make the rest discoverable:
+Nine views will not fit one phone-width row at a readable size (~594px vs
+375–430px), and a two-row bar ate roughly 80px of the bottom of every screen.
+So the bar carries the five views that make up the daily read — Status, State,
+Chart, Vol, News — plus a **More** button, six cells in one row. The four
+secondary views (Signals, AI, Data, Bridge) open in a `.tabs-more` sheet that
+sits flush on top of the bar.
 
-* `updateTabFades()` in `app.js` toggles `.more-left` / `.more-right` on the
-  bar from the *real* layout (`scrollWidth - clientWidth` and `scrollLeft`), and
-  the CSS masks the overflowing edge with a gradient. The hidden side flips with
-  direction — RTL starts at the right — so the classes are chosen by
-  `getComputedStyle(el).direction`, not by assuming LTR.
-* Choosing a tab calls `scrollIntoView({inline:"center"})`, so the selected
-  label is never left off-screen. Fades recompute on scroll, on `resize`, on
-  `orientationchange`, and after a language switch (which flips direction).
+* `setMoreOpen()` toggles the sheet's `[hidden]` and the More button's
+  `aria-expanded`. A tap outside the sheet closes it (the click handler checks
+  `e.target.closest("#tabs-more")` and `.tab-more`).
+* `selectView()` owns the selection: it sets `aria-selected` on the chosen tab
+  and clears the rest, then also marks **More** as selected whenever one of its
+  four views is open, so the bar still says where you are after the sheet
+  closes.
+* The bar has a fixed height (`calc(46px + env(safe-area-inset-bottom))`) so the
+  sheet can anchor exactly above it without guessing at the rendered row size.
+* `updateTabFades()` and the `.more-left` / `.more-right` masks remain for a
+  wide screen that still overflows; the hidden side flips with direction (RTL
+  starts at the right), chosen by `getComputedStyle(el).direction`, not assumed.
+  Fades recompute on scroll, on `resize`, on `orientationchange`, and after a
+  language switch (which flips direction).
 
 Arabic sets `html[dir="rtl"] .tab { letter-spacing: normal }`: the Latin
 tracking that separates capitals breaks the joins between Arabic letters.
