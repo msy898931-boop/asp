@@ -60,8 +60,17 @@ class CheckBotTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("min ago", detail)
 
-    def test_stale_success_is_trouble(self):
+    def test_a_slow_cron_stall_is_not_trouble(self):
+        # The scanner rides a best-effort cron, so the threshold is loose
+        # enough to survive GitHub stalling it for hours (a 5h stall is real).
         old = (NOW - timedelta(hours=5)).isoformat().replace("+00:00", "Z")
+        wd._get_json = lambda url, timeout: {"workflow_runs": [
+            {"conclusion": "success", "updated_at": old}]}
+        ok, _ = wd.check_bot(NOW)
+        self.assertTrue(ok)
+
+    def test_dead_scanner_is_trouble(self):
+        old = (NOW - timedelta(hours=8)).isoformat().replace("+00:00", "Z")
         wd._get_json = lambda url, timeout: {"workflow_runs": [
             {"conclusion": "success", "updated_at": old}]}
         ok, _ = wd.check_bot(NOW)
@@ -78,6 +87,40 @@ class CheckBotTests(unittest.TestCase):
         ok, detail = wd.check_bot(NOW)
         self.assertTrue(ok)
         self.assertEqual(detail, "unavailable")
+
+
+class CheckKeepaliveTests(unittest.TestCase):
+    """The chain is the real liveness signal; it must catch a dead chain."""
+
+    def test_a_running_chain_is_healthy(self):
+        wd._get_json = lambda url, timeout: {"workflow_runs": [
+            {"status": "in_progress", "conclusion": None, "updated_at": "x"}]}
+        ok, detail = wd.check_keepalive(NOW)
+        self.assertTrue(ok)
+        self.assertEqual(detail, "running")
+
+    def test_a_recently_completed_chain_is_healthy(self):
+        recent = (NOW - timedelta(minutes=30)).isoformat().replace("+00:00", "Z")
+        wd._get_json = lambda url, timeout: {"workflow_runs": [
+            {"status": "completed", "conclusion": "success", "updated_at": recent}]}
+        ok, _ = wd.check_keepalive(NOW)
+        self.assertTrue(ok)
+
+    def test_a_dead_chain_is_trouble(self):
+        # Past the 6h job cap with nothing running: a re-arm was dropped.
+        old = (NOW - timedelta(hours=8)).isoformat().replace("+00:00", "Z")
+        wd._get_json = lambda url, timeout: {"workflow_runs": [
+            {"status": "completed", "conclusion": "success", "updated_at": old}]}
+        ok, detail = wd.check_keepalive(NOW)
+        self.assertFalse(ok)
+        self.assertIn("chain", detail)
+
+    def test_unreachable_github_does_not_cry_wolf(self):
+        wd._get_json = lambda url, timeout: None
+        ok, detail = wd.check_keepalive(NOW)
+        self.assertTrue(ok)
+        self.assertEqual(detail, "unavailable")
+
 
 class _Resp:
     def __init__(self, payload):

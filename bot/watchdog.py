@@ -39,8 +39,17 @@ ASTRA_URL = astra_env.URL
 REPO = astra_env.REPO
 GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_WATCHDOG_TIMEOUT", "90"))
-# The bot runs every 5 minutes; 90 minutes of silence means something is wrong.
-BOT_MAX_AGE_MIN = float(os.environ.get("ASTRA_BOT_MAX_AGE_MIN", "90"))
+# The scanner's own cron is best-effort: GitHub delays it to the point where
+# gaps of hours are routine (median ~28 min, but a 5-hour stall has happened).
+# A threshold tight enough to catch a truly dead bot therefore fires false
+# alarms whenever GitHub is merely slow. So the liveness signal is the
+# keepalive chain instead — it re-arms itself and pings every 5 minutes, so a
+# long stall there means something is genuinely broken. This stays as the
+# secondary signal and only alerts on an unmistakable stall.
+BOT_MAX_AGE_MIN = float(os.environ.get("ASTRA_BOT_MAX_AGE_MIN", "360"))
+# The keepalive chain pings every 5 min and re-arms just before the 6h job cap.
+# A gap beyond the cap means a re-arm was missed and the chain is dead.
+KEEPALIVE_MAX_AGE_MIN = float(os.environ.get("ASTRA_KEEPALIVE_MAX_AGE_MIN", "400"))
 # GitHub disables scheduled workflows after ~60 idle days; warn well before.
 COMMIT_WARN_DAYS = float(os.environ.get("ASTRA_COMMIT_WARN_DAYS", "55"))
 # While still in trouble, repeat the alert at most this often (hours).
@@ -154,7 +163,12 @@ def _parse_utc(text: str) -> datetime | None:
 
 
 def check_bot(now: datetime) -> tuple[bool, str]:
-    """Has the bot produced a successful run recently?"""
+    """Has the scanner produced a successful run recently?
+
+    Secondary signal only: the scanner rides GitHub's best-effort cron, which
+    stalls for hours at a time, so this is deliberately loose and
+    ``check_keepalive`` carries the real liveness.
+    """
     url = ("https://api.github.com/repos/%s/actions/workflows/astra-bot.yml/"
            "runs?per_page=10" % REPO)
     payload = _get_json(url, 30)
@@ -170,6 +184,32 @@ def check_bot(now: datetime) -> tuple[bool, str]:
                 return False, "last success %.0f min ago" % age_min
             return True, "%.0f min ago" % age_min
     return False, "no successful run on record"
+
+
+def check_keepalive(now: datetime) -> tuple[bool, str]:
+    """Is the self-re-arming keepalive chain still alive?
+
+    This is the real liveness signal. The chain holds one long run that pings
+    every 5 minutes and dispatches its successor just before the 6-hour cap, so
+    a healthy chain always has a run either in progress or finished within the
+    cap. A completed latest run older than the cap means a re-arm was dropped
+    and the Render service is no longer being kept awake.
+    """
+    url = ("https://api.github.com/repos/%s/actions/workflows/"
+           "astra-keepalive.yml/runs?per_page=5" % REPO)
+    payload = _get_json(url, 30)
+    if not payload or not payload.get("workflow_runs"):
+        return True, "unavailable"  # cannot judge: never cry wolf on this
+    latest = payload["workflow_runs"][0]
+    if latest.get("status") in ("queued", "in_progress", "waiting", "pending"):
+        return True, "running"
+    when = _parse_utc(latest.get("updated_at", ""))
+    if when is None:
+        return True, "unavailable"
+    age_min = (now - when).total_seconds() / 60.0
+    if age_min > KEEPALIVE_MAX_AGE_MIN:
+        return False, "chain last ran %.0f min ago" % age_min
+    return True, "%.0f min ago" % age_min
 
 
 def check_commit(now: datetime) -> tuple[bool, str]:
@@ -194,6 +234,11 @@ def evaluate(now: datetime | None = None) -> dict:
     ok, detail = check_bot(now)
     if not ok:
         problems.append({"key": "bot", "ar": "توقّف البوت عن الفحص", "detail": detail})
+    ok, detail = check_keepalive(now)
+    if not ok:
+        problems.append({"key": "keepalive",
+                         "ar": "انقطعت سلسلة الإبقاء على السيرفر صاحي",
+                         "detail": detail})
     ok, detail = check_server()
     if not ok:
         problems.append({"key": "server", "ar": "السيرفر ما عم يستجيب", "detail": detail})
