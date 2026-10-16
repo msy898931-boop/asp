@@ -147,7 +147,8 @@ persistent disk to a free service.
 - **PWA:** open the service URL and "Add to Home Screen". The service worker
   caches the shell but always fetches `/api/` and `/bridge/` live. The interface
   is bilingual (English / العربية) with an RTL layout; the choice persists in
-  `localStorage`. Tabs: Status, State, Chart, Data, Bridge.
+  `localStorage`. Tabs: Status, State, Chart, Vol, News, Signals, AI, Data,
+  Bridge.
 - **Honest by design:** the State tab is labelled "Market state" and always
   shows the badge *Edge: none measured (OOS 2025, AUC ≈ 0.50)* — see §9. The
   price-alert list on that tab only notifies, it does not trade; levels persist
