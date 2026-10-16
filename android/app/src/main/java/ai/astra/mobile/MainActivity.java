@@ -33,6 +33,13 @@ public class MainActivity extends Activity {
     // loopback would be the phone itself and open an empty screen.
     private static final String DEFAULT_URL = "https://astra-xlp9.onrender.com/";
 
+    // Optional gate key baked in by build.sh --key for a *personal* build, so
+    // the app opens straight to the data with no typing. It is empty by
+    // default and must stay empty in the public rolling release: the APK is a
+    // public download, and a key in it would hand the gate to everyone. Build
+    // with --key locally when you want the zero-tap experience.
+    private static final String DEFAULT_KEY = "";
+
     private static final String PREFS = "astra";
     private static final String KEY_URL = "server_url";
     private static final String KEY_ACCESS = "access_key";
@@ -189,10 +196,11 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    /** The access key the server's gate expects, or "" when none was entered. */
+    /** The access key the gate expects: the entered one, else a baked-in one. */
     private String accessKey() {
-        return getSharedPreferences(PREFS, MODE_PRIVATE)
+        String saved = getSharedPreferences(PREFS, MODE_PRIVATE)
                 .getString(KEY_ACCESS, "");
+        return saved.isEmpty() ? DEFAULT_KEY : saved;
     }
 
     /**

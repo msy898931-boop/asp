@@ -7,7 +7,11 @@
 # enough to produce a release APK, which is all a personal build needs.
 #
 # Usage:
-#   android/build.sh --url http://192.168.1.50:12001/ [--name ASTRA]
+#   android/build.sh --url http://192.168.1.50:12001/ [--name ASTRA] [--key SECRET]
+#
+# --key bakes the gate key into a *personal* build so the app opens straight to
+# the data with no typing. Leave it off for the public rolling release: that APK
+# is a public download, and a key in it would hand the gate to everyone.
 #
 # Requires: JAVA_HOME (JDK 17+) and ANDROID_HOME with build-tools + platform.
 # The APK is signed with a local keystore (android/astra.keystore), created on
@@ -34,10 +38,12 @@ ANDROID_JAR="$ANDROID_HOME/platforms/android-$PLATFORM_VER/android.jar"
 # open an empty error screen and look broken. --url still overrides.
 SERVER_URL="https://astra-xlp9.onrender.com/"
 APP_NAME="ASTRA"
+ACCESS_KEY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --url) [ -n "$2" ] && SERVER_URL="$2"; shift 2 ;;
     --name) APP_NAME="$2"; shift 2 ;;
+    --key) ACCESS_KEY="$2"; shift 2 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -64,14 +70,20 @@ echo "==> stage sources (bake in URL and name)"
 STAGE="$BUILD/stage"
 mkdir -p "$STAGE/java/ai/astra/mobile" "$STAGE/res/values"
 cp "$SRC/java/ai/astra/mobile/MainActivity.java" "$STAGE/java/ai/astra/mobile/"
-python3 - "$STAGE/java/ai/astra/mobile/MainActivity.java" "$SERVER_URL" <<'PY'
+python3 - "$STAGE/java/ai/astra/mobile/MainActivity.java" "$SERVER_URL" "$ACCESS_KEY" <<'PY'
 import sys
-path, url = sys.argv[1], sys.argv[2]
+path, url, key = sys.argv[1], sys.argv[2], sys.argv[3]
 text = open(path, encoding="utf-8").read()
-marker = 'private static final String DEFAULT_URL = "'
-i = text.index(marker) + len(marker)
-j = text.index('";', i)
-open(path, "w", encoding="utf-8").write(text[:i] + url + text[j:])
+
+def bake(text, const, value):
+    marker = 'private static final String %s = "' % const
+    i = text.index(marker) + len(marker)
+    j = text.index('";', i)
+    return text[:i] + value + text[j:]
+
+text = bake(text, "DEFAULT_URL", url)
+text = bake(text, "DEFAULT_KEY", key)
+open(path, "w", encoding="utf-8").write(text)
 PY
 sed "s|<string name=\"app_name\">.*</string>|<string name=\"app_name\">$APP_NAME</string>|" \
   "$SRC/res/values/strings.xml" > "$STAGE/res/values/strings.xml"
@@ -134,4 +146,9 @@ fi
 echo
 echo "APK ready: $OUT/astra.apk"
 echo "Server URL baked in: $SERVER_URL"
-echo "To change it after install: open the app, tap the error screen."
+if [ -n "$ACCESS_KEY" ]; then
+  echo "Access key baked in: yes (personal build — do not publish this APK)"
+else
+  echo "Access key baked in: no (the gate, if on, asks once on first launch)"
+fi
+echo "To change the URL after install: open the app, tap the error screen."

@@ -22,6 +22,10 @@ on:
         description: 'Launcher name'
         required: false
         default: 'ASTRA'
+      access_key:
+        description: 'Gate key baked in (personal build; NEVER published publicly)'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -66,7 +70,8 @@ jobs:
           # then the build script's own default. No host literal lives here.
           SERVER_URL: ${{ github.event.inputs.server_url || vars.ASTRA_URL || '' }}
           APP_NAME: ${{ github.event.inputs.app_name || 'ASTRA' }}
-        run: android/build.sh --url "$SERVER_URL" --name "$APP_NAME"
+          ACCESS_KEY: ${{ github.event.inputs.access_key || '' }}
+        run: android/build.sh --url "$SERVER_URL" --name "$APP_NAME" --key "$ACCESS_KEY"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -80,8 +85,13 @@ jobs:
       # resolves to a permanent download instead of a local file the server
       # may not have. Whoever installs it sets their own server address on
       # first launch, so this one APK works against any deployment.
+      #
+      # A key-baked build is skipped here on purpose: the release is a public
+      # download, so publishing an APK that carries the gate key would hand the
+      # key to everyone. The keyed APK is still available as a workflow artifact
+      # to whoever triggered the run.
       - name: Publish APK to the rolling release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && github.event.inputs.access_key == ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android

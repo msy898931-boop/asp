@@ -29,6 +29,21 @@ cannot reach the server it shows "Can't reach the ASTRA server", and tapping
 that screen lets you type a new address. So you can re-point an installed app
 without rebuilding.
 
+### Zero-tap personal build
+
+When the server's access gate is on, the app asks for the key once on first
+launch. For a personal build you can bake the key in so it opens straight to
+the data:
+
+```bash
+android/build.sh --url https://your-server/ --key YOUR_GATE_KEY
+```
+
+Never publish a key-baked APK: the release is a public download, and the key in
+it would hand the gate to anyone. The workflow enforces this — a run with
+`access_key` set uploads the APK as a private artifact and skips the public
+release.
+
 ## Signing
 
 The first build creates `android/astra.keystore` (self-signed, local). Android
