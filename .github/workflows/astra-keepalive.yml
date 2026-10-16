@@ -66,7 +66,16 @@ jobs:
           # tab broken. Read the body and fail the run if it is empty. Retry,
           # because the study replays the corpus and a cold instance is slow.
           for attempt in 1 2 3 4 5; do
-            body=$(curl -s -m 120 -H "Cookie: astra_key=${ASTRA_ACCESS_TOKEN}" "$ASTRA_URL/akoan.json" || echo "")
+            resp=$(curl -s -m 120 -w "\n%{http_code}" -H "Cookie: astra_key=${ASTRA_ACCESS_TOKEN}" "$ASTRA_URL/akoan.json" || echo "")
+            code=$(printf "%s" "$resp" | tail -n1)
+            body=$(printf "%s" "$resp" | sed '$d')
+            if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+              # The access gate is on and this run has no (or a wrong) token.
+              # That is a missing credential, not an empty engine; the warm
+              # loop and the re-arm still run, so do not fail the chain.
+              echo "engine: access gate without a token (HTTP $code) — cannot judge; set ASTRA_ACCESS_TOKEN to restore the check"
+              exit 0
+            fi
             if echo "$body" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d.get('available'); assert d.get('scored',0)>0; print('engine ok:', d['verdict'], d['scored'], 'scored')" 2>/dev/null; then
               exit 0
             fi

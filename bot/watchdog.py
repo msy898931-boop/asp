@@ -88,7 +88,9 @@ def check_engine() -> tuple[bool, str]:
     {"available": false} — invisible to a plain status check. This reads the
     body and insists the engine produced a verdict. A 404 (older deploy without
     the route) or a connection error reads as unavailable and never cries wolf;
-    any other failure is real trouble.
+    a 401/403 means the access gate is on and this monitor had no token, which
+    is a missing credential rather than a dead engine, so it also stays quiet.
+    Any other failure is real trouble.
     """
     req = urllib.request.Request(
         ASTRA_URL + "/akoan.json",
@@ -100,6 +102,11 @@ def check_engine() -> tuple[bool, str]:
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             return True, "unavailable"
+        if exc.code in (401, 403):
+            # The access gate is on but this monitor had no (or a wrong) token.
+            # That is a missing credential, not a dead engine; crying wolf here
+            # would page the operator every hour a secret is unset.
+            return True, "unavailable (gate)"
         return False, "akoan route HTTP %d" % exc.code
     except (urllib.error.URLError, OSError, ValueError):
         return True, "unavailable"
@@ -127,6 +134,8 @@ def check_poller() -> tuple[bool, str]:
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             return True, "unavailable"
+        if exc.code in (401, 403):
+            return True, "unavailable (gate)"  # see check_engine
         return False, "bot route HTTP %d" % exc.code
     except (urllib.error.URLError, OSError, ValueError):
         return True, "unavailable"

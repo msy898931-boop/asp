@@ -122,6 +122,16 @@ class CheckEngineTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(detail, "unavailable")
 
+    def test_gate_401_without_a_token_is_not_trouble(self):
+        # The access gate answers 401 when the monitor has no token. That is a
+        # missing credential, not a dead engine; it must never cry wolf.
+        def raise401(*a, **k):
+            raise urllib.error.HTTPError("u", 401, "unauth", {}, None)
+        wd.urllib.request.urlopen = raise401
+        ok, detail = wd.check_engine()
+        self.assertTrue(ok)
+        self.assertIn("gate", detail)
+
     def test_other_http_error_is_trouble(self):
         def raise500(*a, **k):
             raise urllib.error.HTTPError("u", 500, "err", {}, None)
