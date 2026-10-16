@@ -794,5 +794,31 @@ class ThemeContrastTest(unittest.TestCase):
                                 "dark --flat must clear AA")
 
 
+class PwaManifestTest(unittest.TestCase):
+    """The install splash and status bar must match the chosen theme, so a
+    light-mode phone does not flash a dark field on launch."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_index_swaps_to_the_light_manifest(self):
+        html = self._read("index.html")
+        self.assertIn('href="manifest.webmanifest"', html)
+        self.assertIn("manifest-light.webmanifest", html)
+        # The swap must run before the stylesheet so the splash colour is right.
+        self.assertLess(html.index("manifest-light.webmanifest"),
+                        html.index('href="styles.css"'))
+
+    def test_light_manifest_is_light(self):
+        m = json.loads(self._read("manifest-light.webmanifest"))
+        self.assertEqual(m["background_color"].upper(), "#F4F0E6")
+        self.assertEqual(m["theme_color"].upper(), "#F4F0E6")
+
+    def test_light_manifest_is_precached(self):
+        sw = self._read("sw.js")
+        self.assertIn("./manifest-light.webmanifest", sw)
+
+
 if __name__ == "__main__":
     unittest.main()

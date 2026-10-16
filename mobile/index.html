@@ -4,11 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0B0E13">
+<link rel="manifest" href="manifest.webmanifest">
 <script>
-/* Pre-paint boot. The theme and the reading direction are set here, before the
-   first stylesheet parse, so a light-mode phone or an Arabic reader never sees
-   a dark/LTR flash on cold launch. app.js reads the same keys at startup and
-   keeps them in sync from then on. */
+/* Pre-paint boot. The theme, the reading direction and the install colours are
+   set here, before the first stylesheet parse, so a light-mode phone or an
+   Arabic reader never sees a dark/LTR flash on cold launch. app.js reads the
+   same keys at startup and keeps them in sync from then on. The install splash
+   and status bar take their colour from the manifest, so the light palette gets
+   its own file and the boot script points the link at it when light is chosen. */
 (function () {
   var d = document.documentElement;
   try {
@@ -17,6 +20,10 @@
     d.setAttribute("data-theme", t);
     var m = document.querySelector('meta[name="theme-color"]');
     if (m) m.setAttribute("content", t === "light" ? "#F4F0E6" : "#0B0E13");
+    if (t === "light") {
+      var link = document.querySelector('link[rel="manifest"]');
+      if (link) link.setAttribute("href", "manifest-light.webmanifest");
+    }
   } catch (e) { /* private mode */ }
   try {
     var l = localStorage.getItem("astra-lang");
@@ -27,7 +34,6 @@
 })();
 </script>
 <meta name="description" content="ASTRA shadow-mode gold analysis, on your phone. Decision support only.">
-<link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
 <!-- Preview card. Telegram (and most chat apps) read OpenGraph, not the

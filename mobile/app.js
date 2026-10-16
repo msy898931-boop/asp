@@ -320,6 +320,10 @@ function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", theme === "light" ? "#F4F0E6" : "#0B0E13");
+  // Keep the install colours in step with a mid-session switch, not just the
+  // next cold load, so an install started now gets the right splash.
+  const link = document.querySelector('link[rel="manifest"]');
+  if (link) link.setAttribute("href", theme === "light" ? "manifest-light.webmanifest" : "manifest.webmanifest");
   try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private mode */ }
 }
 
