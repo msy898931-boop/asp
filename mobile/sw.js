@@ -4,12 +4,15 @@
    up on the next load instead of the load after next, and the app still opens
    offline. */
 
-const SHELL = "astra-shell-v25";
+const SHELL = "astra-shell-v26";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./terminal.html",
+  "./terminal.css",
+  "./terminal.js",
   "./pricing.html",
   "./pricing.css",
   "./performance.html",

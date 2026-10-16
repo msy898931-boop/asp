@@ -1,0 +1,278 @@
+/* ASTRA Terminal — the web counterpart of the phone app.
+   Inherits the instrument-panel palette and primitives from styles.css and adds
+   only what a wider, multi-section console needs: a metric matrix, the
+   nine-timeframe grid, a service list and a raw-response console.
+
+   Mobile-first, like the app. The desktop layout is the enhancement, not the
+   baseline: the grid widens but the single-column reading order never changes. */
+
+.term { display: block; }
+
+/* ── panel chrome ───────────────────────────────────────────────────── */
+
+.panel-head { margin: 0 0 12px; }
+.panel-head.sub-head { margin-top: 22px; }
+.panel-title.sm { font-size: 15px; }
+.panel-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: .01em;
+}
+
+/* ── aggregate banner ───────────────────────────────────────────────── */
+
+.aggregate {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(214,165,60,.06), transparent 70%),
+    var(--ink);
+  margin-bottom: 16px;
+}
+.aggregate.ok   { border-color: var(--up); }
+.aggregate.warn { border-color: var(--gold); }
+.aggregate.bad  { border-color: var(--down); }
+.aggregate.unknown { border-color: var(--flat); }
+.agg-value {
+  font-family: var(--serif);
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.aggregate.ok   .agg-value { color: var(--up); }
+.aggregate.warn .agg-value { color: var(--gold); }
+.aggregate.bad  .agg-value { color: var(--down); }
+.aggregate.unknown .agg-value { color: var(--muted); }
+.agg-note { color: var(--muted); font-size: 13px; }
+
+/* ── metric matrix ──────────────────────────────────────────────────── */
+
+.matrix {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--edge);
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.metric {
+  background: var(--ink);
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.metric-label { color: var(--muted); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.metric-value {
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.metric-value.ok   { color: var(--up); }
+.metric-value.warn { color: var(--gold); }
+.metric-value.bad  { color: var(--down); }
+.metric-value.unknown { color: var(--muted); }
+.metric-src { color: var(--muted); font-size: 10px; opacity: .75; overflow-wrap: anywhere; }
+
+/* ── timeframe grid ─────────────────────────────────────────────────── */
+
+.tf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.tf-cell {
+  appearance: none;
+  text-align: start;
+  cursor: pointer;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  padding: 12px 12px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  transition: border-color .15s, transform .1s;
+}
+.tf-cell:hover { border-color: var(--gold-dim); }
+.tf-cell:active { transform: scale(.985); }
+.tf-cell[data-state="OBSERVED"] { border-color: rgba(79,180,119,.5); }
+.tf-cell[data-state="DEGRADED"] { border-color: rgba(214,165,60,.5); }
+.tf-name { font-family: var(--serif); font-size: 18px; font-weight: 700; letter-spacing: .04em; }
+.tf-badge {
+  font-size: 10px;
+  letter-spacing: .06em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  align-self: flex-start;
+  color: var(--muted);
+}
+.tf-badge.ok   { color: var(--up); border-color: rgba(79,180,119,.4); }
+.tf-badge.warn { color: var(--gold); border-color: rgba(214,165,60,.4); }
+.tf-badge.unknown { color: var(--muted); }
+.tf-quality { color: var(--muted); font-size: 10px; }
+.tf-fresh { color: var(--muted); font-size: 10px; }
+
+/* ── service list ───────────────────────────────────────────────────── */
+
+.svc {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  background: var(--edge);
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.svc-row {
+  background: var(--ink);
+  display: grid;
+  grid-template-columns: 1.4fr .7fr .6fr;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  font-size: 13px;
+}
+.svc-name { font-family: var(--mono); overflow-wrap: anywhere; }
+.svc-state { font-weight: 600; }
+.svc-state.ok   { color: var(--up); }
+.svc-state.warn { color: var(--gold); }
+.svc-state.bad  { color: var(--down); }
+.svc-state.unknown { color: var(--muted); }
+.svc-lat { color: var(--muted); text-align: end; font-size: 12px; }
+.svc-head {
+  background: var(--ink-2);
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+/* ── shortcuts ──────────────────────────────────────────────────────── */
+
+.shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+.shortcut {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 13px;
+  transition: border-color .15s;
+}
+.shortcut:hover { border-color: var(--gold-dim); }
+
+/* ── callout ────────────────────────────────────────────────────────── */
+
+.callout {
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 11px 13px;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 12px 0;
+}
+.callout.ok { border-color: rgba(79,180,119,.35); }
+
+/* ── console ────────────────────────────────────────────────────────── */
+
+.console-bar { display: flex; gap: 8px; align-items: stretch; }
+.console-bar select {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  background: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 10px 12px;
+}
+.text-btn.run {
+  background: var(--gold);
+  color: var(--ink);
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 10px 18px;
+}
+.console-out {
+  margin: 12px 0 6px;
+  padding: 13px 14px;
+  background: #05070A;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  color: #B9C4D2;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  max-height: 46vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  direction: ltr;
+  text-align: left;
+}
+html[data-theme="light"] .console-out {
+  background: #10141B;
+  color: #D5DEE9;
+}
+
+/* ── timeframe detail dialog ────────────────────────────────────────── */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(4,6,10,.72);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.tf-detail {
+  width: min(520px, 94vw);
+  max-height: 86vh;
+  overflow: auto;
+  animation: rise .25s cubic-bezier(.2,.8,.2,1) both;
+}
+.tf-detail .readout { margin-bottom: 12px; }
+.tf-detail .text-btn.run { margin-top: 4px; }
+
+/* ── desktop enhancement ────────────────────────────────────────────── */
+
+@media (min-width: 720px) {
+  .matrix { grid-template-columns: repeat(4, 1fr); }
+  .tf-grid { grid-template-columns: repeat(5, 1fr); }
+}
+@media (min-width: 1024px) {
+  .term { max-width: 1080px; margin: 0 auto; }
+  .matrix { grid-template-columns: repeat(6, 1fr); }
+  .tf-grid { grid-template-columns: repeat(9, 1fr); }
+  .tf-grid .tf-cell { padding: 10px 8px; }
+  .tf-name { font-size: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-cell, .shortcut { transition: none; }
+  .panel { animation: none; }
+}

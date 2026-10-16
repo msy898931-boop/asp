@@ -370,6 +370,33 @@ AI tab sits on placeholders with no error. Check `run/advisor.log` and
 `provider=... configured=...` on startup, so a missing log line means it never
 came up.
 
+### Web terminal (the wide-screen view)
+
+`mobile/terminal.html` is the desktop counterpart of the phone app: the same
+backend, the same palette, read on a monitor. It is a **separate page** served
+by the same server (and stamped/gated with the rest of the shell), so it adds no
+risk to the phone shell — if it were folded into `index.html` it would have to
+be in the offline shell and every phone would pay for a view it never opens.
+
+Six sections: Overview (aggregate state, a metric matrix with each reading's
+source endpoint, the two honesty badges, degraded reasons), Timeframes (all nine,
+each with a tap-for-detail dialog), Services (a live latency board over the same
+endpoints, plus the bridge readout), Audit, Risk & System, and Console — a raw
+endpoint runner so "what does the app actually receive?" is one click.
+
+The rule that governs every panel: **show the backend's real answer, and when
+the answer is unknown say so.** A missing reading renders `غير متاح`, never a
+plausible-looking `0`. `refresh()` uses `Promise.allSettled`, so one dead
+endpoint degrades its own tile instead of blanking the page, and a `401`
+everywhere reports "backend locked", not "unreachable" — the two send an
+operator down different paths. `mobile/test_terminal.py` pins all of this
+(asset wiring, the stamp, gate coverage, bilingual key parity, no `eval`, no
+absolute origins, and the unknown-is-not-safe rule).
+
+Arabic-first but locale-following, like the app: no saved choice means the
+phone's language decides; `?lang=ar` / `?lang=en` forces one (and persists it).
+
+
 ### Android APK
 
 `android/` wraps the same web app in a WebView shell to produce a real,
