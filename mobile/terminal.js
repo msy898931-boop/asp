@@ -80,7 +80,43 @@ const STRINGS = {
     m_version: "الإصدار", m_strategy: "الاستراتيجية",
     /* values */
     v_yes: "نعم", v_no: "لا", v_na: "غير متاح",
-    v_open: "مفتوح", v_closed: "مغلق",
+    v_open: "مفتوح", v_closed: "مغلق", v_none: "لا شيء",
+    /* market & trades */
+    nav_market: "السوق والصفقات",
+    mk_sub: "الاتجاه وخطة الصفقة من محرّك القرار نفسه",
+    mk_plan: "خطة الصفقة",
+    mk_plan_wait: "بانتظار قرار مُقيَّم…",
+    mk_plan_na: "لا خطة صفقة: الباكند لم يُعِد مستويات صالحة بعد.",
+    mk_positions: "مراكز الظلّ المفتوحة",
+    mk_outcomes: "آخر النتائج",
+    mk_decision: "آخر قرار مُسجَّل",
+    mk_decision_none: "لا قرارات مُسجَّلة في السجلّ بعد.",
+    dc_signal: "الإشارة", dc_time: "الوقت", dc_tf: "الإطار", dc_score: "التقييم",
+    dc_ref: "السعر المرجعي", dc_last: "آخر سعر", dc_drift: "الانحراف",
+    dc_outcome: "النتيجة", dc_data: "البيانات", dc_structure: "البنية",
+    dc_eligibility: "الأهلية", dc_mode: "الوضع",
+    mk_caveat: "هذا نظام ظلّي: المستويات والمراكز والنتائج كلها محاكاة، ولا يملك تفويض تنفيذ.",
+    mk_score_note: "تقييم خام — ليس احتمالاً.",
+    d_long: "شراء", d_short: "بيع", d_none: "لا اتجاه",
+    d_up: "صاعد", d_down: "هابط", d_range: "عرضي",
+    vl_HIGH: "مرتفع", vl_LOW: "منخفض", vl_NORMAL: "طبيعي",
+    st_OPEN: "مفتوح", st_STOP: "وقف", st_TARGET: "هدف", st_TIMEOUT: "انتهت المدة",
+    dq_VALID: "صالح", dq_DEGRADED: "متدهور", dq_INVALID: "غير صالح",
+    dq_STALE: "قديم", dq_MISSING: "ناقص", dq_UNKNOWN: "مجهول",
+    el_ELIGIBLE: "مؤهّل", el_NOT_ELIGIBLE: "غير مؤهّل",
+    pl_entry: "الدخول", pl_stop: "الوقف", pl_target: "الهدف",
+    pl_rr: "المخاطرة/العائد", pl_risk: "المخاطرة المقترحة",
+    cp_symbol: "الأداة", cp_regime: "النظام", cp_h4: "اتجاه H4",
+    cp_m15: "زناد M15", cp_vol: "التقلّب", cp_agreement: "توافق الإطارات",
+    cp_confidence: "الثقة", cp_score: "التقييم",
+    cp_calibrated: "احتمال مُعايَر", cp_uncalibrated: "احتمال غير مُعايَر",
+    rg_TREND_UP: "صاعد", rg_TREND_DOWN: "هابط", rg_RANGE: "عرضي",
+    rg_VOLATILE: "متقلّب", rg_QUIET: "هادئ",
+    pos_entry: "الدخول", pos_stop: "الوقف", pos_target: "الهدف",
+    pos_lots: "اللوت", pos_risk: "المخاطرة", pos_pnl: "الربح/الخسارة",
+    pos_r: "R", pos_tf: "الإطار", pos_reason: "السبب",
+    pos_none_open: "لا مراكز ظلّ مفتوحة.",
+    pos_none_outcomes: "لا نتائج مسجّلة بعد.",
   },
   en: {
     title_sub: "Market console · shadow mode",
@@ -135,7 +171,42 @@ const STRINGS = {
     m_proposal: "Proposal", m_shadow_only: "Shadow only", m_ready: "Ready",
     m_version: "Version", m_strategy: "Strategy",
     v_yes: "yes", v_no: "no", v_na: "unavailable",
-    v_open: "open", v_closed: "closed",
+    v_open: "open", v_closed: "closed", v_none: "none",
+    nav_market: "Market & trades",
+    mk_sub: "Direction and the trade plan, straight from the decision engine",
+    mk_plan: "Trade plan",
+    mk_plan_wait: "waiting for an evaluated decision…",
+    mk_plan_na: "No trade plan: the backend has not returned valid levels yet.",
+    mk_positions: "Open shadow positions",
+    mk_outcomes: "Recent outcomes",
+    mk_decision: "Last recorded decision",
+    mk_decision_none: "No decisions recorded in the ledger yet.",
+    dc_signal: "Signal", dc_time: "Time", dc_tf: "TF", dc_score: "Score",
+    dc_ref: "Reference price", dc_last: "Last price", dc_drift: "Drift",
+    dc_outcome: "Outcome", dc_data: "Data", dc_structure: "Structure",
+    dc_eligibility: "Eligibility", dc_mode: "Mode",
+    mk_caveat: "This is a shadow system: levels, positions and outcomes are all simulated, and it holds no execution authority.",
+    mk_score_note: "raw score — not a probability.",
+    d_long: "LONG", d_short: "SHORT", d_none: "NONE",
+    d_up: "UP", d_down: "DOWN", d_range: "RANGE",
+    vl_HIGH: "HIGH", vl_LOW: "LOW", vl_NORMAL: "NORMAL",
+    st_OPEN: "OPEN", st_STOP: "STOP", st_TARGET: "TARGET", st_TIMEOUT: "TIMEOUT",
+    dq_VALID: "VALID", dq_DEGRADED: "DEGRADED", dq_INVALID: "INVALID",
+    dq_STALE: "STALE", dq_MISSING: "MISSING", dq_UNKNOWN: "UNKNOWN",
+    el_ELIGIBLE: "ELIGIBLE", el_NOT_ELIGIBLE: "NOT ELIGIBLE",
+    pl_entry: "Entry", pl_stop: "Stop", pl_target: "Target",
+    pl_rr: "R:R", pl_risk: "Suggested risk",
+    cp_symbol: "Instrument", cp_regime: "Regime", cp_h4: "H4 bias",
+    cp_m15: "M15 trigger", cp_vol: "Volatility", cp_agreement: "MTF agreement",
+    cp_confidence: "Confidence", cp_score: "Score",
+    cp_calibrated: "calibrated probability", cp_uncalibrated: "uncalibrated probability",
+    rg_TREND_UP: "trending up", rg_TREND_DOWN: "trending down", rg_RANGE: "ranging",
+    rg_VOLATILE: "volatile", rg_QUIET: "quiet",
+    pos_entry: "Entry", pos_stop: "Stop", pos_target: "Target",
+    pos_lots: "Lots", pos_risk: "Risk", pos_pnl: "P/L",
+    pos_r: "R", pos_tf: "TF", pos_reason: "Reason",
+    pos_none_open: "No open shadow positions.",
+    pos_none_outcomes: "No outcomes recorded yet.",
   },
 };
 
@@ -278,6 +349,7 @@ function readoutRow(dl, label, value, cls) {
 const state = {
   health: null, system: null, bridge: null, analysis: null,
   timeframes: null, risk: null, governance: null, research: null,
+  market: null, signals: null,
   lastUpdated: null, route: "overview",
 };
 
@@ -335,8 +407,9 @@ function renderOverview() {
 
   const sc = $("shortcuts");
   sc.textContent = "";
-  [["timeframes", T("nav_timeframes")], ["services", T("nav_services")],
-   ["audit", T("nav_audit")], ["risk", T("nav_risk")], ["console", T("nav_console")]
+  [["market", T("nav_market")], ["timeframes", T("nav_timeframes")],
+   ["services", T("nav_services")], ["audit", T("nav_audit")],
+   ["risk", T("nav_risk")], ["console", T("nav_console")]
   ].forEach(([route, label]) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -345,6 +418,250 @@ function renderOverview() {
     b.addEventListener("click", () => go(route));
     sc.appendChild(b);
   });
+}
+
+/* ── panel: market & trades ─────────────────────────────────────────── */
+
+/* Map a backend direction word to a tone and a spoken label. The backend
+   returns LONG / SHORT / NONE / UP / DOWN / RANGE / UNKNOWN — every one of
+   these is passed through, and anything unrecognised reads as "unknown"
+   rather than being guessed into a side. */
+function dirClass(word) {
+  const w = String(word || "").toUpperCase();
+  if (w === "LONG" || w === "UP" || w === "TREND_UP" || w === "BULLISH") return "up";
+  if (w === "SHORT" || w === "DOWN" || w === "TREND_DOWN" || w === "BEARISH") return "down";
+  return "flat";
+}
+
+function dirLabel(word) {
+  const w = String(word || "").toUpperCase();
+  if (w === "LONG" || w === "SHORT" || w === "NONE") return T("d_" + w.toLowerCase());
+  if (w === "UP" || w === "BULLISH") return T("d_up");
+  if (w === "DOWN" || w === "BEARISH") return T("d_down");
+  if (w === "RANGE") return T("d_range");
+  if (!w) return T("d_none");
+  return word; // an unrecognised word is shown as-is, never guessed into a side
+}
+
+function regimeLabel(word) {
+  const key = "rg_" + String(word || "").toUpperCase();
+  return STRINGS[lang][key] || STRINGS.en[key] || (word || null);
+}
+
+/* The volatility band is its own vocabulary (HIGH / LOW / NORMAL / UNKNOWN). */
+function volLabel(word) {
+  const w = String(word || "").toUpperCase();
+  const key = "vl_" + w;
+  return STRINGS[lang][key] || STRINGS.en[key] || (word || null);
+}
+
+/* A position/outcome state word (OPEN / STOP / TARGET / TIMEOUT). */
+function stateLabel(word) {
+  const w = String(word || "").toUpperCase();
+  const key = "st_" + w;
+  return STRINGS[lang][key] || STRINGS.en[key] || (word || null);
+}
+
+/* A data-quality word (VALID / DEGRADED / STALE / MISSING …). */
+function dataLabel(word) {
+  const w = String(word || "").toUpperCase();
+  const key = "dq_" + w;
+  return STRINGS[lang][key] || STRINGS.en[key] || (word || null);
+}
+
+/* An eligibility word (ELIGIBLE / NOT_ELIGIBLE). */
+function eligLabel(word) {
+  const w = String(word || "").toUpperCase();
+  const key = "el_" + w;
+  return STRINGS[lang][key] || STRINGS.en[key] || (word || null);
+}
+
+function chip(label, value, cls) {
+  const el = document.createElement("span");
+  el.className = "chip" + (cls ? " " + cls : "");
+  const l = document.createElement("span");
+  l.textContent = label;
+  const b = document.createElement("b");
+  b.textContent = value === null || value === undefined || value === "" ? T("v_na") : String(value);
+  el.append(l, b);
+  return el;
+}
+
+function planCell(label, value, cls) {
+  const el = document.createElement("div");
+  el.className = "plan-cell";
+  const l = document.createElement("span");
+  l.className = "plan-label";
+  l.textContent = label;
+  const v = document.createElement("span");
+  v.className = "plan-value" + (cls ? " " + cls : "") +
+    (value === null || value === undefined ? " unknown" : "");
+  v.textContent = value === null || value === undefined ? T("v_na") : String(value);
+  el.append(l, v);
+  return el;
+}
+
+function posCard(p, closed) {
+  const card = document.createElement("div");
+  card.className = "pos-card";
+
+  const head = document.createElement("div");
+  head.className = "pos-head";
+  const dir = document.createElement("span");
+  dir.className = "pos-dir " + dirClass(p.direction);
+  dir.textContent = dirLabel(p.direction);
+  const st = document.createElement("span");
+  const stWord = closed ? (p.exit_state || p.outcome_class || null) : p.state;
+  st.className = "pos-state " + tone(stWord);
+  st.textContent = stWord ? stateLabel(stWord) : T("v_na");
+  head.append(dir, st);
+
+  const row = document.createElement("div");
+  row.className = "pos-row";
+  const pair = (label, value, cls) => {
+    const s = document.createElement("span");
+    s.textContent = label + " ";
+    const b = document.createElement("b");
+    b.className = cls || "";
+    b.textContent = value === null || value === undefined ? T("v_na") : String(value);
+    s.appendChild(b);
+    return s;
+  };
+  row.append(
+    pair(T("pos_entry"), num(p.entry_price)),
+    pair(T("pos_stop"), num(p.stop_price)),
+    pair(T("pos_target"), num(p.target_price)),
+    pair(T("pos_lots"), num(p.lots, 3)),
+  );
+  if (closed) {
+    const r = num(p.realized_r);
+    const pnl = num(p.realized_pnl);
+    row.append(
+      pair(T("pos_r"), r === null ? null : (Number(p.realized_r) >= 0 ? "+" : "") + r,
+           Number(p.realized_r) >= 0 ? "up" : "down"),
+      pair(T("pos_pnl"), pnl === null ? null : (Number(p.realized_pnl) >= 0 ? "+" : "") + pnl,
+           Number(p.realized_pnl) >= 0 ? "up" : "down"),
+      pair(T("pos_tf"), p.timeframe || null),
+    );
+  } else if (p.timeframe) {
+    row.append(pair(T("pos_tf"), p.timeframe));
+  }
+
+  card.append(head, row);
+  return card;
+}
+
+function renderMarket() {
+  const a = state.market || {};
+  const ctx = a.context || {};
+  const sig = a.signal || {};
+  const levels = a.levels || {};
+
+  // Direction hero. `signal.direction` is the engine's own word; when the
+  // analysis surface is absent it is null, which reads as "unavailable" — not
+  // as a decision of NONE.
+  const dirWord = sig.direction || null;
+  const hero = $("mk-hero");
+  hero.className = "dir-hero " + dirClass(dirWord);
+  $("mk-dir").textContent = dirWord ? dirLabel(dirWord) : T("v_na");
+  $("mk-dir").className = "direction " + dirClass(dirWord);
+
+  // Probability is shown ONLY when the backend marks it calibrated (RULE C);
+  // otherwise the raw score is named as a score, never dressed as a probability.
+  let meta;
+  if (sig.probability_calibrated === true && sig.probability != null) {
+    meta = T("cp_calibrated") + " · " + num(sig.probability, 3);
+  } else if (sig.score != null) {
+    meta = T("cp_score") + " " + num(sig.score, 3) + " · " + T("mk_score_note");
+  } else {
+    meta = T("v_na");
+  }
+  $("mk-prob").textContent = meta;
+
+  const chips = $("mk-chips");
+  chips.textContent = "";
+  chips.append(
+    chip(T("cp_symbol"), a.symbol || null),
+    chip(T("cp_regime"), regimeLabel(ctx.regime), tone(ctx.regime)),
+    chip(T("cp_h4"), dirLabel(ctx.h4_bias), dirClass(ctx.h4_bias)),
+    chip(T("cp_m15"), dirLabel(ctx.m15_trigger), dirClass(ctx.m15_trigger)),
+    chip(T("cp_vol"), volLabel(ctx.volatility_state),
+         ctx.volatility_state === "HIGH" ? "warn" : null),
+    chip(T("cp_agreement"), ctx.mtf_agreement),
+    chip(T("cp_confidence"), num(sig.confidence, 2)),
+  );
+
+  // Trade plan: entry / stop / target come from the live risk proposal. When
+  // the backend returns null levels, the panel says so instead of drawing a
+  // plausible plan from nothing.
+  const grid = $("mk-levels");
+  grid.textContent = "";
+  const havePlan = levels.entry != null || levels.stop_loss != null ||
+                   levels.take_profit != null;
+  $("mk-plan-note").hidden = havePlan;
+  if (havePlan) {
+    grid.append(
+      planCell(T("pl_entry"), num(levels.entry), dirClass(dirWord)),
+      planCell(T("pl_stop"), num(levels.stop_loss), "warn"),
+      planCell(T("pl_target"), num(levels.take_profit), dirClass(dirWord)),
+      planCell(T("pl_rr"), num(levels.reward_risk, 2)),
+      planCell(T("pl_risk"), levels.suggested_risk_pct == null
+        ? null : num(levels.suggested_risk_pct, 2) + "%"),
+    );
+  }
+
+  // Last recorded decision, straight from the prediction ledger. This is the
+  // one view that survives a restart with no live context: it shows the frozen
+  // contract values (score is a score, probability stays N/A per RULE C).
+  const s = state.signals;
+  const dl = $("mk-decision");
+  dl.textContent = "";
+  $("mk-decision-note").hidden = !!(s && s.available);
+  if (s && s.available) {
+    const drift = (s.last_price != null && s.reference_price != null)
+      ? num(Number(s.last_price) - Number(s.reference_price)) : null;
+    readoutRow(dl, T("cp_symbol"), s.symbol || null);
+    readoutRow(dl, T("dc_tf"), s.trigger_timeframe || null);
+    readoutRow(dl, T("dc_signal"), s.signal ? dirLabel(s.signal) : null, dirClass(s.signal));
+    readoutRow(dl, T("dc_time"), s.trigger_time != null
+      ? fmtEpochUTC(Math.floor(Number(s.trigger_time) / 1000)) : null);
+    readoutRow(dl, T("dc_score"), num(s.score, 3));
+    readoutRow(dl, T("cp_confidence"), num(s.confidence, 2));
+    readoutRow(dl, T("dc_ref"), num(s.reference_price));
+    readoutRow(dl, T("dc_last"), num(s.last_price));
+    readoutRow(dl, T("dc_drift"), drift, drift == null ? null : (drift >= 0 ? "ok" : "bad"));
+    readoutRow(dl, T("dc_outcome"), yn(s.has_outcome));
+    readoutRow(dl, T("dc_data"), dataLabel(s.data_state), tone(s.data_state));
+    readoutRow(dl, T("dc_structure"), dirLabel(s.structure_state), dirClass(s.structure_state));
+    readoutRow(dl, T("dc_eligibility"), eligLabel(s.eligibility_state), tone(s.eligibility_state));
+    readoutRow(dl, T("dc_mode"), s.system_mode || null);
+  }
+
+  // Positions and outcomes come straight from the shadow simulator.
+  const positions = Array.isArray(state.positions) ? state.positions : [];
+  const open = positions.filter((p) => p && p.state === "OPEN");
+  const pl = $("mk-positions");
+  pl.textContent = "";
+  if (!open.length) {
+    const e = document.createElement("div");
+    e.className = "pos-empty";
+    e.textContent = T("pos_none_open");
+    pl.appendChild(e);
+  } else {
+    open.forEach((p) => pl.appendChild(posCard(p, false)));
+  }
+
+  const outcomes = Array.isArray(state.outcomes) ? state.outcomes : [];
+  const ol = $("mk-outcomes");
+  ol.textContent = "";
+  if (!outcomes.length) {
+    const e = document.createElement("div");
+    e.className = "pos-empty";
+    e.textContent = T("pos_none_outcomes");
+    ol.appendChild(e);
+  } else {
+    outcomes.slice(-5).reverse().forEach((o) => ol.appendChild(posCard(o, true)));
+  }
 }
 
 /* ── panel: timeframes ──────────────────────────────────────────────── */
@@ -581,7 +898,7 @@ async function runConsole() {
 
 /* ── routing ────────────────────────────────────────────────────────── */
 
-const ROUTES = ["overview", "timeframes", "services", "audit", "risk", "console"];
+const ROUTES = ["overview", "market", "timeframes", "services", "audit", "risk", "console"];
 
 function go(route) {
   if (!ROUTES.includes(route)) route = "overview";
@@ -597,6 +914,7 @@ function go(route) {
   }
   window.scrollTo({ top: 0 });
   if (route === "services") renderServices();
+  if (route === "market") renderMarket();
 }
 
 function initTabs() {
@@ -622,6 +940,8 @@ async function refresh() {
     ["health", "health"], ["system", "system/state"], ["bridge", "bridge/status"],
     ["analysis", "analysis/latest"], ["timeframes", "timeframes"], ["risk", "risk/latest"],
     ["governance", "governance/status"], ["research", "research/status"],
+    ["positions", "shadow/positions"], ["outcomes", "shadow/outcomes"],
+    ["signals", "signals/latest"],
   ];
   const settled = await Promise.allSettled(specs.map(([, path]) => api(path)));
 
@@ -637,6 +957,9 @@ async function refresh() {
       state[key] = null;
     }
   });
+  // The market panel reads the same analysis document as the overview; keep one
+  // fetch and one truth rather than calling the endpoint twice.
+  state.market = state.analysis;
 
   if (!anyOk) {
     // Name the real failure. A 401 is a locked backend, not a dead one, and
@@ -646,6 +969,7 @@ async function refresh() {
     if (status === 401) banner("degraded", T("banner_locked"));
     else banner("offline", T("banner_offline"));
     renderOverview();
+    renderMarket();
     renderTimeframes();
     renderRisk();
     return;
@@ -662,6 +986,7 @@ async function refresh() {
     "{t}", fmtEpochUTC(Math.floor(Date.now() / 1000))));
 
   renderOverview();
+  renderMarket();
   renderTimeframes();
   renderAudit(audit);
   renderRisk();
@@ -690,6 +1015,7 @@ function boot() {
     lang = lang === "ar" ? "en" : "ar";
     applyLang();
     renderOverview();
+    renderMarket();
     renderTimeframes();
     renderRisk();
     if (state.route === "services") renderServices();

@@ -378,11 +378,28 @@ by the same server (and stamped/gated with the rest of the shell), so it adds no
 risk to the phone shell — if it were folded into `index.html` it would have to
 be in the offline shell and every phone would pay for a view it never opens.
 
-Six sections: Overview (aggregate state, a metric matrix with each reading's
-source endpoint, the two honesty badges, degraded reasons), Timeframes (all nine,
-each with a tap-for-detail dialog), Services (a live latency board over the same
-endpoints, plus the bridge readout), Audit, Risk & System, and Console — a raw
-endpoint runner so "what does the app actually receive?" is one click.
+Seven sections: Overview (aggregate state, a metric matrix with each reading's
+source endpoint, the two honesty badges, degraded reasons), Market & trades,
+Timeframes (all nine, each with a tap-for-detail dialog), Services (a live
+latency board over the same endpoints, plus the bridge readout), Audit, Risk &
+System, and Console — a raw endpoint runner so "what does the app actually
+receive?" is one click.
+
+**Market & trades** is the one panel built from the decision engine's own
+output rather than a state flag. It reads `analysis/latest` for the direction
+(`signal.direction`) and the live context (`regime`, `h4_bias`, `m15_trigger`,
+`volatility_state`), the risk proposal for the trade plan
+(`levels.entry` / `stop_loss` / `take_profit` / `reward_risk` /
+`suggested_risk_pct`), `signals/latest` for the last recorded decision
+(reference vs last price, drift, outcome flag), and `shadow/positions` +
+`shadow/outcomes` for the simulated book. Nothing here is derived: if the
+backend returns `null` levels the panel says "no trade plan" instead of drawing
+one, and an absent analysis document reads "unavailable", never a direction of
+`NONE`. **RULE C is enforced in the renderer**: the probability is shown only
+when `signal.probability_calibrated === true`, otherwise the raw score is
+labelled a score, never dressed as a probability. Its CSS lives in
+`terminal.css` only — the shared `styles.css` the phone app depends on is not
+touched, and the tab bar is widened to seven in `terminal.css`.
 
 The rule that governs every panel: **show the backend's real answer, and when
 the answer is unknown say so.** A missing reading renders `غير متاح`, never a

@@ -21,6 +21,90 @@
   letter-spacing: .01em;
 }
 
+/* ── market & trades ────────────────────────────────────────────────── */
+
+.dir-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(214,165,60,.05), transparent 70%),
+    var(--ink);
+  margin-bottom: 12px;
+}
+.dir-hero.up   { border-color: var(--up); }
+.dir-hero.down { border-color: var(--down); }
+.dir-hero.unknown { border-color: var(--flat); }
+.dir-hero .direction { font-size: 44px; line-height: 1; }
+.dir-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+html[dir="rtl"] .dir-side { align-items: flex-start; }
+.dir-meta { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.chip {
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.chip b { color: var(--paper); font-weight: 600; margin-inline-start: 5px; }
+.chip.up   { border-color: rgba(79,180,119,.4); }
+.chip.up b { color: var(--up); }
+.chip.down { border-color: rgba(209,88,79,.4); }
+.chip.down b { color: var(--down); }
+.chip.warn { border-color: rgba(214,165,60,.4); }
+.chip.warn b { color: var(--gold); }
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--edge);
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.plan-grid:empty { display: none; }
+.plan-cell {
+  background: var(--ink);
+  padding: 13px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.plan-label { color: var(--muted); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.plan-value { font-family: var(--mono); font-size: 19px; font-weight: 600; }
+.plan-value.up   { color: var(--up); }
+.plan-value.down { color: var(--down); }
+.plan-value.warn { color: var(--gold); }
+.plan-value.unknown { color: var(--muted); }
+
+.pos-list { display: grid; gap: 1px; background: var(--edge); border: 1px solid var(--edge); border-radius: 14px; overflow: hidden; }
+.pos-card { background: var(--ink); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.pos-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pos-dir { font-family: var(--serif); font-size: 17px; font-weight: 700; letter-spacing: .04em; }
+.pos-dir.up   { color: var(--up); }
+.pos-dir.down { color: var(--down); }
+.pos-dir.flat { color: var(--flat); }
+.pos-state {
+  font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  border: 1px solid var(--edge); border-radius: 999px; padding: 3px 8px; color: var(--muted);
+}
+.pos-state.ok   { color: var(--up); border-color: rgba(79,180,119,.4); }
+.pos-state.bad  { color: var(--down); border-color: rgba(209,88,79,.4); }
+.pos-state.warn { color: var(--gold); border-color: rgba(214,165,60,.4); }
+.pos-row { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); }
+.pos-row span b { color: var(--paper); font-family: var(--mono); font-weight: 600; }
+.pos-row span b.up   { color: var(--up); }
+.pos-row span b.down { color: var(--down); }
+.pos-empty { background: var(--ink); padding: 16px 14px; color: var(--muted); font-size: 12.5px; }
+
 /* ── aggregate banner ───────────────────────────────────────────────── */
 
 .aggregate {
@@ -263,6 +347,7 @@ html[data-theme="light"] .console-out {
 @media (min-width: 720px) {
   .matrix { grid-template-columns: repeat(4, 1fr); }
   .tf-grid { grid-template-columns: repeat(5, 1fr); }
+  .plan-grid { grid-template-columns: repeat(4, 1fr); }
 }
 @media (min-width: 1024px) {
   .term { max-width: 1080px; margin: 0 auto; }
@@ -270,6 +355,16 @@ html[data-theme="light"] .console-out {
   .tf-grid { grid-template-columns: repeat(9, 1fr); }
   .tf-grid .tf-cell { padding: 10px 8px; }
   .tf-name { font-size: 15px; }
+}
+
+/* The terminal has seven primary views where the app has six. Overriding the
+   shared bar here (rather than editing styles.css) keeps the phone app's tab
+   geometry untouched. On a narrow phone the row scrolls instead of crushing the
+   Arabic labels into an ellipsis; on a wide screen every tab still fits. */
+.tabs {
+  grid-template-columns: repeat(7, minmax(88px, 1fr));
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 @media (prefers-reduced-motion: reduce) {

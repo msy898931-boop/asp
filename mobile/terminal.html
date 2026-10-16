@@ -106,6 +106,52 @@
     <div class="shortcuts" id="shortcuts"></div>
   </section>
 
+  <!-- ══ MARKET & TRADES ══════════════════════════════════════════════ -->
+  <section class="panel" id="view-market" hidden aria-labelledby="mk-title">
+    <div class="panel-head">
+      <h2 class="panel-title" id="mk-title" data-i18n="nav_market">السوق والصفقات</h2>
+      <span class="panel-sub" data-i18n="mk_sub">الاتجاه وخطة الصفقة من محرّك القرار نفسه</span>
+    </div>
+
+    <!-- Direction: the one reading an operator opens the page for. -->
+    <div class="dir-hero unknown" id="mk-hero">
+      <span class="direction flat" id="mk-dir">--</span>
+      <div class="dir-side">
+        <span class="dir-meta" id="mk-prob">--</span>
+        <span class="metric-src" id="mk-hero-src">analysis/latest</span>
+      </div>
+    </div>
+
+    <div class="chips" id="mk-chips"></div>
+
+    <div class="panel-head sub-head">
+      <h3 class="panel-title sm" data-i18n="mk_plan">خطة الصفقة</h3>
+    </div>
+    <p class="panel-note" id="mk-plan-note" data-i18n="mk_plan_wait">بانتظار قرار مُقيَّم…</p>
+    <div class="plan-grid" id="mk-levels"></div>
+
+    <div class="panel-head sub-head">
+      <h3 class="panel-title sm" data-i18n="mk_decision">آخر قرار مُسجَّل</h3>
+      <span class="panel-sub">signals/latest</span>
+    </div>
+    <p class="panel-note" id="mk-decision-note" hidden data-i18n="mk_decision_none">لا قرارات مُسجَّلة في السجلّ بعد.</p>
+    <dl class="readout" id="mk-decision"></dl>
+
+    <div class="panel-head sub-head">
+      <h3 class="panel-title sm" data-i18n="mk_positions">مراكز الظلّ المفتوحة</h3>
+      <span class="panel-sub">shadow/positions</span>
+    </div>
+    <div class="pos-list" id="mk-positions"></div>
+
+    <div class="panel-head sub-head">
+      <h3 class="panel-title sm" data-i18n="mk_outcomes">آخر النتائج</h3>
+      <span class="panel-sub">shadow/outcomes</span>
+    </div>
+    <div class="pos-list" id="mk-outcomes"></div>
+
+    <div class="callout" data-i18n="mk_caveat">هذا نظام ظلّي: المستويات والمراكز والنتائج كلها محاكاة، ولا يملك تفويض تنفيذ.</div>
+  </section>
+
   <!-- ══ TIMEFRAMES ═══════════════════════════════════════════════════ -->
   <section class="panel" id="view-timeframes" hidden aria-labelledby="tf-title">
     <div class="panel-head">
@@ -176,6 +222,7 @@
 
 <nav class="tabs" role="tablist" aria-label="Sections">
   <button class="tab" data-view="overview" aria-selected="true" type="button" data-i18n="nav_overview">النظرة العامة</button>
+  <button class="tab" data-view="market" type="button" data-i18n="nav_market">السوق والصفقات</button>
   <button class="tab" data-view="timeframes" type="button" data-i18n="nav_timeframes">الإطارات</button>
   <button class="tab" data-view="services" type="button" data-i18n="nav_services">الخدمات</button>
   <button class="tab" data-view="audit" type="button" data-i18n="nav_audit">التدقيق</button>

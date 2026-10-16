@@ -137,6 +137,81 @@ class UnknownIsNotSafeTest(unittest.TestCase):
         self.assertIn('value === null || value === undefined ? T("v_na")', js)
 
 
+class MarketPanelTest(unittest.TestCase):
+    """The market & trades view: direction, trade plan, shadow positions.
+
+    The panel is where the project's honesty rule is easiest to break, so these
+    pin the two things that matter: every number comes from a real surface, and
+    an uncalibrated score is never shown as a probability.
+    """
+
+    def test_the_section_and_tab_exist(self):
+        html = _read(TERMINAL)
+        self.assertIn('id="view-market"', html)
+        self.assertIn('data-view="market"', html)
+        self.assertIn('id="mk-levels"', html)
+        self.assertIn('id="mk-positions"', html)
+        self.assertIn('id="mk-outcomes"', html)
+
+    def test_the_bar_has_seven_tabs(self):
+        html = _read(TERMINAL)
+        self.assertEqual(html.count('class="tab"'), 7)
+
+    def test_market_is_a_route(self):
+        js = _read(TERMINAL_JS)
+        self.assertRegex(js, r'const ROUTES = \[[^\]]*"market"')
+        self.assertIn('if (route === "market") renderMarket();', js)
+
+    def test_direction_reads_the_analysis_surface(self):
+        js = _read(TERMINAL_JS)
+        # The direction is the engine's own word, taken from signal.direction.
+        self.assertIn("sig.direction", js)
+        # And the market view is the analysis document, fetched once.
+        self.assertIn("state.market = state.analysis;", js)
+
+    def test_probability_is_shown_only_when_calibrated(self):
+        js = _read(TERMINAL_JS)
+        # RULE C: the calibrated flag must gate the probability, and the raw
+        # score must be labelled as a score, never dressed as a probability.
+        self.assertIn("sig.probability_calibrated === true", js)
+        self.assertIn('T("mk_score_note")', js)
+
+    def test_trade_plan_comes_from_the_risk_proposal(self):
+        js = _read(TERMINAL_JS)
+        for field in ("levels.entry", "levels.stop_loss", "levels.take_profit",
+                      "levels.reward_risk", "levels.suggested_risk_pct"):
+            with self.subTest(field=field):
+                self.assertIn(field, js)
+
+    def test_positions_and_outcomes_are_read_from_the_shadow_surfaces(self):
+        js = _read(TERMINAL_JS)
+        self.assertIn('["positions", "shadow/positions"]', js)
+        self.assertIn('["outcomes", "shadow/outcomes"]', js)
+
+    def test_the_last_recorded_decision_comes_from_the_ledger(self):
+        js = _read(TERMINAL_JS)
+        self.assertIn('["signals", "signals/latest"]', js)
+        self.assertIn("state.signals", js)
+        self.assertIn('s.available', js)
+
+    def test_an_unknown_direction_is_not_guessed_into_a_side(self):
+        js = _read(TERMINAL_JS)
+        # dirClass falls back to "flat", never to up or down.
+        fn = re.search(r"function dirClass[\s\S]*?\n\}", js).group(0)
+        self.assertIn('return "flat"', fn)
+        self.assertNotRegex(fn, r'return "up";\s*\n\}')
+
+    def test_market_styles_are_scoped_to_the_terminal(self):
+        # The market panel's own CSS lives in terminal.css, not the shared
+        # stylesheet the phone app depends on.
+        css = _read(TERMINAL_CSS)
+        for cls in (".dir-hero", ".plan-grid", ".pos-card", ".chip"):
+            with self.subTest(cls=cls):
+                self.assertIn(cls, css)
+        shared = _read(os.path.join(HERE, "styles.css"))
+        self.assertNotIn(".dir-hero", shared)
+
+
 class GateTest(unittest.TestCase):
     """The terminal is part of the app, so it lives behind the same gate."""
 
