@@ -4,7 +4,7 @@
    up on the next load instead of the load after next, and the app still opens
    offline. */
 
-const SHELL = "astra-shell-v22";
+const SHELL = "astra-shell-v23";
 const ASSETS = [
   "./",
   "./index.html",
@@ -42,11 +42,21 @@ self.addEventListener("fetch", (event) => {
                url.pathname.includes("/advisor/");
   if (live || event.request.method !== "GET") return; // network only
 
+  // Never touch the gate's handshake. /unlock?k=KEY carries the access key in
+  // its URL; caching the request would persist that key in the device's cache
+  // storage, and serving it from cache later would skip the cookie exchange.
+  if (url.pathname.endsWith("/unlock")) return;
+
   event.respondWith(
     fetch(event.request)
       .then((res) => {
-        const copy = res.clone();
-        caches.open(SHELL).then((c) => c.put(event.request, copy)).catch(() => {});
+        // Cache only successful shell responses. Caching a 401 would serve the
+        // gate's "access requires a key" page as the app shell on the next
+        // offline load, which reads as a broken app rather than a locked one.
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(SHELL).then((c) => c.put(event.request, copy)).catch(() => {});
+        }
         return res;
       })
       .catch(() => caches.match(event.request))

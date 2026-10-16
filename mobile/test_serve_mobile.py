@@ -821,6 +821,25 @@ class PwaManifestTest(unittest.TestCase):
         self.assertIn("./manifest-light.webmanifest", sw)
 
 
+class ServiceWorkerGateTest(unittest.TestCase):
+    """The service worker must not defeat or leak the access gate."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_unlock_is_never_cached(self):
+        # /unlock?k=KEY puts the access key in the URL; caching the request
+        # would persist the key in the device's cache storage.
+        sw = self._read("sw.js")
+        self.assertIn('url.pathname.endsWith("/unlock")', sw)
+
+    def test_only_successful_responses_are_cached(self):
+        # Caching a 401 would serve the gate page as the offline shell.
+        sw = self._read("sw.js")
+        self.assertIn("res && res.ok", sw)
+
+
 class AndroidShellTest(unittest.TestCase):
     """The APK is a WebView shell that opens the hosted app. Its baked-in target
     must be the live server, never loopback: 127.0.0.1 on a phone is the phone

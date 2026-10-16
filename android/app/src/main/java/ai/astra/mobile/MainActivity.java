@@ -79,6 +79,10 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 error.setVisibility(View.GONE);
                 web.setVisibility(View.VISIBLE);
+                // Persist any cookie the gate just set so the session survives
+                // the app being closed; the WebView flush is async and easy to
+                // lose on a process that is killed.
+                CookieManager.getInstance().flush();
                 // With a stored key, establish the gate's cookie once the host
                 // is reachable. The HttpOnly cookie persists after this single
                 // visit; when the gate is off, /unlock redirects straight to "/".
