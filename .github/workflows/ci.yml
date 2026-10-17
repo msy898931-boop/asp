@@ -90,7 +90,13 @@ jobs:
           python3 -m playwright install --with-deps chromium
 
       - name: Test the phone UI in a real browser
-        run: python3 mobile/test_dom_browser.py
+        # test_dom_data seeds the endpoints from scripts/mock_api.py and asserts
+        # on the rendered DOM; test_dom_browser runs the same shell with every
+        # endpoint dead. Between them: the panels show real values, and the app
+        # still works when the backend is gone.
+        run: |
+          python3 mobile/test_dom_browser.py
+          python3 mobile/test_dom_data.py
 
       - name: Test the signal engine and its honesty guarantees
         run: python3 -m unittest discover -s tracker -p "test_*.py"

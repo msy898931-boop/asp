@@ -48,6 +48,21 @@ and the network helpers, so it must stay first. Each script is precached in
 `ClientScriptContractTest` in `test_serve_mobile.py` pins that, so a new script
 cannot ship half-wired.
 
+## Tests
+
+Two layers, both driving the real shell in a real Chromium through Playwright:
+
+- `test_dom_browser.py` aborts every live endpoint and proves the shell is fully
+  navigable and never throws with a dead backend.
+- `test_dom_data.py` answers those endpoints from the canonical fixtures in
+  `scripts/mock_api.py` (plus a synthetic candle series) and asserts on the
+  rendered DOM — the status, signal, chart, volatility and ticker panels show
+  real values, and a cached reading paints with its `offline` label when the
+  backend is gone. This is the layer that catches a renderer reading the wrong
+  key; a text test and a dead-backend test both pass while the panel is empty.
+
+Both skip (never fail) when Playwright is absent.
+
 ## Run the server
 
 The backend must already be running (it publishes the loopback API on 8790 and
@@ -76,7 +91,10 @@ offline; over `https://` it also works offline).
 
 The service worker caches the **shell** (HTML/CSS/JS/icons), so the app opens
 offline instead of showing the browser's error page. Live data is never served
-from the cache — a stale reading presented as live would be a lie.
+from the cache — a stale reading presented as live would be a lie. That covers
+the panel readings too (`vol.json`, `akoan.json`): the volatility panel stamps
+the time it *rendered*, not the time the data was computed, so a cached reading
+would look freshly computed. `ServiceWorkerGateTest` pins the never-cache rule.
 
 The app separately keeps the **last successful reading** in `localStorage`
 (`astra-last-read`). On a cold, offline start it paints that reading, and the

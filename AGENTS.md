@@ -443,6 +443,13 @@ leaks no timing signal. The gate is dormant until the variable is set, mirroring
 `ASTRA_UPGRADE_URL`: development, CI and the current deployment behave exactly
 as before. `mobile/test_serve_mobile.py::AccessControlTest` locks all of this.
 
+The service worker caches the shell only. Everything that carries a current
+number is network-only: `/api/*`, `/bridge/*`, `/tracker/*`, `/advisor/*`, and
+the panel readings `/vol.json` and `/akoan.json`. The volatility panel stamps
+the *render* time, not the data time, so a cached reading would look freshly
+computed — that is why the readings join the live list rather than the shell
+cache. `ServiceWorkerGateTest::test_panel_readings_are_never_cached` pins it.
+
 The gate is rate limited so it is not an unlimited guessing oracle. Failures are
 counted **per client address** (`_RateLimiter`), and the address is refused with
 `429` + `Retry-After` once it crosses `ASTRA_GATE_MAX_FAILURES` (default 10)
@@ -934,12 +941,20 @@ keep them honest and in sync:
   ("signal", "buy/sell") — that would assert an edge the corpus does not
   support.
 - **Bilingual by design (EN/AR, RTL).** All user-facing strings live in the
-  `STRINGS` table in `mobile/app.js` and are applied via `data-i18n` attributes.
-  The layout flips with `dir="rtl"`; numeric readouts stay LTR. Add a string in
-  both languages or not at all.
+  `STRINGS` table in `mobile/i18n.js` and are applied via `data-i18n`
+  attributes. The layout flips with `dir="rtl"`; numeric readouts stay LTR. Add
+  a string in both languages or not at all.
 
 The app is read-only: one origin (`serve_mobile.py`) reverse-proxies `/api/v1`
 to the backend and `/bridge` to the bridge. It never places trades.
+
+Two Playwright suites drive the real shell in a real Chromium. `test_dom_browser.py`
+aborts every live endpoint and proves the shell navigates and never throws with a
+dead backend. `test_dom_data.py` answers those endpoints from `scripts/mock_api.py`
+and a synthetic candle series, then asserts on the rendered DOM. The second layer
+is the one that catches a renderer reading the wrong key: a text test and a
+dead-backend test both stay green while the panel shows nothing. Both skip when
+Playwright is absent.
 
 ### The tab bar (five primary tabs plus a More sheet)
 
