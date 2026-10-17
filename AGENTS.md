@@ -1470,3 +1470,22 @@ Scope decisions worth keeping:
 * `explicit_package_bases = True` in `mypy.ini` is required: two files share the
   leaf name `study.py` (`akoan/study.py`, `research/features_real/study.py`).
 
+### T13 stages the bridge's whole import closure
+
+`tests/integration/test_e2e_real_host_t13.py` copies the bridge into
+`build/resources/bridge/mt5_python` before starting the host (`ensure_bundle`).
+`bridge_service.py` imports `live_client` and `replay_client` **unconditionally**,
+so the staged list must be all six modules
+(`bridge_service, live_client, mt5_client, replay_client, schemas, mt5_csv_feed`).
+A shorter list used to pass only because a pre-packaged `build/` happened to
+already hold the missing files; on a clean CI build the host died with
+`ModuleNotFoundError: No module named 'live_client'` before it could bind, which
+E05 surfaced as a bare "connection refused". Both T13 paths now capture the
+host's output and print its tail when the wait times out, and both wait up to
+15s (not 5s) for the bind. Reproduce from a wiped tree with:
+
+```
+rm -rf build/resources/bridge && python3 tests/integration/test_e2e_real_host_t13.py
+T13_REAL_DATA=1 python3 tests/integration/test_e2e_real_host_t13.py
+```
+
