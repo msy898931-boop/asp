@@ -286,6 +286,9 @@ so a clone can move to a new deployment by setting two variables:
 - `ASTRA_ACCESS_TOKEN` — optional. Set it and every phone-app route needs the
   key; leave it unset (the default) and the server is open exactly as before.
   See *Access control* under the phone app below.
+- `ASTRA_GATE_MAX_FAILURES` / `ASTRA_GATE_WINDOW_S` / `ASTRA_GATE_LOCKOUT_S` —
+  optional. Tune the gate's per-address failure limit (defaults 10 / 300 s /
+  900 s). Only wrong keys are counted; a correct key clears the record.
 
 The watchdog's repo comes from `GITHUB_REPOSITORY`, which GitHub sets in Actions
 automatically. Defaults remain the current Render host and fork, so nothing
@@ -385,6 +388,26 @@ or `Referer`. The key is compared with `hmac.compare_digest` so a wrong guess
 leaks no timing signal. The gate is dormant until the variable is set, mirroring
 `ASTRA_UPGRADE_URL`: development, CI and the current deployment behave exactly
 as before. `mobile/test_serve_mobile.py::AccessControlTest` locks all of this.
+
+The gate is rate limited so it is not an unlimited guessing oracle. Failures are
+counted **per client address** (`_RateLimiter`), and the address is refused with
+`429` + `Retry-After` once it crosses `ASTRA_GATE_MAX_FAILURES` (default 10)
+within `ASTRA_GATE_WINDOW_S` (300 s), for `ASTRA_GATE_LOCKOUT_S` (900 s). Two
+details matter and are easy to get wrong:
+
+* Only a *presented* wrong key is counted. A request with no key at all is a
+  plain unauthenticated visit, answered `401` without spending the budget — so a
+  phone reloading the gate page, or a crawler, cannot lock the real user out.
+* A correct key clears the record, so an operator who mistypes a few times is
+  never locked out.
+* The client address comes from `X-Forwarded-For` (leftmost hop) when present,
+  because Render/Fly terminate TLS in front: without it every request would
+  share the proxy's address and one attacker would lock out everyone.
+
+The limiter is in-process and bounded (`_GATE_MAX_TRACKED`, pruned), so a
+restart forgets it and a flood of distinct addresses cannot grow it without
+limit. `GateRateLimitTest` and `RateLimiterUnitTest` lock the rules; the unit
+test injects a clock so nothing sleeps.
 
 Shell caching: the shell is served `Cache-Control: no-cache` and the HTML has a
 content hash appended to `styles.css`/`app.js` (`?v=<build>`), while `sw.js`

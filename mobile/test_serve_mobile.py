@@ -614,9 +614,11 @@ class AccessControlTest(unittest.TestCase):
     def setUp(self):
         self._saved = sm.ACCESS_TOKEN
         sm.ACCESS_TOKEN = ""
+        sm._GATE_LIMITER.reset()
 
     def tearDown(self):
         sm.ACCESS_TOKEN = self._saved
+        sm._GATE_LIMITER.reset()
 
     def _serve_app(self):
         return _serve(sm.Handler)
@@ -731,6 +733,120 @@ class AccessControlTest(unittest.TestCase):
         self.assertFalse(sm._auth_required())
         sm.ACCESS_TOKEN = "x"
         self.assertTrue(sm._auth_required())
+
+
+class RateLimiterUnitTest(unittest.TestCase):
+    """The limiter on its own, with an injected clock, so the timing rules are
+    checked without sleeping."""
+
+    def test_blocks_after_max_failures_and_expires(self):
+        rl = sm._RateLimiter(max_failures=3, window_s=100.0, lockout_s=50.0)
+        self.assertFalse(rl.blocked("a", 0.0))
+        for t in (0.0, 1.0, 2.0):
+            rl.fail("a", t)
+        self.assertTrue(rl.blocked("a", 2.0))
+        self.assertEqual(rl.retry_after("a", 2.0), 50)
+        # The cool-down ends, and the address is forgotten, not just unblocked.
+        self.assertFalse(rl.blocked("a", 52.0))
+        self.assertEqual(rl.retry_after("a", 52.0), 0)
+
+    def test_success_clears_the_record(self):
+        rl = sm._RateLimiter(max_failures=3, window_s=100.0, lockout_s=50.0)
+        rl.fail("a", 0.0)
+        rl.fail("a", 1.0)
+        rl.succeed("a")
+        rl.fail("a", 2.0)  # a fresh run of failures, not a continuation
+        self.assertFalse(rl.blocked("a", 2.0))
+
+    def test_old_failures_fall_out_of_the_window(self):
+        rl = sm._RateLimiter(max_failures=3, window_s=100.0, lockout_s=50.0)
+        rl.fail("a", 0.0)
+        rl.fail("a", 1.0)
+        rl.fail("a", 200.0)  # the first two are outside the window
+        self.assertFalse(rl.blocked("a", 200.0))
+
+    def test_addresses_are_independent(self):
+        rl = sm._RateLimiter(max_failures=2, window_s=100.0, lockout_s=50.0)
+        rl.fail("a", 0.0)
+        rl.fail("a", 1.0)
+        self.assertTrue(rl.blocked("a", 1.0))
+        self.assertFalse(rl.blocked("b", 1.0))
+
+
+class GateRateLimitTest(unittest.TestCase):
+    """The gate must not be an unlimited guessing oracle. Repeated wrong keys
+    from one address are rate limited, but a legitimate visitor — a correct
+    key, or a plain page load with no key — is never locked out."""
+
+    def setUp(self):
+        self._saved = sm.ACCESS_TOKEN
+        sm.ACCESS_TOKEN = "s3cret"
+        sm._GATE_LIMITER.reset()
+        self.app = _serve(sm.Handler)
+
+    def tearDown(self):
+        _stop(self.app)
+        sm.ACCESS_TOKEN = self._saved
+        sm._GATE_LIMITER.reset()
+
+    def _status(self, path, headers=None):
+        url = "http://127.0.0.1:%d%s" % (self.app.server_address[1], path)
+        req = urllib.request.Request(url, headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status, dict(resp.headers)
+        except urllib.error.HTTPError as exc:
+            return exc.code, dict(exc.headers)
+
+    def test_repeated_wrong_keys_are_rate_limited(self):
+        n = sm._GATE_MAX_FAILURES
+        codes = [self._status("/version.json?k=wrong%d" % i)[0]
+                 for i in range(n + 2)]
+        # The first n-1 wrong guesses are plain 401s; the guess that reaches
+        # the limit is refused with 429, and every guess after stays refused.
+        self.assertEqual(codes[:n - 1], [401] * (n - 1))
+        self.assertEqual(codes[n - 1:], [429] * 3)
+
+    def test_lockout_sends_retry_after(self):
+        for i in range(sm._GATE_MAX_FAILURES):
+            self._status("/version.json?k=wrong%d" % i)
+        status, headers = self._status("/version.json?k=wrong-again")
+        self.assertEqual(status, 429)
+        self.assertGreater(int(headers.get("Retry-After", "0")), 0)
+
+    def test_correct_key_clears_the_budget(self):
+        # A handful of typos must not accumulate toward a lockout once the
+        # right key arrives.
+        for i in range(sm._GATE_MAX_FAILURES - 1):
+            self._status("/version.json?k=wrong%d" % i)
+        status, _ = self._status("/version.json?k=s3cret")
+        self.assertEqual(status, 200)
+        # The record is gone, so the next wrong key is a 401, not a 429.
+        status, _ = self._status("/version.json?k=wrong")
+        self.assertEqual(status, 401)
+
+    def test_a_bare_visit_is_not_a_guess(self):
+        # A phone loading the gate page carries no key. That must never spend
+        # the budget, or a few refreshes would lock the real user out.
+        for _ in range(sm._GATE_MAX_FAILURES * 2):
+            status, _ = self._status("/")
+            self.assertEqual(status, 401)
+        # The budget is intact: a wrong key is still just a 401.
+        status, _ = self._status("/version.json?k=wrong")
+        self.assertEqual(status, 401)
+
+    def test_forwarded_for_keeps_clients_apart(self):
+        # Behind Render/Fly every request arrives from the proxy, so the client
+        # address must come from X-Forwarded-For — otherwise one attacker would
+        # lock out every user.
+        attacker = {"X-Forwarded-For": "203.0.113.9"}
+        for i in range(sm._GATE_MAX_FAILURES):
+            self._status("/version.json?k=wrong%d" % i, headers=attacker)
+        status, _ = self._status("/version.json?k=x", headers=attacker)
+        self.assertEqual(status, 429)
+        status, _ = self._status("/version.json?k=x",
+                                 headers={"X-Forwarded-For": "198.51.100.4"})
+        self.assertEqual(status, 401)
 
 
 class RefreshGuardTest(unittest.TestCase):

@@ -80,6 +80,88 @@ def _auth_required() -> bool:
     return bool(ACCESS_TOKEN)
 
 
+# Gate hardening. A single static key with unlimited guesses is a guessing
+# oracle: an attacker can try keys as fast as the network allows. These bound
+# how many *failed* tries one client address may make before it is refused for
+# a cool-down. A correct key is never counted and clears the record, so an
+# operator who mistypes the key a few times is never locked out. The numbers
+# are deliberately generous — a human typing a key does not hit ten failures in
+# five minutes — so only a brute-force pattern trips it.
+_GATE_MAX_FAILURES = int(os.environ.get("ASTRA_GATE_MAX_FAILURES", "10"))
+_GATE_WINDOW_S = float(os.environ.get("ASTRA_GATE_WINDOW_S", "300"))
+_GATE_LOCKOUT_S = float(os.environ.get("ASTRA_GATE_LOCKOUT_S", "900"))
+_GATE_MAX_TRACKED = 4096
+
+
+class _RateLimiter:
+    """Per-address failure counter for the access gate.
+
+    Counts only failures, so a legitimate visitor is invisible to it; a client
+    that crosses `max_failures` within `window_s` is refused for `lockout_s`.
+    State is in-process and bounded: a restart forgets it (fine for one
+    always-on container, and it adds no disk or shared-state dependency), and
+    the tracked set is pruned so a flood of distinct addresses cannot grow it
+    without limit.
+    """
+
+    def __init__(self, max_failures: int, window_s: float, lockout_s: float) -> None:
+        self.max_failures = max_failures
+        self.window_s = window_s
+        self.lockout_s = lockout_s
+        self._lock = threading.Lock()
+        self._hits: dict[str, list[float]] = {}
+        self._until: dict[str, float] = {}
+
+    def blocked(self, key: str, now: float) -> bool:
+        """True while `key` is in its cool-down; forgets it once it has passed."""
+        with self._lock:
+            until = self._until.get(key)
+            if until is None:
+                return False
+            if now >= until:
+                self._until.pop(key, None)
+                self._hits.pop(key, None)
+                return False
+            return True
+
+    def fail(self, key: str, now: float) -> None:
+        with self._lock:
+            hits = [t for t in self._hits.get(key, ()) if now - t < self.window_s]
+            hits.append(now)
+            if len(hits) >= self.max_failures:
+                self._until[key] = now + self.lockout_s
+                hits = []
+            self._hits[key] = hits
+            self._prune(now)
+
+    def succeed(self, key: str) -> None:
+        """A correct key clears the record, so it can never be locked out."""
+        with self._lock:
+            self._hits.pop(key, None)
+            self._until.pop(key, None)
+
+    def retry_after(self, key: str, now: float) -> int:
+        with self._lock:
+            until = self._until.get(key)
+            return max(0, int(until - now)) if until else 0
+
+    def reset(self) -> None:
+        """Forget all state. Used by tests so one case cannot leak into the next."""
+        with self._lock:
+            self._hits.clear()
+            self._until.clear()
+
+    def _prune(self, now: float) -> None:
+        if len(self._hits) < _GATE_MAX_TRACKED and len(self._until) < _GATE_MAX_TRACKED:
+            return
+        self._hits = {k: v for k, v in self._hits.items()
+                      if v and now - v[-1] < self.window_s}
+        self._until = {k: v for k, v in self._until.items() if v > now}
+
+
+_GATE_LIMITER = _RateLimiter(_GATE_MAX_FAILURES, _GATE_WINDOW_S, _GATE_LOCKOUT_S)
+
+
 def _cookie_value(header: str) -> str:
     for part in (header or "").split(";"):
         name, _, value = part.strip().partition("=")
@@ -488,8 +570,9 @@ class Handler(BaseHTTPRequestHandler):
             # on, which reads as "the download is broken".
             self._apk()
             return
-        if _auth_required() and not self._authorized():
-            self._unauthorized()
+        denied = self._gate_check()
+        if denied is not None:
+            self._unauthorized(denied)
             return
         if path == "/unlock":
             self._unlock()
@@ -521,6 +604,53 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- access control -----------------------------------------------------
 
+    def _client_key(self) -> str:
+        """The address a failed guess is attributed to.
+
+        X-Forwarded-For is read first (leftmost hop) because Render and Fly
+        terminate TLS in front of this server: without it every request would
+        carry the proxy's address and one attacker would lock out everyone.
+        """
+        fwd = self.headers.get("X-Forwarded-For", "")
+        if fwd:
+            return fwd.split(",", 1)[0].strip()
+        return self.client_address[0] if self.client_address else "unknown"
+
+    def _presented_key(self) -> str:
+        """A credential the caller actually supplied, or "" if none.
+
+        Distinguishes a wrong *guess* from a bare unauthenticated visit: only
+        the former is a brute-force signal worth counting. A page load with no
+        key at all is not an attempt, so it must not consume the budget.
+        """
+        cookie = _cookie_value(self.headers.get("Cookie", ""))
+        if cookie:
+            return cookie
+        return _parse_query(self.path).get("k", "")
+
+    def _gate_check(self) -> int | None:
+        """Decide access, counting wrong guesses against the caller's address.
+
+        Returns the status to refuse with (401, or 429 once the limit is
+        crossed), or None to allow. A correct key — cookie or ?k= — always
+        passes and clears the record, so the operator is never locked out. Only
+        a *presented* wrong key is counted; a request carrying no key is a plain
+        unauthenticated visit and is answered 401 without spending the budget.
+        """
+        if not _auth_required():
+            return None
+        now = time.time()
+        key = self._client_key()
+        if _GATE_LIMITER.blocked(key, now):
+            return 429
+        if self._authorized():
+            _GATE_LIMITER.succeed(key)
+            return None
+        if self._presented_key():
+            _GATE_LIMITER.fail(key, now)
+            return 429 if _GATE_LIMITER.blocked(key, now) else 401
+        return 401
+
     def _authorized(self) -> bool:
         """A valid cookie, or the token on the URL (for the first visit)."""
         if not _auth_required():
@@ -530,11 +660,18 @@ class Handler(BaseHTTPRequestHandler):
             given = _parse_query(self.path).get("k", "")
         return _token_matches(given)
 
-    def _unauthorized(self) -> None:
+    def _unauthorized(self, status: int = 401) -> None:
         # Shown to a phone that opened the app without the key. Lead with the
         # /unlock form (it stores the cookie, so it is typed once); the bare
         # ?k= form works too but is forgotten on every visit. Styled for a
-        # phone: 401s are reached from the app, not from a desktop.
+        # phone: 401s are reached from the app, not from a desktop. A rate
+        # limited caller gets the same page as 429, with a note, so it still
+        # reads as a lock rather than a raw error.
+        retry_after = 0
+        note = ""
+        if status == 429:
+            retry_after = _GATE_LIMITER.retry_after(self._client_key(), time.time())
+            note = ("<p>محاولات كثيرة خاطئة. أعد المحاولة بعد قليل.</p>")
         body = (
             "<!doctype html><html dir=\"rtl\" lang=\"ar\"><head>"
             "<meta charset=\"utf-8\">"
@@ -554,13 +691,14 @@ class Handler(BaseHTTPRequestHandler):
             "</style></head><body><main>"
             "<h1>ASTRA</h1>"
             "<p>هذا التطبيق محمي. أدخل مفتاح الوصول مرة واحدة وسيُحفظ على جهازك.</p>"
+            + note +
             "<form method=\"get\" action=\"/unlock\">"
             "<input name=\"k\" type=\"password\" dir=\"ltr\" autocomplete=\"off\" "
             "placeholder=\"مفتاح الوصول\" aria-label=\"مفتاح الوصول\">"
             "<button type=\"submit\">دخول</button></form>"
             "</main></body></html>"
         ).encode("utf-8")
-        self._send(401, body, "text/html; charset=utf-8")
+        self._send(status, body, "text/html; charset=utf-8", retry_after=retry_after)
 
     def _unlock(self) -> None:
         """Exchange ?k= for a cookie, then redirect to a clean URL.
@@ -709,11 +847,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- writer -------------------------------------------------------------
 
-    def _send(self, status: int, body: bytes, ctype: str) -> None:
+    def _send(self, status: int, body: bytes, ctype: str,
+              retry_after: int = 0) -> None:
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
+        if retry_after:
+            # RFC 6585: tells a rate-limited caller how long to wait, so a
+            # well-behaved client backs off instead of hammering the gate.
+            self.send_header("Retry-After", str(retry_after))
         if ctype.startswith("application/json"):
             self.send_header("Cache-Control", "no-store")
         else:

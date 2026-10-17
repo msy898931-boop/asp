@@ -56,8 +56,12 @@ kept in the `astra_key` cookie. A first visit without a key gets **HTTP 401** â€
 that is the gate working, not a broken deploy. Ask the operator for the key.
 
 The gate is a single static key: enough to keep casual visitors out, not a real
-auth system (no expiry, no per-user accounts, no rate limit). Treat the live URL
-as private.
+auth system (no expiry, no per-user accounts). Wrong keys from one address are
+rate limited â€” after `ASTRA_GATE_MAX_FAILURES` (10) failed tries within
+`ASTRA_GATE_WINDOW_S` (300 s) the address is refused with **429** and a
+`Retry-After` for `ASTRA_GATE_LOCKOUT_S` (900 s). A correct key is never
+counted, and a plain visit carrying no key is not a guess, so a real user is
+not locked out by mistyping or reloading. Treat the live URL as private.
 
 ## Tests
 
@@ -70,10 +74,10 @@ Measured on this fork (2026-10-16):
 | `research/` | 50 |
 | `akoan/` | 59 |
 | `advisor/` | 92 |
-| `mobile/` | 119 |
+| `mobile/` | 128 |
 | `bridge/telegram_bot/` | 91 |
 | `tests/` (models, integration, features) | 308 |
-| **Total (Python)** | **915** |
+| **Total (Python)** | **924** |
 
 Plus 19 C++ test binaries (`ctest`). Run a suite with
 `python3 -m unittest discover -s <suite> -p "test_*.py"`. Every Python suite
