@@ -21,6 +21,7 @@ If you are new, read these four, in order:
 | Ops | `docs/RUNBOOK.md` | Incident runbook |
 | Ops | `docs/FORK_UPSTREAM_DECISION.md` | Fork vs upstream: what to do, and the hard constraint |
 | Audit | `docs/PROJECT_AUDIT_2026-10-14.md` | Full-repo audit and 100-point score (85.0) |
+| Audit | `docs/ASSESSMENT_2026-10-16.md` | Independent re-assessment (84.5), measured live; supersedes the audit's test counts |
 | Product | `docs/SELLING.md` | Pricing and what the tool honestly does |
 | Mobile | `mobile/README.md` | The PWA: routes, tabs, offline shell |
 | Bot | `bridge/telegram_bot/README.md` | Telegram bot, entitlements, watchdog |
