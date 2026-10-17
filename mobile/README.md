@@ -1,8 +1,15 @@
 # ASTRA mobile app
 
 A phone app for the ASTRA backend. It is a **PWA** (installable web app): no
-store account, no build step, no APK. You open one URL once and add it to the
-home screen; after that it opens full-screen like any other app.
+store account, no build step needed to use it. You open one URL once and add it
+to the home screen; after that it opens full-screen like any other app. A signed
+`.apk` is also published for those who prefer a file install.
+
+## Access gate
+
+The deployed app is **keyed**. Until the key is entered it shows a one-field
+unlock screen; a first request without the key returns **HTTP 401**, which is the
+gate working, not a broken deploy. The key is stored in the `astra_key` cookie.
 
 ## Deployed instance
 

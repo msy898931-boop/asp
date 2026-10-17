@@ -326,6 +326,19 @@ const CACHE_KEY = "astra-last-read";
 const CACHE_VERSION = 1;
 let offlineMode = false;  // true while the app is showing the cached reading
 
+// A cold start shows placeholders, not a wall of "--". Cleared the first time a
+// real reading (live or cached) paints.
+function setSkeleton(on) {
+  const d = document.documentElement;
+  if (on) {
+    d.setAttribute("data-skeleton", "true");
+    d.setAttribute("aria-busy", "true");
+  } else {
+    d.removeAttribute("data-skeleton");
+    d.removeAttribute("aria-busy");
+  }
+}
+
 /* ── last-reading cache ─────────────────────────────────────────────────
    Written on every successful live poll and read back only when the network
    fails, so the app degrades to "here is the last thing I knew" rather than an
@@ -375,6 +388,7 @@ function renderSnapshot(snap, offline) {
   renderSignal(snap.analysis || {});
   renderBridge(snap.bridge || {});
   if (snap.ticker) renderTicker(snap.ticker);
+  setSkeleton(false);
   if (!offline) return;
   offlineMode = true;
   const at = snap.at;
@@ -1324,6 +1338,7 @@ async function refresh() {
     renderBridge(br);
     maybeAlert(analysis);
     offlineMode = false;
+    setSkeleton(false);
     banner(aggregate === "ONLINE" ? "online"
       : aggregate === "OFFLINE" ? "offline" : "degraded",
       `${aggregate.toLowerCase()} · ${br.broker || "no source"}`);
@@ -1337,6 +1352,9 @@ async function refresh() {
       renderSnapshot(cached.snap, true);
     } else {
       offlineMode = true;
+      // Nothing cached and nothing live: stop pretending to load and show the
+      // honest empty readout under the error banner.
+      setSkeleton(false);
       banner("offline", "backend unreachable");
     }
   } finally {
@@ -1771,9 +1789,14 @@ function init() {
   window.addEventListener("orientationchange", () => setTimeout(updateTabFades, 150));
 
   // Paint the last reading first so a cold, offline start is never blank, then
-  // let the live poll overwrite it the moment the backend answers.
+  // let the live poll overwrite it the moment the backend answers. With no
+  // cached reading at all, show skeletons until the first live answer lands.
   const cached = loadLastRead();
-  if (cached) renderSnapshot(cached.snap, false);
+  if (cached) {
+    renderSnapshot(cached.snap, false);
+  } else {
+    setSkeleton(true);
+  }
 
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);

@@ -975,7 +975,7 @@ class OfflineCacheTest(unittest.TestCase):
         js = self._read("app.js")
         # In init(): restore first, then refresh. A live poll on a cold start
         # must not be the only thing standing between the user and a blank app.
-        restore = js.index("if (cached) renderSnapshot(cached.snap, false)")
+        restore = js.index("if (cached) {\n    renderSnapshot(cached.snap, false)")
         live = js.index("refresh();\n  setInterval")
         self.assertLess(restore, live)
 
@@ -996,6 +996,48 @@ class OfflineCacheTest(unittest.TestCase):
         sw = self._read("sw.js")
         self.assertIn('mode === "navigate"', sw)
         self.assertIn('caches.match("./index.html")', sw)
+
+
+class SkeletonTest(unittest.TestCase):
+    """A cold start must show placeholders, not a wall of '--' that reads as a
+    broken app. The placeholders must vanish once a reading paints, and must not
+    animate for a reader who asked for reduced motion."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_css_defines_skeleton_placeholders(self):
+        css = self._read("styles.css")
+        self.assertIn('html[data-skeleton="true"]', css)
+        # It must cover the readout values, not just the panel background.
+        anchor = css[css.index('html[data-skeleton="true"] .readout dd'):]
+        self.assertIn("color: transparent", anchor)
+        self.assertIn("shimmer", anchor)
+
+    def test_reduced_motion_neutralises_the_skeleton(self):
+        css = self._read("styles.css")
+        block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
+        block = block[:block.index("\n}\n")]
+        self.assertIn('html[data-skeleton="true"]', block)
+
+    def test_app_sets_and_clears_the_skeleton(self):
+        js = self._read("app.js")
+        self.assertIn("setSkeleton", js)
+        self.assertIn('d.setAttribute("data-skeleton"', js)
+        self.assertIn('d.removeAttribute("data-skeleton"', js)
+        # It must be cleared when a live reading lands and when a cached one
+        # paints, or the values would stay hidden forever.
+        self.assertIn("setSkeleton(false)", js)
+
+    def test_skeleton_is_only_shown_when_there_is_no_cached_reading(self):
+        js = self._read("app.js")
+        # In init(): if a cached reading exists, paint it; only otherwise show
+        # the skeleton. A cached start must not flash placeholders.
+        idx = js.index("const cached = loadLastRead();\n  if (cached) {")
+        window = js[idx:idx + 220]
+        self.assertIn("renderSnapshot(cached.snap, false)", window)
+        self.assertIn("setSkeleton(true)", window)
 
 
 if __name__ == "__main__":

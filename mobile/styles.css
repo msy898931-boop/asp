@@ -214,6 +214,48 @@ main { flex: 1; padding: 8px 14px 108px; }
   animation: shimmer 1.4s linear infinite;
   pointer-events: none;
 }
+
+/* ── skeleton placeholders ──────────────────────────────────────────────
+   A cold start used to read "--" everywhere, which looks like a broken app.
+   While a panel is fetching (or before the first reading arrives) its values
+   are hidden behind a soft block, so the eye sees "loading", not "empty".
+   The real value is still in the DOM (aria-busy says so); only the paint is
+   covered. `data-skeleton` on <html> means "no reading yet at all". */
+
+html[data-skeleton="true"] .readout dd,
+html[data-skeleton="true"] .levels dd,
+html[data-skeleton="true"] .bar b,
+html[data-skeleton="true"] .bar i,
+html[data-skeleton="true"] .signal-head .direction,
+html[data-skeleton="true"] .signal-head .regime,
+html[data-skeleton="true"] #sig-context,
+html[data-skeleton="true"] .ticker-price,
+html[data-skeleton="true"] .ticker-chg,
+html[data-skeleton="true"] .gauge-label .big {
+  color: transparent !important;
+  border-radius: 6px;
+  background: linear-gradient(100deg, var(--ink-3) 30%,
+              rgba(255,255,255,.07) 50%, var(--ink-3) 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+html[data-skeleton="true"] .readout dd,
+html[data-skeleton="true"] .levels dd,
+html[data-skeleton="true"] .gauge-label .big {
+  display: inline-block; min-width: 3.2em; min-height: 1em;
+}
+html[data-skeleton="true"] .bar i::after { content: none; }
+html[data-skeleton="true"] .signal-head .direction {
+  min-width: 5em; min-height: 1.6em;
+}
+html[data-skeleton="true"] .signal-head .regime { min-width: 4em; }
+html[data-skeleton="true"] .ticker-price,
+html[data-skeleton="true"] .ticker-chg { min-width: 4.5em; }
+html[data-skeleton="true"] .gauge-label .big { min-width: 4em; }
+
+/* The banner dot should not look like a live status while the first read is
+   still in flight. */
+html[data-skeleton="true"] .banner .dot { background: var(--flat); box-shadow: none; }
 @keyframes shimmer { from { background-position: 160% 0; } to { background-position: -60% 0; } }
 
 /* ── gauge ──────────────────────────────────────────────────────────── */
@@ -641,6 +683,18 @@ html[data-theme="light"] .tab[aria-selected="true"] { background: var(--ink-3); 
   /* The shimmer is motion; without it, show a quiet static tint instead of a
      frozen bright band across the panel. */
   .panel.loading::after { background: rgba(255,255,255,.03); }
+  html[data-skeleton="true"] .readout dd,
+  html[data-skeleton="true"] .levels dd,
+  html[data-skeleton="true"] .bar b,
+  html[data-skeleton="true"] .bar i,
+  html[data-skeleton="true"] .signal-head .direction,
+  html[data-skeleton="true"] .signal-head .regime,
+  html[data-skeleton="true"] #sig-context,
+  html[data-skeleton="true"] .ticker-price,
+  html[data-skeleton="true"] .ticker-chg,
+  html[data-skeleton="true"] .gauge-label .big {
+    background: var(--ink-3);
+  }
 }
 
 /* ── right-to-left (Arabic) ─────────────────────────────────────────── */

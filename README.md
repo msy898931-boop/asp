@@ -48,5 +48,34 @@ the `.apk` installs from the file. On first launch the `.apk` asks for the
 server address; enter the live PWA URL. The desktop bundles are a separate Qt
 build and are not part of the container image.
 
+## Access
+
+The live app is **keyed**. The backend sets `ASTRA_ACCESS_TOKEN` and the phone
+app shows a one-field unlock screen until the key is entered; the key is then
+kept in the `astra_key` cookie. A first visit without a key gets **HTTP 401** —
+that is the gate working, not a broken deploy. Ask the operator for the key.
+
+The gate is a single static key: enough to keep casual visitors out, not a real
+auth system (no expiry, no per-user accounts, no rate limit). Treat the live URL
+as private.
+
+## Tests
+
+Measured on this fork (2026-10-16):
+
+| Suite | Tests |
+| --- | --- |
+| `bot/` | 152 |
+| `tracker/` | 44 |
+| `research/` | 50 |
+| `akoan/` | 59 |
+| `advisor/` | 92 |
+| `mobile/` | 119 |
+| `bridge/telegram_bot/` | 91 |
+| **Total (Python)** | **607** |
+
+Plus 19 C++ test binaries. Run a suite with
+`python3 -m unittest discover -s <suite> -p "test_*.py"`.
+
 _All links are published by an AI agent (OpenHands) on behalf of @msy898931-boop._
 
