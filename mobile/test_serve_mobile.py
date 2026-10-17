@@ -1208,13 +1208,46 @@ class NarrowHeaderTest(unittest.TestCase):
 
     def test_footer_links_are_thumb_sized(self):
         css = self._read("styles.css")
-        # The APK and the two page links were 33px tall text pills, below the
+        # The APK and the three page links were 33px tall text pills, below the
         # 44px a thumb needs. They are now flex boxes with a 44px floor.
         for sel in (".apk-link", ".plans-link"):
             block = css[css.index(sel + " {"):]
             block = block[:block.index("}")]
             self.assertIn("display: inline-flex", block)
             self.assertIn("min-height: 44px", block)
+
+
+class SubPageOverflowTest(unittest.TestCase):
+    """The standalone pages (pricing, performance) must also fit a 320px phone.
+
+    Each has its own stylesheet, so the fix in styles.css never reached them.
+    performance.html cited repository paths inside <code> — long unbroken tokens
+    like research/PHASE0_VOLATILITY_DECISION.md — which no line-breaking rule
+    could split, so the page rendered 8px wider than a 320px screen and
+    scrolled sideways. The token is checked alongside the rule that tames it.
+    """
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_code_tokens_break_instead_of_widening_the_page(self):
+        css = self._read("performance.css")
+        block = css[css.index("code {"):]
+        block = block[:block.index("}")]
+        self.assertIn("overflow-wrap: anywhere", block)
+        self.assertIn("word-break: break-word", block)
+
+    def test_the_paths_that_need_breaking_are_still_cited(self):
+        html = self._read("performance.html")
+        # If these ever shrink to short tokens the rule above is still correct,
+        # but this is the reason it exists — assert the trigger is present.
+        self.assertIn("research/PHASE0_VOLATILITY_DECISION.md", html)
+
+    def test_every_page_reserves_the_notch_and_gesture_insets(self):
+        for name in ("index.html", "pricing.html", "performance.html",
+                     "terminal.html"):
+            self.assertIn("viewport-fit=cover", self._read(name), name)
 
 
 if __name__ == "__main__":

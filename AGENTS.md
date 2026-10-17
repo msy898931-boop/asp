@@ -53,7 +53,7 @@ for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
   python3 -m unittest discover -s "$d" -p "test_*.py"
 done
 python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
-# 958 tests total (152/44/50/59/92/159/94 + 308)
+# 961 tests total (152/44/50/59/92/162/94 + 308)
 ```
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style

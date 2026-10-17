@@ -90,7 +90,7 @@ Measured on this fork (2026-10-16):
 | `mobile/` | 151 |
 | `bridge/telegram_bot/` | 94 |
 | `tests/` (models, integration, features) | 308 |
-| **Total (Python)** | **958** |
+| **Total (Python)** | **961** |
 
 Plus 19 C++ test binaries (`ctest`). Run a suite with
 `python3 -m unittest discover -s <suite> -p "test_*.py"`. Every Python suite

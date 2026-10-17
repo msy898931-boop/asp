@@ -114,6 +114,10 @@ code {
   background: var(--ink-2); border: 1px solid var(--edge);
   padding: 1px 6px; border-radius: 6px; color: var(--gold);
   font-size: 12.5px;
+  /* The sources cite repository paths (research/PHASE0_VOLATILITY_DECISION.md)
+     — long unbroken tokens with no space to wrap at. Without this they push the
+     whole page 8px wider than a 320px phone. */
+  overflow-wrap: anywhere; word-break: break-word;
 }
 
 .foot {
