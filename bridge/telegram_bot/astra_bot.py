@@ -72,6 +72,25 @@ try:
 except ImportError:  # pragma: no cover - deployment-shape dependent
     news_engine = None
 
+# Web Push mirrors the phone app: the mobile package sits beside (repo) or one
+# level up from (container) the bot. Loaded best-effort, so the bot runs
+# unchanged when it is absent or when no VAPID keys are set.
+_WEBPUSH_CANDIDATES = (
+    os.environ.get("ASTRA_WEBPUSH_DIR", ""),
+    os.path.join(_HERE, "..", "..", "mobile"),         # repo: <root>/bridge/telegram_bot
+    os.path.join(_HERE, "..", "..", "..", "mobile"),   # container: /app/resources/bridge/telegram_bot
+)
+for _cand in _WEBPUSH_CANDIDATES:
+    _abs = os.path.abspath(_cand) if _cand else ""
+    if _abs and os.path.isfile(os.path.join(_abs, "webpush.py")):
+        if _abs not in sys.path:
+            sys.path.insert(0, _abs)
+        break
+try:
+    import webpush
+except ImportError:  # pragma: no cover - deployment-shape dependent
+    webpush = None
+
 TELEGRAM_API = "https://api.telegram.org"
 _POLL_TIMEOUT_SECONDS = 25
 _SEND_TIMEOUT_SECONDS = 10
@@ -676,12 +695,29 @@ class CommandRouter:
 # ──────────────────────────────── main loop ─────────────────────────────────
 
 
+def _push_mirror(text: str) -> None:
+    """Mirror an alert to Web Push subscribers, best-effort.
+
+    The phone app subscribes with /push/subscribe; this delivers the same alert
+    it would get in Telegram as a real push, so a backgrounded app still
+    notifies. Silently a no-op when webpush is missing or unconfigured — the
+    Telegram path is the one that must never fail.
+    """
+    if webpush is None:
+        return
+    try:
+        webpush.broadcast({"title": "ASTRA", "body": text, "tag": "astra-alert"})
+    except Exception as exc:  # noqa: BLE001 - push must never break the bot
+        print(f"[warn] web push: {exc}", file=sys.stderr)
+
+
 def _broadcast(client: TelegramClient, subs: Subscriptions, text: str) -> None:
     for chat in subs.all():
         try:
             client.send_message(chat, text)
         except RuntimeError as exc:
             print(f"[warn] send to {chat} failed: {exc}", file=sys.stderr)
+    _push_mirror(text)
 
 
 def poll_updates(client: TelegramClient, router: CommandRouter) -> None:
@@ -924,6 +960,7 @@ def _check_levels(api: AstraApi, levels: LevelStore,
             except RuntimeError as exc:
                 print(f"[warn] level alert to {chat_id} failed: {exc}",
                       file=sys.stderr)
+            _push_mirror(line)
 
 
 def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:

@@ -25,6 +25,23 @@ COPY tests ./tests
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
  && cmake --build build --target aura_backend_host -j"$(nproc)"
 
+# ───────────────────────── python deps stage ────────────────────────────────
+# Web Push is the one runtime feature that needs a third-party package: the
+# ECDH/AES-GCM crypto behind it is not in the standard library. Installing it in
+# its own stage keeps the compiler out of the runtime image. It stays optional:
+# without the VAPID keys, or without this directory, the service starts and
+# answers "not configured" exactly as before.
+FROM debian:bookworm-slim AS pydeps
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-pip \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN printf 'pywebpush==2.5.0\n' > /tmp/webpush-requirements.txt \
+ && python3 -m pip install --no-cache-dir --target /pylibs \
+      -r /tmp/webpush-requirements.txt \
+ && rm -f /tmp/webpush-requirements.txt
+
 # ──────────────────────────── runtime stage ─────────────────────────────────
 FROM debian:bookworm-slim
 
@@ -55,6 +72,12 @@ ENV ASTRA_DATA_SOURCE=live \
     ASTRA_LIVE_CANDLE_PAIR=PAXGUSD \
     ASTRA_REPLAY_CSV=/app/research/data/xauusd_m1/xauusd_m1_real.csv \
     ASTRA_REPLAY_SYMBOL=XAUUSD
+
+# Web Push crypto, from the pydeps stage. PYTHONPATH makes it importable by
+# both processes that need it: the phone-app server and the bot. Without the
+# VAPID keys the feature stays dormant, so this is a capability, not a default.
+COPY --from=pydeps /pylibs /app/pylibs
+ENV PYTHONPATH=/app/pylibs
 
 # The phone app (PWA) is served by the same process, on the same public port,
 # reverse-proxying /api/v1 and /bridge to the loopback backend. This makes the

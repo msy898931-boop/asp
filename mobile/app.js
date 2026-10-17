@@ -49,6 +49,9 @@ const STRINGS = {
     cached_offline_sub: "Reconnecting…",
     alerts_off: "Signal alerts off",
     alerts_on: "Alerts on — you'll be told when the state changes",
+    push_on: "Background alerts on — you'll be notified even when the app is closed",
+    push_off: "Background alerts off",
+    push_blocked: "Notifications are blocked in the browser settings",
     lang_toggle: "العربية",
     theme: "Theme", refresh: "Refresh", alerts: "Alerts",
     health: "System health", waiting: "waiting for data",
@@ -180,6 +183,9 @@ const STRINGS = {
     cached_offline_sub: "جارٍ إعادة الاتصال…",
     alerts_off: "تنبيهات الإشارة متوقفة",
     alerts_on: "التنبيهات مفعّلة — سنخبرك عند تغيّر حالة السوق",
+    push_on: "التنبيهات بالخلفية مفعّلة — سنخبرك حتى لو كان التطبيق مغلقًا",
+    push_off: "التنبيهات بالخلفية متوقفة",
+    push_blocked: "الإشعارات محظورة من إعدادات المتصفح",
     lang_toggle: "English",
     theme: "المظهر", refresh: "تحديث", alerts: "تنبيهات",
     health: "صحة النظام", waiting: "في انتظار البيانات",
@@ -1216,20 +1222,80 @@ function maybeAlert(analysis) {
   if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
 }
 
+/* ── background alerts (Web Push) ──────────────────────────────────────
+   Real push needs a VAPID key from the server. When the server has none
+   (/push.json says available:false) this is a silent no-op and the in-app
+   alerts stay the only channel — the same graceful degradation the AI tab
+   uses when no advisor key is set. Returns true only when a subscription
+   was actually registered, so the caller can tell the user which happened. */
+function urlBase64ToUint8Array(base64) {
+  const pad = "=".repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob((base64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+async function syncPush(on) {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+  let reg = swReg;
+  try {
+    if (!reg) reg = await navigator.serviceWorker.ready;
+  } catch (e) { return false; }
+  if (!reg || !reg.pushManager) return false;
+  let info;
+  try {
+    info = await (await fetch("/push.json", { cache: "no-store" })).json();
+  } catch (e) { return false; }
+  if (!info || !info.available || !info.public_key) return false;
+  try {
+    let sub = await reg.pushManager.getSubscription();
+    if (on) {
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(info.public_key),
+        });
+      }
+      await fetch("/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      return true;
+    }
+    if (sub) {
+      const endpoint = sub.endpoint;
+      await sub.unsubscribe();
+      await fetch("/push/unsubscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint }),
+      });
+    }
+    return false;
+  } catch (e) { return false; }   // permission denied, or no push service
+}
+
 async function toggleAlerts() {
   const btn = $("alerts");
   if (alertsOn) {
     alertsOn = false;
     btn.setAttribute("aria-pressed", "false");
     toast(T("alerts_off"));
+    syncPush(false);
     return;
   }
   alertsOn = true;
   btn.setAttribute("aria-pressed", "true");
-  toast(T("alerts_on"));
-  if ("Notification" in window && Notification.permission === "default") {
-    try { await Notification.requestPermission(); } catch (e) { /* ignore */ }
+  let pushed = false;
+  if ("Notification" in window) {
+    if (Notification.permission === "default") {
+      try { await Notification.requestPermission(); } catch (e) { /* ignore */ }
+    }
+    if (Notification.permission === "granted") pushed = await syncPush(true);
   }
+  toast(pushed ? T("push_on") : T("alerts_on"));
 }
 
 /* ── price levels ───────────────────────────────────────────────────── */

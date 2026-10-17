@@ -53,7 +53,7 @@ for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
   python3 -m unittest discover -s "$d" -p "test_*.py"
 done
 python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
-# 915 tests total (152/44/50/59/92/119/91 + 308)
+# 950 tests total (152/44/50/59/92/151/94 + 308)
 ```
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style
@@ -266,6 +266,7 @@ as root, so that is `/root/.astra`):
 | `telegram_subscribers.json` | chat ids that receive push alerts |
 | `price_levels.json` | per-chat price levels |
 | `entitlements.json` | per-chat free/pro tier |
+| `push_subscriptions.json` | phone devices that receive Web Push alerts |
 
 A restart (or a deploy) rebuilds these objects from those files, so the state
 survives only if the directory does. `render.yaml` mounts a persistent disk at
@@ -289,6 +290,16 @@ so a clone can move to a new deployment by setting two variables:
 - `ASTRA_GATE_MAX_FAILURES` / `ASTRA_GATE_WINDOW_S` / `ASTRA_GATE_LOCKOUT_S` —
   optional. Tune the gate's per-address failure limit (defaults 10 / 300 s /
   900 s). Only wrong keys are counted; a correct key clears the record.
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — optional. Enable Web Push (see
+  *Web Push* below). Both are base64url, unpadded; generate them locally for
+  free with `python3 -c "import webpush; print(webpush.generate_keys())"`. Unset
+  is the default: the phone keeps using its in-app alerts.
+- `VAPID_SUBJECT` — optional. The push-service contact claim; defaults to
+  `mailto:admin@example.com`. Apple is strict about it, so set a real `mailto:`
+  or `https:` value if you ship to iOS.
+- `ASTRA_PUSH_STORE` — optional. Where subscriptions are kept; defaults to
+  `~/.astra/push_subscriptions.json`, on the same persistent disk as the bot
+  heartbeat, so subscriptions survive a redeploy.
 
 The watchdog's repo comes from `GITHUB_REPOSITORY`, which GitHub sets in Actions
 automatically. Defaults remain the current Render host and fork, so nothing
@@ -1260,6 +1271,36 @@ backgrounded. The worker also has a `push` handler and a `notificationclick`
 handler that focuses the app. The page falls back to the constructor only where
 there is no worker. Bump the shell cache in `sw.js` whenever the worker changes,
 or the old one keeps being served.
+
+### Web Push: background alerts, free keys, optional by design
+
+The in-app alert above only fires while the app is open. **Web Push** delivers
+the same alert to a backgrounded or closed app: `mobile/webpush.py` stores each
+device's subscription and `astra_bot.py` mirrors every broadcast to it through
+`_push_mirror()`. The phone subscribes on the Alerts button (`syncPush()` in
+`app.js`) after asking `/push.json` for the server's VAPID key; `sw.js` already
+had the `push` handler that shows the notification.
+
+Everything about it is free. The VAPID key pair is generated locally with
+`webpush.generate_keys()` — no account, no service, no billing. Only the browser
+vendor's own push endpoint (FCM/APNs/Mozilla) is involved, and it is free too.
+
+It is **off by default and degrades cleanly**, exactly like the advisor without
+`GROQ_API_KEY`:
+
+- no VAPID keys → `/push.json` says `available:false`; `syncPush()` is a no-op
+  and the in-app alerts stay the only channel.
+- no `pywebpush` → same `available:false`. The library is the one third-party
+  runtime dependency in the tree; the module imports it lazily, so its absence
+  never stops the service from starting.
+
+Because the crypto is real ECDH/AES-GCM, `mobile/test_webpush.py` does not mock
+it: it stands up a local push service, subscribes a real client key pair,
+encrypts, and decrypts the captured body back to the original payload. The
+`container` CI job separately proves the image ships `pywebpush` (a source-tree
+test cannot). The routes are `/push.json`, `POST /push/subscribe` and
+`POST /push/unsubscribe`, all covered by the access gate when
+`ASTRA_ACCESS_TOKEN` is set.
 
 CI runs the `bot` suite too (alerts, watchdog, scanner); before, only tracker,
 advisor and the paid-tool layer were covered, so a broken alert could ship green.

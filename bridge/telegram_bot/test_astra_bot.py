@@ -254,6 +254,55 @@ class BroadcastTests(unittest.TestCase):
             bot._broadcast(client, subs, "hello")
             self.assertEqual(sorted(c for c, _ in client.sent), ["1", "2"])
 
+    def test_broadcast_mirrors_to_web_push(self):
+        """Every Telegram alert is also pushed to the phone's subscribers."""
+        calls = []
+
+        class _FakePush:
+            @staticmethod
+            def broadcast(payload):
+                calls.append(payload)
+                return {"configured": True, "sent": 1, "removed": 0}
+
+        saved = bot.webpush
+        bot.webpush = _FakePush
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                subs = bot.Subscriptions(Path(d) / "s.json")
+                subs.add("1")
+                bot._broadcast(FakeClient(), subs, "signal")
+        finally:
+            bot.webpush = saved
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["body"], "signal")
+
+    def test_push_failure_never_breaks_the_telegram_send(self):
+        """Web Push is best-effort: a broken one must not stop the alert."""
+        class _BrokenPush:
+            @staticmethod
+            def broadcast(payload):
+                raise RuntimeError("push service down")
+
+        saved = bot.webpush
+        bot.webpush = _BrokenPush
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                subs = bot.Subscriptions(Path(d) / "s.json")
+                subs.add("1")
+                client = FakeClient()
+                bot._broadcast(client, subs, "hello")  # must not raise
+        finally:
+            bot.webpush = saved
+        self.assertEqual([c for c, _ in client.sent], ["1"])
+
+    def test_push_is_a_noop_without_the_module(self):
+        saved = bot.webpush
+        bot.webpush = None
+        try:
+            bot._push_mirror("anything")  # must not raise
+        finally:
+            bot.webpush = saved
+
 
 class PaidToolTests(unittest.TestCase):
     """The free/pro gate and price-level commands, end to end through the router."""

@@ -63,6 +63,16 @@ rate limited — after `ASTRA_GATE_MAX_FAILURES` (10) failed tries within
 counted, and a plain visit carrying no key is not a guess, so a real user is
 not locked out by mistyping or reloading. Treat the live URL as private.
 
+## Alerts
+
+The phone app has an **Alerts** button. With it on, a state change (a new signal,
+a volatility crossing, a price level you set) raises an in-app notification, and
+— when the operator has set the Web Push keys — a real push that reaches the app
+even when it is closed. Web Push is free: the key pair is generated locally, no
+account or service is involved, and the feature stays off (falling back to
+in-app alerts) until `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` are set. See
+*Web Push* in `AGENTS.md`.
+
 ## Tests
 
 Measured on this fork (2026-10-16):
@@ -74,10 +84,10 @@ Measured on this fork (2026-10-16):
 | `research/` | 50 |
 | `akoan/` | 59 |
 | `advisor/` | 92 |
-| `mobile/` | 128 |
-| `bridge/telegram_bot/` | 91 |
+| `mobile/` | 151 |
+| `bridge/telegram_bot/` | 94 |
 | `tests/` (models, integration, features) | 308 |
-| **Total (Python)** | **924** |
+| **Total (Python)** | **950** |
 
 Plus 19 C++ test binaries (`ctest`). Run a suite with
 `python3 -m unittest discover -s <suite> -p "test_*.py"`. Every Python suite

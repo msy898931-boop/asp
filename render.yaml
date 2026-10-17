@@ -26,6 +26,12 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false          # free Groq key; enables the AI advisor tab. Empty = "not configured"
+      - key: VAPID_PUBLIC_KEY
+        sync: false          # free, generated locally; both empty = Web Push off (in-app alerts only)
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false          # optional contact claim, e.g. mailto:you@example.com
       - key: ASTRA_UPGRADE_URL
         sync: false          # Stripe Payment Link; empty = gate off (all free)
       - key: ASTRA_FREE_LEVELS

@@ -5,7 +5,7 @@
    offline. The app keeps the *last reading* itself (localStorage), so offline
    it opens to that reading rather than an empty panel. */
 
-const SHELL = "astra-shell-v30";
+const SHELL = "astra-shell-v31";
 const ASSETS = [
   "./",
   "./index.html",
@@ -45,6 +45,10 @@ self.addEventListener("fetch", (event) => {
                url.pathname.includes("/tracker/") ||
                url.pathname.includes("/advisor/");
   if (live || event.request.method !== "GET") return; // network only
+
+  // The push capability reading must be fresh, never cached: a stale one would
+  // tell the app there is no VAPID key after the operator has set one.
+  if (url.pathname.endsWith("/push.json")) return;
 
   // The APK download must reach the network untouched: serving a cached copy
   // would mask a fresh build, and a binary has no business in the shell cache.

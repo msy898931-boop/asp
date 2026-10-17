@@ -1,6 +1,9 @@
 # Development-only tooling for the quality gate. The shipped service runs on
-# the standard library alone, so nothing here is needed at runtime.
+# the standard library alone, so nothing here is needed at runtime — with one
+# deliberate exception: pywebpush, which the Web Push tests exercise for real
+# (encrypt/decrypt round trip) and which the service imports lazily.
 
 ruff==0.17.1
 mypy==2.4.0
 coverage==7.16.2
+pywebpush==2.5.0

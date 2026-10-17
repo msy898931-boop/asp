@@ -43,6 +43,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the Web Push crypto (the one non-stdlib runtime dep)
+        # Only the Web Push tests need it; the shipped service imports it
+        # lazily and stays on the standard library when it is absent.
+        run: python3 -m pip install pywebpush==2.5.0
+
       - name: Syntax-check the phone app
         run: |
           node --check mobile/app.js
@@ -54,6 +63,9 @@ jobs:
 
       - name: Test the phone server's volatility route
         run: python3 mobile/test_serve_mobile.py
+
+      - name: Test Web Push (store, routes, real encryption round trip)
+        run: python3 mobile/test_webpush.py
 
       - name: Test the web terminal
         run: python3 mobile/test_terminal.py
@@ -158,4 +170,34 @@ jobs:
           assert body.get("scored", 0) > 0, body
           assert (body.get("coverage") or {}).get("events", 0) > 0, body
           print("container akoan:", body["verdict"], body["scored"], "scored")
+          PY
+
+      - name: The image must ship the Web Push crypto
+        # /push.json reports available:true only when the VAPID keys are set
+        # AND pywebpush imports. A source-tree test cannot prove the library
+        # made it into the image, so ask the image itself with throwaway keys.
+        # These keys are CI-only and deliberately public; they are not a secret.
+        run: |
+          docker run -d --name astra-push -p 8081:8080 \
+            -e ASTRA_DATA_SOURCE=replay \
+            -e VAPID_PUBLIC_KEY=BOik3kRY12mH7VKvIf5CQjv3xHn8HnCQlI1GLsHY-3t92TXwUazvQPYz1QwUpIWIn0HO7gsYY4pYA5e5hMFXRmc \
+            -e VAPID_PRIVATE_KEY=xo-_slvMsJVMFcVVGLF89nBs9SfcqXk1S4woMl8TAIM \
+            astra-ci
+          trap 'docker logs astra-push || true; docker rm -f astra-push || true' EXIT
+          python3 - <<'PY'
+          import json, time, urllib.request
+          url = "http://127.0.0.1:8081/push.json"
+          body = None
+          for _ in range(40):
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as fh:
+                      body = json.load(fh)
+                  if body.get("available"):
+                      break
+              except Exception:
+                  body = None
+              time.sleep(3)
+          assert body and body.get("available"), body
+          assert body.get("public_key"), body
+          print("container web push: available, key present")
           PY

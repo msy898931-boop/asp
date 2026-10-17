@@ -38,6 +38,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
+# Web Push lives in a sibling module. It imports only the standard library at
+# module load; the third-party crypto package it needs is imported lazily
+# inside, so a host without it still starts and answers "not configured".
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+import webpush  # noqa: E402
+
 # Where /astra.apk points when no local build is staged: the rolling release
 # the Android workflow republishes on every mobile/android change. Set
 # ASTRA_REPO (owner/repo) or ASTRA_APK_URL to point at a different fork.
@@ -582,6 +589,8 @@ class Handler(BaseHTTPRequestHandler):
             self._version_json()
         elif path == "/bot.json":
             self._bot_json()
+        elif path == "/push.json":
+            self._push_json()
         elif path == "/vol.json":
             self._volatility()
         elif path == "/akoan.json":
@@ -601,6 +610,37 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         self.do_GET()
+
+    def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        denied = self._gate_check()
+        if denied is not None:
+            self._unauthorized(denied)
+            return
+        if path == "/push/subscribe":
+            self._push_subscribe()
+        elif path == "/push/unsubscribe":
+            self._push_unsubscribe()
+        else:
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+
+    def _read_json_body(self) -> dict | None:
+        """A small JSON body, or None when it is missing, huge or malformed.
+
+        Bounded because the body arrives from the network: a length cap keeps a
+        stranger from making the server buffer an unbounded payload.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError:
+            return None
+        if length <= 0 or length > 8192:
+            return None
+        try:
+            data = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return None
+        return data if isinstance(data, dict) else None
 
     # -- access control -----------------------------------------------------
 
@@ -774,7 +814,44 @@ class Handler(BaseHTTPRequestHandler):
         """Whether the interactive Telegram poller is alive right now."""
         self._send(200, bot_heartbeat_body(), "application/json; charset=utf-8")
 
-    # -- volatility reading -------------------------------------------------
+    # -- web push -----------------------------------------------------------
+
+    def _push_json(self) -> None:
+        """Whether Web Push is on, and the VAPID key the phone subscribes with.
+
+        `available: false` is the normal state on a host with no keys: the
+        phone then keeps using its in-app alerts instead of erroring.
+        """
+        self._send(200, webpush.body(), "application/json; charset=utf-8")
+
+    def _push_subscribe(self) -> None:
+        sub = self._read_json_body()
+        if not sub or not webpush.valid_subscription(sub):
+            self._send(400, b'{"error":"invalid subscription"}',
+                       "application/json; charset=utf-8")
+            return
+        try:
+            webpush.subscribe(sub)
+        except OSError:
+            self._send(503, b'{"error":"could not store subscription"}',
+                       "application/json; charset=utf-8")
+            return
+        self._send(200, b'{"ok":true}', "application/json; charset=utf-8")
+
+    def _push_unsubscribe(self) -> None:
+        body = self._read_json_body()
+        endpoint = (body or {}).get("endpoint", "")
+        if not isinstance(endpoint, str) or not endpoint:
+            self._send(400, b'{"error":"invalid endpoint"}',
+                       "application/json; charset=utf-8")
+            return
+        try:
+            webpush.unsubscribe(endpoint)
+        except OSError:
+            self._send(503, b'{"error":"could not store subscription"}',
+                       "application/json; charset=utf-8")
+            return
+        self._send(200, b'{"ok":true}', "application/json; charset=utf-8")
 
     def _volatility(self) -> None:
         """Re-score the bot's calibrated model for the phone.
