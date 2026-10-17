@@ -126,6 +126,11 @@ def ensure_bundle(include_replay: bool = False):
     such tree, so the host cannot start. Staging the real bridge sources + (when
     replaying) the MetaTrader5 shim makes this harness self-contained. Writes only
     under build/; never src/. Returns files created so replay staging can revert.
+
+    The staged set is the bridge's import closure, not a hand-picked subset:
+    bridge_service imports live_client and replay_client unconditionally, so a
+    list missing either one raises ModuleNotFoundError in the child and the host
+    never binds (which is exactly how E05 failed on a clean CI build).
     """
     target = os.path.join(os.path.dirname(HOST_BIN), "resources", "bridge",
                           "mt5_python")
@@ -133,8 +138,8 @@ def ensure_bundle(include_replay: bool = False):
     created = []
     sources = [
         (os.path.join(REPO, "bridge", "mt5_python", name), name)
-        for name in ("bridge_service.py", "mt5_client.py", "schemas.py",
-                     "mt5_csv_feed.py")
+        for name in ("bridge_service.py", "live_client.py", "mt5_client.py",
+                     "replay_client.py", "schemas.py", "mt5_csv_feed.py")
     ]
     if include_replay:
         sources.append((
@@ -268,14 +273,17 @@ def main() -> int:
     port = free_port()
     # No --once: the host stops right after its first cycle and the API would be
     # unreachable. Run it as a server and terminate it ourselves.
+    log_fd, log_path = tempfile.mkstemp(prefix="t13-host-", suffix=".log")
     proc = subprocess.Popen(
         [HOST_BIN, "--api-port", str(port)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdout=log_fd, stderr=subprocess.STDOUT,
         start_new_session=True,
     )
+    os.close(log_fd)  # Popen duplicated it for the child
     base = f"http://127.0.0.1:{port}"
     try:
-        wait_for(base + "/api/v1/system/state")
+        wait_for(base + "/api/v1/system/state", attempts=150, delay=0.1,
+                 log_path=log_path)
 
         for route, spec in schema["endpoints"].items():
             method, _, path = route.partition(" ")
@@ -333,6 +341,8 @@ def main() -> int:
               f"ready={data.get('ready')} bridge_state={data.get('bridge_state')}")
     finally:
         reap(proc)
+        with contextlib.suppress(OSError):
+            os.remove(log_path)
 
     # Evidential (E05) path: opt-in so the default frozen-suite run stays green.
     # Enable with T13_REAL_DATA=1 (or by exporting FAKE_MT5_CSV). When enabled it
