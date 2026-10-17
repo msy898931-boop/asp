@@ -167,13 +167,12 @@ def run_real_data_checks(csv_path: str, schema: dict) -> None:
     # bind (a cold or loaded CI runner, a missing shim), the old code reported
     # only "connection refused" and hid why; wait_for now prints the tail.
     log_fd, log_path = tempfile.mkstemp(prefix="t13-host-", suffix=".log")
-    os.close(log_fd)
-    log = open(log_path, "wb")
     proc = subprocess.Popen(
         [HOST_BIN, "--api-port", str(port), "--dev-system-python"],
-        env=env, stdout=log, stderr=subprocess.STDOUT,
+        env=env, stdout=log_fd, stderr=subprocess.STDOUT,
         start_new_session=True,
     )
+    os.close(log_fd)  # Popen duplicated it for the child
     base = f"http://127.0.0.1:{port}"
     try:
         # 15s, not 5s: the host loads the full committed corpus and the MT5 shim
