@@ -15,6 +15,7 @@ The years are configurable, but the split is always chronological and disjoint.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, List, Sequence, Tuple
@@ -67,7 +68,7 @@ def year_of(timestamp: datetime) -> int:
 
 def _sorted_unique(samples: Iterable[Sample]) -> List[Sample]:
     ordered = sorted(samples, key=lambda s: s.timestamp)
-    for previous, current in zip(ordered, ordered[1:]):
+    for previous, current in itertools.pairwise(ordered):
         if current.timestamp == previous.timestamp:
             raise SplitError(
                 "duplicate timestamp in sample set: " + current.timestamp.isoformat()
@@ -201,7 +202,7 @@ def assert_causal(split: Split) -> None:
         ("oos", split.oos),
     ]
     present = [(name, rows) for name, rows in partitions if rows]
-    for (name_a, rows_a), (name_b, rows_b) in zip(present, present[1:]):
+    for (name_a, rows_a), (name_b, rows_b) in itertools.pairwise(present):
         last_a = rows_a[-1].timestamp
         first_b = rows_b[0].timestamp
         if last_a >= first_b:

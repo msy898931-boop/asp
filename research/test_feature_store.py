@@ -24,8 +24,9 @@ for extra in (os.path.join(REPO, "tracker"), FEATURES_REAL):
         sys.path.insert(0, extra)
 
 import build_store  # noqa: E402
-import features  # noqa: E402
 import study  # noqa: E402
+
+import features  # noqa: E402
 
 
 def write_m1_csv(path: str, start: int, count: int, step: int = 60) -> None:

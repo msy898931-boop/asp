@@ -17,9 +17,9 @@ from src.models.features import (
     PER_TIMEFRAME_BOUNDS,
     PER_TIMEFRAME_DISCRETE,
     TIMEFRAMES,
+    CrossFeatureVector,
     FeatureSet,
     FeatureVector,
-    CrossFeatureVector,
     parse_feature_set_json,
 )
 from src.models.splits import SplitError
@@ -34,7 +34,7 @@ def per_values(**overrides):
 
 
 def cross_values(**overrides):
-    values = {name: 0.0 for name in CROSS_BOUNDS}
+    values = dict.fromkeys(CROSS_BOUNDS, 0.0)
     for name in CROSS_DISCRETE:
         values[name] = 0.0
     values.update(overrides)

@@ -53,24 +53,23 @@ import math
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Dict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import numpy as np  # noqa: E402
+import numpy as np
 
-from scripts.feature_lab import (  # noqa: E402
+from scripts.feature_lab import (
     evaluate_split,
     with_extra,
 )
-from src.models.dataset import build_labeled_examples  # noqa: E402
-from src.models.realdata import load_corpus  # noqa: E402
-from src.models.splits import (  # noqa: E402
+from src.models.dataset import build_labeled_examples
+from src.models.realdata import load_corpus
+from src.models.splits import (
     DEVELOPMENT_YEARS,
     OOS_YEARS,
     VALIDATION_YEARS,
     Sample,
-    Split,
     chronological_split,
 )
 
@@ -99,7 +98,7 @@ def _load(path: str, has_volume: bool):
 def _flow_features(year: int) -> Dict[int, Dict[str, float]]:
     """Causal volume/spread features per M1-bar-closed decision instant."""
     ts, o, h, l, c, vol = _load(f"{DATA}/{year}.csv.gz", True)
-    ats, ao, ah, al, ac, _ = _load(f"{DATA}/ask/{year}.csv.gz", False)
+    ats, _ao, _ah, _al, ac, _ = _load(f"{DATA}/ask/{year}.csv.gz", False)
     ask = dict(zip(ats.tolist(), ac.tolist()))
 
     order = np.argsort(ts, kind="stable")
@@ -179,7 +178,7 @@ def main(argv=None) -> int:
     missing = sum(1 for e in base if e.timestamp not in flow)
     if missing:
         print(f"  WARNING: {missing} corpus rows have no flow features (gap)")
-    flow_extra = [flow.get(e.timestamp, {k: 0.0 for k in next(iter(flow.values()))})
+    flow_extra = [flow.get(e.timestamp, dict.fromkeys(next(iter(flow.values())), 0.0))
                   for e in base]
 
     import random

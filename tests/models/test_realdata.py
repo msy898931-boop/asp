@@ -134,9 +134,8 @@ class LoadCorpusTest(unittest.TestCase):
             realdata.load_corpus("/no/such/dir")
 
     def test_empty_dir(self):
-        with tempfile.TemporaryDirectory() as d:
-            with self.assertRaises(SplitError):
-                realdata.load_corpus(d)
+        with tempfile.TemporaryDirectory() as d, self.assertRaises(SplitError):
+            realdata.load_corpus(d)
 
     def test_missing_close_is_an_error_not_interpolation(self):
         rows = _corpus_rows(per_year=2)

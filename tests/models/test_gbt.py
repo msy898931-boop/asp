@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.models.gbt import GBTModel, Tree, fit_gbt
+from src.models.gbt import Tree, fit_gbt
 from src.models.splits import SplitError
 
 

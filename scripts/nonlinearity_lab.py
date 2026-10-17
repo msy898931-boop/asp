@@ -36,21 +36,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import math
 import os
 import sys
 from typing import List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import numpy as np  # noqa: E402
-from sklearn.ensemble import HistGradientBoostingClassifier  # noqa: E402
+import numpy as np
+from sklearn.ensemble import HistGradientBoostingClassifier
 
-from scripts.feature_lab import time_features  # noqa: E402
-from src.models.calibrators import fit_calibrator  # noqa: E402
-from src.models.calibration import calibration_report  # noqa: E402
-from src.models.dataset import feature_columns, to_matrix  # noqa: E402
-from src.models.realdata import load_corpus  # noqa: E402
+from scripts.feature_lab import time_features
+from src.models.calibration import calibration_report
+from src.models.calibrators import fit_calibrator
+from src.models.realdata import load_corpus
 
 
 def _logit(p: np.ndarray) -> List[float]:

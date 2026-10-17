@@ -36,6 +36,7 @@ binary; never mutates anything.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -51,8 +52,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, os.path.join(REPO, "src", "models"))
-import mock_api  # noqa: E402
 import contract_checker  # noqa: E402
+import mock_api  # noqa: E402
 import schema_shape  # noqa: E402
 
 HOST_BIN = os.path.join(REPO, "build", "aura_backend_host")
@@ -206,7 +207,7 @@ def run_real_data_checks(csv_path: str, schema: dict) -> None:
 
         # Frozen v1 contract still holds with real data on every route.
         for route, spec in schema["endpoints"].items():
-            method, _, path = route.partition(" ")
+            _method, _, path = route.partition(" ")
             live_path = path.replace("{tf}", "M15")
             try:
                 status, body = fetch(base + live_path)
@@ -222,10 +223,8 @@ def run_real_data_checks(csv_path: str, schema: dict) -> None:
     finally:
         reap(proc)
         for path in staged:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(path)
-            except OSError:
-                pass
 
 
 def main() -> int:

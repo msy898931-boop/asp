@@ -9,7 +9,6 @@ from __future__ import annotations
 import unittest
 
 from src.models.calibration import (
-    BRIER_BASELINE,
     CalibrationReport,
     brier_score,
     brier_skill_score,

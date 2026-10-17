@@ -6,7 +6,6 @@ import math
 import unittest
 
 from src.models.logistic import (
-    LogisticModel,
     Standardizer,
     accuracy,
     fit_logistic,

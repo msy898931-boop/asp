@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import sys
 import tempfile
@@ -43,7 +42,6 @@ def main() -> int:
 
     print("Parity: packaging manifest vs C++ runtime constants")
     pkg_h = read(os.path.join(REPO, "src/platform/windows/PackagingConfig.h"))
-    pkg_cpp = read(os.path.join(REPO, "src/platform/windows/PackagingConfig.cpp"))
     pathres = read(os.path.join(REPO, "src/platform/windows/PathResolver.cpp"))
     resolver_h = read(os.path.join(REPO, "src/platform/windows/PathResolver.h"))
 
@@ -85,7 +83,7 @@ def main() -> int:
     print("Staging: build and verify a bundle")
     out = tempfile.mkdtemp(prefix="astra-bundle-")
     try:
-        report = bundle.stage(out)
+        bundle.stage(out)
         check("bundle report written", os.path.isfile(os.path.join(out, "bundle_report.json")))
         check("bridge_service.py staged",
               os.path.isfile(os.path.join(out, rel["bridge_dir"], "bridge_service.py")))

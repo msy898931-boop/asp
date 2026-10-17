@@ -21,7 +21,8 @@ import mock_api  # noqa: E402
 
 HOST = os.path.join(REPO, "build", "aura_backend_host")
 OUT = os.path.join(REPO, "coordination", "agent-c", "host_leaf_keys.json")
-schema = json.load(open(mock_api.SCHEMA_PATH))
+with open(mock_api.SCHEMA_PATH, encoding="utf-8") as fh:
+    schema = json.load(fh)
 
 
 def free_port():
@@ -83,7 +84,7 @@ try:
         try:
             fetch(base + "/api/v1/system/state")
             break
-        except Exception:
+        except Exception:  # noqa: BLE001
             time.sleep(0.1)
 
     routes = {}

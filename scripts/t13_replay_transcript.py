@@ -17,9 +17,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
-import socket
 import subprocess
 import sys
 import time
@@ -118,7 +118,7 @@ def run_transcript(out_path: str) -> int:
             _, _, path = route.partition(" ")
             try:
                 status, body = fetch(base + path)
-            except urllib.error.HTTPError as exc:  # noqa: PERF203
+            except urllib.error.HTTPError as exc:
                 entry["steps"].append({
                     "stage": stage, "route": route, "label": label,
                     "status": exc.code, "body": None,
@@ -147,10 +147,8 @@ def run_transcript(out_path: str) -> int:
     finally:
         harness.reap(proc)
         for path in staged:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(path)
-            except OSError:
-                pass
 
     write_transcript(out_path, entry)
     ok = bool(entry.get("rule_c", {}).get("gate_closed")) and all(

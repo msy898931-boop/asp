@@ -18,6 +18,7 @@ This module contains no modelling and publishes no probability.
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import List, Mapping, Sequence, Tuple
 
@@ -70,7 +71,7 @@ def build_labeled_examples(
         )
 
     stamps = [fs.asOfBarOpenSec for fs in feature_sets]
-    for previous, current in zip(stamps, stamps[1:]):
+    for previous, current in itertools.pairwise(stamps):
         if current <= previous:
             raise SplitError(
                 "feature snapshots must be strictly increasing in time; "
@@ -171,9 +172,9 @@ def assert_partitions_separated(named_partitions) -> None:
 
 def purge_split(
     examples: Sequence[LabeledExample],
-    development_years: Sequence[int] = None,
-    validation_years: Sequence[int] = None,
-    oos_years: Sequence[int] = None,
+    development_years: Sequence[int] | None = None,
+    validation_years: Sequence[int] | None = None,
+    oos_years: Sequence[int] | None = None,
 ) -> PurgedSplit:
     """Chronological split, then drop seam rows whose label window crosses into
     the next partition.

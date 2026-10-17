@@ -51,8 +51,8 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 FIXTURES = os.path.join(REPO, "tests", "fixtures", "api_v1")
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, os.path.join(REPO, "src", "models"))
-import mock_api  # noqa: E402
 import contract_checker  # noqa: E402
+import mock_api  # noqa: E402
 
 MOCK = os.path.join(REPO, "scripts", "mock_api.py")
 
@@ -190,7 +190,7 @@ def main() -> int:
             live_path = path.replace("{tf}", "M15")
             try:
                 status, ctype, body = fetch(server.base + live_path)
-            except urllib.error.HTTPError as exc:  # noqa: BLE001
+            except urllib.error.HTTPError as exc:
                 check(f"e2e {route} reachable", False, f"HTTP {exc.code}")
                 continue
             check(f"e2e {route} status 200", status == 200, str(status))

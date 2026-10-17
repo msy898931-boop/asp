@@ -79,7 +79,7 @@ def main() -> int:
             try:
                 t = _parse_time(cols[0])
                 o, h, l, c = (float(cols[i]) for i in (1, 2, 3, 4))
-                v = int(round(float(cols[5]))) if len(cols) > 5 else 0
+                v = round(float(cols[5])) if len(cols) > 5 else 0
             except (ValueError, IndexError) as exc:
                 skipped.append((n, str(exc)))
                 continue

@@ -9,6 +9,7 @@ Run: python3 -m unittest discover -s research -p "test_*.py"
 
 from __future__ import annotations
 
+import itertools
 import math
 import os
 import sys
@@ -19,8 +20,7 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from research.multi_trade_probe import (load_m15, metrics,  # noqa: E402
-                                        precompute, replay_multi)
+from research.multi_trade_probe import load_m15, metrics, precompute, replay_multi  # noqa: E402
 from tracker import replay  # noqa: E402
 
 
@@ -69,7 +69,7 @@ class ReplayMultiMatchesLiveRuleTests(unittest.TestCase):
         many = replay_multi(bars, decisions, 5)
         spans = [(s.time, s.resolved_time) for s in many]
         overlapped = any(next_start < prev_end
-                         for (_, prev_end), (next_start, _) in zip(spans, spans[1:]))
+                         for (_, prev_end), (next_start, _) in itertools.pairwise(spans))
         self.assertTrue(overlapped, "5 concurrent should produce overlapping ideas")
 
 

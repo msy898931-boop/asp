@@ -10,7 +10,6 @@ Exit 0 = conformant. Reads scripts/mock_api.py + the frozen schema; no network.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 

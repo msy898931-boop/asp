@@ -55,7 +55,7 @@ def _feature_offset(name: str, index: int) -> float:
 def _synthetic_features(i: int) -> dict:
     state = _latent(i)
     values = {}
-    for name, (low, high) in PER_TIMEFRAME_BOUNDS.items():
+    for name, (low, _high) in PER_TIMEFRAME_BOUNDS.items():
         raw = state * (0.3 + 0.7 * _feature_offset(name, i % 17))
         values[name] = _bounded_signed(raw) if low < 0 else _bounded_unit(raw)
     for name in PER_TIMEFRAME_DISCRETE:

@@ -26,8 +26,8 @@ ROOT = os.path.dirname(HERE)
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import telegram_bot as bot  # noqa: E402
 import astra_env  # noqa: E402
+import telegram_bot as bot  # noqa: E402
 
 # Where the advisor lives. Defaults to the deployed service; point it at
 # loopback for local runs with ASTRA_REVIEW_URL.

@@ -48,7 +48,7 @@ def _label(event: dict) -> str:
 
 
 def _minutes(delta_seconds: float) -> int:
-    return int(round(abs(delta_seconds) / 60.0))
+    return round(abs(delta_seconds) / 60.0)
 
 
 def blackout_event(events: list[dict], now: float,
@@ -66,9 +66,9 @@ def blackout_event(events: list[dict], now: float,
         at = event.get("at_utc")
         if at is None:
             continue
-        if at - before_min * 60 <= now <= at + after_min * 60:
-            if hit is None or at > hit.get("at_utc", 0):
-                hit = event
+        if (at - before_min * 60 <= now <= at + after_min * 60
+                and (hit is None or at > hit.get("at_utc", 0))):
+            hit = event
     return hit
 
 
@@ -82,9 +82,9 @@ def upcoming_event(events: list[dict], now: float,
         at = event.get("at_utc")
         if at is None or at < now:
             continue
-        if at - now <= horizon_min * 60:
-            if best is None or at < best.get("at_utc", 0):
-                best = event
+        if (at - now <= horizon_min * 60
+                and (best is None or at < best.get("at_utc", 0))):
+            best = event
     return best
 
 

@@ -18,9 +18,9 @@ synthetic and labelled as such.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Sequence
+from typing import List, Sequence, Tuple
 
-from src.models.costs import CostTier, cost_tiers, tier_by_name
+from src.models.costs import CostTier, cost_tiers, tier_by_name  # noqa: F401 (re-exported)
 from src.models.splits import SplitError
 
 # The canonical cost tiers live in `src.models.costs` (T20). Re-exported here so

@@ -68,7 +68,7 @@ def _headlines() -> list[dict]:
     an error — the digest simply carries no headlines.
     """
     try:
-        import ai_advisor  # noqa: WPS433 (deliberate lazy import)
+        import ai_advisor
     except ImportError:
         return []
     try:
@@ -105,7 +105,7 @@ def _upcoming(events: list[dict], now: float) -> list[dict]:
             "country": event.get("country") or "",
             "importance": event.get("importance"),
             "at_utc": at,
-            "in_minutes": int(round((at - now) / 60.0)),
+            "in_minutes": round((at - now) / 60.0),
             "forecast": event.get("forecast"),
             "previous": event.get("previous"),
         })
@@ -124,7 +124,7 @@ def _released(events: list[dict], now: float) -> list[dict]:
             "title_ar": event.get("title_ar") or event.get("title") or "",
             "country": event.get("country") or "",
             "at_utc": event.get("at_utc"),
-            "minutes_ago": int(round((now - (event.get("at_utc") or now)) / 60.0)),
+            "minutes_ago": round((now - (event.get("at_utc") or now)) / 60.0),
             "actual": event.get("actual"),
             "forecast": event.get("forecast"),
             "previous": event.get("previous"),
@@ -149,7 +149,7 @@ def _window(events: list[dict], now: float) -> dict:
             "title_ar": active.get("title_ar") or active.get("title") or "",
             "country": active.get("country") or "",
             "at_utc": at,
-            "in_minutes": int(round((at - now) / 60.0)),
+            "in_minutes": round((at - now) / 60.0),
         }
     else:
         soon = win.upcoming_event(events, now)
@@ -160,7 +160,7 @@ def _window(events: list[dict], now: float) -> dict:
                 "title_ar": soon.get("title_ar") or soon.get("title") or "",
                 "country": soon.get("country") or "",
                 "at_utc": soon.get("at_utc"),
-                "in_minutes": int(round((soon.get("at_utc") - now) / 60.0)),
+                "in_minutes": round((soon.get("at_utc") - now) / 60.0),
             }
         else:
             state, event = "clear", None

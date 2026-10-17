@@ -393,7 +393,7 @@ def explain_last_bar(bars: list[dict], cost_usd: float = DEFAULT_COST_USD,
     no-trade verdict carrying the engine's read of the market. It always says
     something, so 'no signal' is never a blank.
     """
-    signals, status = _replay(bars, cost_usd, horizon_bars, cooldown_bars)
+    _signals, status = _replay(bars, cost_usd, horizon_bars, cooldown_bars)
     out = dict(status)
     out["bar_time"] = bars[-1]["time"] if bars else None
     out["bars"] = len(bars)
@@ -442,7 +442,7 @@ def _bucket(scored: list[Signal], key: str) -> dict:
         name = getattr(s, key, None) or "UNKNOWN"
         g = groups.setdefault(name, {"wins": 0, "losses": 0})
         g["wins" if s.outcome == "TARGET" else "losses"] += 1
-    for name, g in groups.items():
+    for g in groups.values():
         n = g["wins"] + g["losses"]
         g["scored"] = n
         if n >= MIN_BUCKET:

@@ -10,6 +10,7 @@ Run: python3 -m unittest discover -s research -p "test_*.py"
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import sys
@@ -52,7 +53,7 @@ class MonthWindowTests(unittest.TestCase):
 
     def test_windows_are_contiguous(self):
         w = ledger.month_windows(2023)
-        for (a1, b1), (a2, _) in zip(w, w[1:]):
+        for (_a1, b1), (a2, _) in itertools.pairwise(w):
             self.assertEqual(b1, a2)
 
     def test_december_ends_at_next_year(self):

@@ -163,7 +163,7 @@ class StructuralLayerTest(unittest.TestCase):
         bad["data"]["signal"]["score"] = float("nan")
         with self.assertRaises(cc.ContractError):
             cc.validate_envelope(route, spec, bad)
-        with self.assertRaises(Exception):
+        with self.assertRaises(mock_api.SchemaError):
             mock_api.validate_envelope(route, spec, bad)
 
     def test_rejects_missing_required_top_level(self):
@@ -181,10 +181,10 @@ class StructuralLayerTest(unittest.TestCase):
             route = ROUTES[name]
             payload = load("valid", name) if name in VALID else load("invalid", name)
 
-            def _mock():
+            def _mock(route=route, payload=payload):
                 mock_api.validate_envelope(route, self.endpoints[route], payload)
 
-            def _mine():
+            def _mine(route=route, payload=payload):
                 cc.validate_envelope(route, self.endpoints[route], payload)
 
             mock_error = None

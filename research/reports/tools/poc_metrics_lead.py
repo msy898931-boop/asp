@@ -3,15 +3,18 @@ Not the verdict artifact (Agent-B owns T27); this is an independent cross-check 
 the exact human-requested metrics: Brier, ECE, reliability, tier coverage at
 0.55/0.60/0.65, directional accuracy, LONG vs SHORT. No walk-forward is claimed."""
 import json
-from src.models.realdata import load_corpus
-from src.models.dataset import build_labeled_examples, feature_columns, to_matrix
-from src.models.splits import fractional_split
-from src.models.logistic import fit_logistic
-from src.models.calibrators import fit_calibrator
+
 from src.models.calibration import (
-    expected_calibration_error, maximum_calibration_error,
-    reliability_diagram, brier_score,
+    brier_score,
+    expected_calibration_error,
+    maximum_calibration_error,
+    reliability_diagram,
 )
+from src.models.calibrators import fit_calibrator
+from src.models.dataset import build_labeled_examples, feature_columns, to_matrix
+from src.models.logistic import fit_logistic
+from src.models.realdata import load_corpus
+from src.models.splits import fractional_split
 
 CORPUS = "research/features_real/corpus/real_corpus.json.gz"
 fs, closes = load_corpus(CORPUS)
@@ -66,4 +69,5 @@ out = {
     "label": "PROOF-OF-CONCEPT — single window (no walk-forward claimed)",
 }
 print(json.dumps(out, indent=1))
-open("/tmp/poc_metrics_lead.json", "w").write(json.dumps(out, indent=1))
+with open("/tmp/poc_metrics_lead.json", "w", encoding="utf-8") as fh:
+    fh.write(json.dumps(out, indent=1))

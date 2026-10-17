@@ -14,8 +14,6 @@ from src.models.dataset import (
     to_matrix,
 )
 from src.models.features import (
-    CROSS_BOUNDS,
-    CROSS_DISCRETE,
     PER_TIMEFRAME_BOUNDS,
     PER_TIMEFRAME_DISCRETE,
     FeatureSet,

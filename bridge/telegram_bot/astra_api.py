@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 DEFAULT_API_BASE = "http://127.0.0.1:8790/api/v1"
 BRIDGE_PORT = 8791   # the host's Python bridge port (see StartupCoordinator)

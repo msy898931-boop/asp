@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import bisect
 import importlib.util
-import json
 import os
 import random
 import sys

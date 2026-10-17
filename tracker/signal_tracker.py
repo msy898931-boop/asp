@@ -172,7 +172,7 @@ class Tracker:
         while True:
             try:
                 self.cycle()
-            except Exception as exc:  # never let one bad cycle kill the poller
+            except Exception as exc:  # noqa: BLE001 - never let one bad cycle kill the poller
                 sys.stderr.write("[tracker] cycle error: %r\n" % (exc,))
             time.sleep(POLL_SECONDS)
 
@@ -183,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # quieter logs
         sys.stderr.write("[tracker] %s\n" % (fmt % args))
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path in ("/v1/signals", "/signals"):
             self._json(200, {"tracker": self.tracker.current()})
@@ -195,7 +195,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json(404, {"error": "unknown route", "path": path})
 
-    def do_HEAD(self):  # noqa: N802
+    def do_HEAD(self):
         self.do_GET()
 
     def _json(self, status: int, obj: dict) -> None:

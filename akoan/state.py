@@ -78,9 +78,9 @@ def state_at(events: list[dict], ts: float,
         if not is_high_impact(e):
             continue
         at = e["at_utc"]
-        if at - before_min * 60 <= ts <= at + after_min * 60:
-            if active is None or at > active["at_utc"]:
-                active = e
+        if (at - before_min * 60 <= ts <= at + after_min * 60
+                and (active is None or at > active["at_utc"])):
+            active = e
 
     # Recent release: the newest high-impact print inside the lookback window.
     recent = None
@@ -90,9 +90,9 @@ def state_at(events: list[dict], ts: float,
         if e.get("actual") is None:
             continue
         at = e["at_utc"]
-        if ts - recent_min * 60 <= at <= ts:
-            if recent is None or at > recent["at_utc"]:
-                recent = e
+        if (ts - recent_min * 60 <= at <= ts
+                and (recent is None or at > recent["at_utc"])):
+            recent = e
 
     # Upcoming is the one exception to "past only": a scheduled event the trade
     # could *see coming*. Its `actual` is never used, so there is no lookahead.
@@ -101,9 +101,9 @@ def state_at(events: list[dict], ts: float,
         if not is_high_impact(e):
             continue
         at = e.get("at_utc") or 0
-        if ts < at <= ts + upcoming_min * 60:
-            if upcoming is None or at < upcoming["at_utc"]:
-                upcoming = e
+        if (ts < at <= ts + upcoming_min * 60
+                and (upcoming is None or at < upcoming["at_utc"])):
+            upcoming = e
 
     gold_dir = _gold_dir(recent) if recent is not None else 0
     trade_dir = _TRADE_DIR.get((direction or "").upper(), 0)
@@ -118,11 +118,11 @@ def state_at(events: list[dict], ts: float,
         "blackout_seconds": int(ts - active["at_utc"]) if active else None,
         "recent_release": recent is not None,
         "recent_title": (recent or {}).get("title_ar") or (recent or {}).get("title"),
-        "recent_minutes": int(round((ts - recent["at_utc"]) / 60.0)) if recent else None,
+        "recent_minutes": round((ts - recent["at_utc"]) / 60.0) if recent else None,
         "recent_gold_dir": gold_dir,
         "upcoming": upcoming is not None,
         "upcoming_title": (upcoming or {}).get("title_ar") or (upcoming or {}).get("title"),
-        "upcoming_minutes": (int(round((upcoming["at_utc"] - ts) / 60.0))
+        "upcoming_minutes": (round((upcoming["at_utc"] - ts) / 60.0)
                              if upcoming else None),
         "alignment": alignment,
         "news_in_play": bool(active is not None or recent is not None

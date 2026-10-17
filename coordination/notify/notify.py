@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Send a notification to Discord.
 Silent no-op if coordination/notify/config is missing."""
-import sys, json, urllib.request, pathlib
+import json
+import pathlib
+import sys
+import urllib.request
+
 
 def main():
     msg = " ".join(sys.argv[1:]) or "(no message)"
@@ -23,7 +27,7 @@ def main():
         headers={"Content-Type": "application/json"})
     try:
         urllib.request.urlopen(req, timeout=5)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"notify: failed ({type(e).__name__})",
               file=sys.stderr)
     return 0

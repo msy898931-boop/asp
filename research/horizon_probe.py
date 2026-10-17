@@ -138,8 +138,6 @@ def probe_horizon(closes: Sequence[float], times: Sequence[int],
         trailing.append(stdev(logret[i - window + 1:i + 1]))
         forward.append(stdev(logret[i + 1:i + 1 + horizon]))
 
-    times_oos = [times[i] for i in range(window, len(closes) - horizon)
-                 if times[i] >= start]
     tra = [t for i, t in zip(range(window, len(closes) - horizon), trailing)
            if times[i] >= start]
     fwd = [f for i, f in zip(range(window, len(closes) - horizon), forward)

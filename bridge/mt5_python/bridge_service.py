@@ -35,31 +35,29 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
+from live_client import SOURCE_LABEL, LiveMt5Client, candle_pair_from_env
+from live_client import symbol_from_env as live_symbol_from_env
 from mt5_client import Mt5Client
 from replay_client import ReplayMt5Client, csv_path_from_env, symbol_from_env
-from live_client import (LiveMt5Client, SOURCE_LABEL,
-                         candle_pair_from_env, symbol_from_env as live_symbol_from_env)
 from schemas import (
-    ErrorInfo,
-    PROTOCOL_VERSION,
-    SCHEMA_VERSION,
-    SOURCE_NAME,
-    TIMEFRAMES,
-    PRIMARY_OPERATIONAL_TIMEFRAME,
-    PRIMARY_STRUCTURAL_TIMEFRAME,
-    STATUS_ERROR,
-    STATUS_OK,
     ERR_BAD_REQUEST,
     ERR_BRIDGE_PROTOCOL_MISMATCH,
     ERR_BRIDGE_SCHEMA_MISMATCH,
+    ERR_INSUFFICIENT_HISTORY,
+    ERR_INTERNAL,
+    ERR_MARKET_DATA_STALE,
     ERR_MT5_SYMBOL_UNRESOLVED,
     ERR_MT5_TERMINAL_UNAVAILABLE,
-    ERR_MARKET_DATA_STALE,
-    ERR_INSUFFICIENT_HISTORY,
     ERR_NOT_FOUND,
-    ERR_INTERNAL,
+    PRIMARY_OPERATIONAL_TIMEFRAME,
+    PRIMARY_STRUCTURAL_TIMEFRAME,
+    PROTOCOL_VERSION,
     QUALITY_UNKNOWN,
     QUALITY_VALID,
+    SCHEMA_VERSION,
+    SOURCE_NAME,
+    TIMEFRAMES,
+    ErrorInfo,
     error_envelope,
     ok_envelope,
 )
@@ -186,7 +184,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     # Silence default stderr request logging noise.
-    def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A003
+    def log_message(self, fmt: str, *args: Any) -> None:
         pass
 
     # -- helpers ------------------------------------------------------------
@@ -250,10 +248,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     # -- routing ------------------------------------------------------------
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         try:
             self._route()
-        except Exception as exc:  # never leak a stack trace to the client
+        except Exception as exc:  # noqa: BLE001 - never leak a stack trace to the client
             self._error(ErrorInfo(code=ERR_INTERNAL, message=str(exc),
                                   recovery="retry or restart the bridge"), 500)
 

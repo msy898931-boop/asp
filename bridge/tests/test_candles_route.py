@@ -173,7 +173,7 @@ class Server:
         # Force a fresh import so mt5_client binds the injected module.
         for stale in ("bridge_service", "mt5_client", "schemas"):
             sys.modules.pop(stale, None)
-        import bridge_service  # noqa: E402  (import after injection)
+        import bridge_service
 
         self.bridge_service = bridge_service
         self.state = bridge_service.BridgeState("XAUUSD")
@@ -295,7 +295,7 @@ def scenario_mt5_unavailable() -> None:
     print("Scenario: MT5 unavailable")
     s = Server(_make_fake_mt5(available=False))
     try:
-        code, body = s.get("/v1/candles?tf=M15&limit=10")
+        _code, body = s.get("/v1/candles?tf=M15&limit=10")
         check("unavailable -> structured error", body.get("status") == "ERROR",
               str(body.get("error", {}).get("code")))
         check("unavailable code MT5_TERMINAL_UNAVAILABLE",

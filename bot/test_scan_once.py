@@ -20,6 +20,7 @@ for extra in (os.path.join(os.path.dirname(HERE), "tracker"),):
         sys.path.insert(0, extra)
 
 import scan_once  # noqa: E402
+
 from replay import Signal  # noqa: E402
 
 

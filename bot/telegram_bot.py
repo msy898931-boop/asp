@@ -385,7 +385,7 @@ class Bot:
                 data = self._fetch()
                 if data:
                     self.handle_signals(data)
-            except Exception as exc:  # keep the bot alive across a bad cycle
+            except Exception as exc:  # noqa: BLE001 - keep the bot alive across a bad cycle
                 sys.stderr.write("[bot] cycle error: %r\n" % (exc,))
             time.sleep(POLL_SECONDS)
 

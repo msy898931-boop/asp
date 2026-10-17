@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import shutil
@@ -121,10 +122,8 @@ def _prune_forbidden(out_dir: str) -> None:
                 shutil.rmtree(os.path.join(root, d), ignore_errors=True)
         for f in files:
             if f.endswith(".pyc"):
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(os.path.join(root, f))
-                except OSError:
-                    pass
 
 
 def verify(out_dir: str) -> tuple[bool, List[str]]:

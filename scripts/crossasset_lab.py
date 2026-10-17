@@ -37,10 +37,10 @@ from typing import Dict, List, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.feature_lab import evaluate_split, with_extra  # noqa: E402
-from src.models.dataset import build_labeled_examples  # noqa: E402
-from src.models.realdata import load_corpus  # noqa: E402
-from src.models.splits import (  # noqa: E402
+from scripts.feature_lab import evaluate_split, with_extra
+from src.models.dataset import build_labeled_examples
+from src.models.realdata import load_corpus
+from src.models.splits import (
     DEVELOPMENT_YEARS,
     OOS_YEARS,
     VALIDATION_YEARS,
@@ -64,14 +64,16 @@ def dxy_series() -> List[Tuple[int, float]]:
     path = os.path.join(CACHE, "dxy_yahoo.json")
     raw = None
     if os.path.exists(path):
-        raw = open(path, "rb").read()
+        with open(path, "rb") as fh:
+            raw = fh.read()
     else:
         raw = _fetch(
             "https://query1.finance.yahoo.com/v8/finance/chart/"
             "DX-Y.NYB?range=10y&interval=1d"
         )
         os.makedirs(CACHE, exist_ok=True)
-        open(path, "wb").write(raw)
+        with open(path, "wb") as fh:
+            fh.write(raw)
     doc = json.loads(raw)
     result = doc["chart"]["result"][0]
     stamps = result["timestamp"]
@@ -86,13 +88,15 @@ def fred_series(series_id: str) -> List[Tuple[int, float]]:
     path = os.path.join(CACHE, f"fred_{series_id}.csv")
     raw = None
     if os.path.exists(path):
-        raw = open(path, "rb").read()
+        with open(path, "rb") as fh:
+            raw = fh.read()
     else:
         raw = _fetch(
             "https://fred.stlouisfed.org/graph/fredgraph.csv?id=" + series_id
         )
         os.makedirs(CACHE, exist_ok=True)
-        open(path, "wb").write(raw)
+        with open(path, "wb") as fh:
+            fh.write(raw)
     out = []
     for row in csv.DictReader(io.StringIO(raw.decode())):
         key = list(row.keys())
@@ -154,7 +158,7 @@ def main(argv=None) -> int:
     print("fetching macro context (DXY via Yahoo, DFII10 via FRED) ...")
     try:
         macro = macro_features([e.timestamp for e in base])
-    except Exception as exc:  # network/source unavailable: degrade honestly
+    except Exception as exc:  # noqa: BLE001 - network/source unavailable: degrade honestly
         print(f"  ERROR: cannot build macro context: {exc}")
         print("  (no fabrication: the experiment stops rather than guessing.)")
         return 2

@@ -46,7 +46,7 @@ def main() -> int:
     bad_numeric = 0
     with CSV.open(newline="") as fh:
         reader = csv.reader(fh)
-        header = next(reader, None)
+        next(reader, None)  # header row, skipped
         for cols in reader:
             if not cols:
                 continue

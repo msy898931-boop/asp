@@ -81,9 +81,8 @@ def draw(size: int, inset: float = 1.0) -> bytes:
                 ang = math.atan2(dy, dx)
                 if ang < 0:
                     ang += 2 * math.pi
-                if a_start <= ang <= a_end:
-                    if abs(d - r_arc) <= arc_w / 2:
-                        a = 1.0
+                if a_start <= ang <= a_end and abs(d - r_arc) <= arc_w / 2:
+                    a = 1.0
                 # Needle pointing up-left, plus hub.
                 na = math.radians(215)
                 nx, ny = math.cos(na), math.sin(na)

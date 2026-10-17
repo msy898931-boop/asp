@@ -10,7 +10,7 @@ Deterministic, pure stdlib. This module measures; it publishes nothing (RULE C).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
+from typing import List, Sequence
 
 from src.models.calibration import calibration_report
 from src.models.dataset import (
@@ -19,7 +19,6 @@ from src.models.dataset import (
     feature_columns,
     to_matrix,
 )
-from src.models.gbt import fit_gbt
 from src.models.levels import tier_by_name
 from src.models.logistic import fit_logistic
 from src.models.splits import SplitError
@@ -135,7 +134,6 @@ def evaluate_horizon(
     )
 
     # Reuse the year-based purged split by timestamp.
-    from datetime import datetime, timezone
 
     from src.models.dataset import purge_split
 

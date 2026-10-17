@@ -18,7 +18,7 @@ No third-party dependencies. Fully deterministic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
+from typing import Sequence, Tuple
 
 from src.models.calibration import CalibrationReport, calibration_report
 from src.models.dataset import (
@@ -89,7 +89,7 @@ def _evaluate(
 def run_baseline(
     development: Sequence[LabeledExample],
     validation: Sequence[LabeledExample],
-    oos: Sequence[LabeledExample] = None,  # type: ignore[assignment]
+    oos: Sequence[LabeledExample] | None = None,  # type: ignore[assignment]
     l2: float = 1e-6,
     max_iter: int = 100,
 ) -> BaselineReport:
@@ -108,9 +108,8 @@ def run_baseline(
     columns = feature_columns(development)
     # Enforce identical columns across partitions.
     for name, part in (("validation", validation), ("oos", oos)):
-        if part:
-            if feature_columns(part) != columns:
-                raise SplitError(f"partition '{name}' has different feature columns")
+        if part and feature_columns(part) != columns:
+            raise SplitError(f"partition '{name}' has different feature columns")
 
     x_dev, y_dev = to_matrix(development, columns)
     model = fit_logistic(x_dev, y_dev, l2=l2, max_iter=max_iter)

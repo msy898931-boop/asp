@@ -10,6 +10,7 @@ Causality: candle retrieval always skips the currently forming bar using
 
 from __future__ import annotations
 
+import contextlib
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -38,7 +39,7 @@ _STALE_INTERVAL_MULTIPLIER = 3
 try:  # The package is Windows-only; absence must be reportable, not fatal.
     import MetaTrader5 as _mt5  # type: ignore
     _MT5_IMPORT_ERROR = ""
-except Exception as exc:  # pragma: no cover - depends on host platform
+except Exception as exc:  # noqa: BLE001 - pragma: no cover - depends on host platform
     _mt5 = None
     _MT5_IMPORT_ERROR = str(exc)
 
@@ -134,29 +135,23 @@ class Mt5Client:
                     error_code="MT5_TERMINAL_UNAVAILABLE",
                     message=f"mt5.initialize failed: {_mt5.last_error()}",
                 )
-        except Exception as exc:  # pragma: no cover
+        except Exception as exc:  # noqa: BLE001 - pragma: no cover
             return ClientResult(ok=False, error_code="MT5_TERMINAL_UNAVAILABLE", message=str(exc))
 
         self._initialized = True
-        try:
+        with contextlib.suppress(Exception):  # version is optional
             self._terminal_version = tuple(_mt5.version()) if _mt5.version() else None
-        except Exception:
-            self._terminal_version = None
-        try:
+        with contextlib.suppress(Exception):  # account info is optional
             acc = _mt5.account_info()
             if acc is not None:
                 self._broker = getattr(acc, "company", "") or ""
                 self._server = getattr(acc, "server", "") or ""
-        except Exception:
-            pass
         return ClientResult(ok=True)
 
     def shutdown(self) -> None:
         if _mt5 is not None and self._initialized:
-            try:
+            with contextlib.suppress(Exception):  # best-effort teardown
                 _mt5.shutdown()
-            except Exception:
-                pass
         self._initialized = False
 
     # -- symbol resolution --------------------------------------------------
@@ -175,7 +170,7 @@ class Mt5Client:
                                 message="MetaTrader5 package unavailable")
         try:
             symbols = _mt5.symbols_get()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return ClientResult(ok=False, error_code="MT5_SYMBOL_UNRESOLVED", message=str(exc))
         if symbols is None:
             return ClientResult(ok=False, error_code="MT5_SYMBOL_UNRESOLVED",
@@ -199,10 +194,8 @@ class Mt5Client:
         if not chosen:
             chosen = names[0]
 
-        try:
+        with contextlib.suppress(Exception):  # symbol_select is best-effort
             _mt5.symbol_select(chosen, True)
-        except Exception:
-            pass
         self._resolved_symbol = chosen
         return ClientResult(ok=True, data={"symbol": chosen, "candidates": names})
 
@@ -239,7 +232,7 @@ class Mt5Client:
         start_pos = 1 if closed_only else 0
         try:
             rates = _mt5.copy_rates_from_pos(symbol, tf_const, start_pos, count)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return ClientResult(ok=False, error_code="MARKET_DATA_MISSING", message=str(exc))
         if rates is None or len(rates) == 0:
             return ClientResult(ok=False, error_code="MARKET_DATA_MISSING",
@@ -290,7 +283,7 @@ class Mt5Client:
                                 message="MetaTrader5 package unavailable")
         try:
             tick = _mt5.symbol_info_tick(symbol)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return ClientResult(ok=False, error_code="MARKET_DATA_MISSING", message=str(exc))
         if tick is None:
             return ClientResult(ok=False, error_code="MARKET_DATA_MISSING",
@@ -311,7 +304,7 @@ class Mt5Client:
                                 message="MetaTrader5 package unavailable")
         try:
             info = _mt5.symbol_info(symbol)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return ClientResult(ok=False, error_code="MT5_SYMBOL_UNRESOLVED", message=str(exc))
         if info is None:
             return ClientResult(ok=False, error_code="MT5_SYMBOL_UNRESOLVED",

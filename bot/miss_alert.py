@@ -29,9 +29,9 @@ for extra in (os.path.join(ROOT, "advisor"), HERE):
     if extra not in sys.path:
         sys.path.insert(0, extra)
 
+import astra_env  # noqa: E402
 import self_review  # noqa: E402
 import telegram_bot as bot  # noqa: E402
-import astra_env  # noqa: E402
 
 ADVISOR_URL = (os.environ.get("ASTRA_REVIEW_URL") or
                astra_env.URL + "/advisor/v1/review")

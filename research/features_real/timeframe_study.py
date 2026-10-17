@@ -43,8 +43,9 @@ def build_rows(tf: int) -> list[dict]:
         path = tmp.name
     try:
         import json
-        import replay
+
         import features
+        import replay
         with open(path, "w", encoding="utf-8") as out:
             for year, src in files:
                 bars = build_store.resample(src, tf)

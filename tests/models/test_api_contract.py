@@ -10,15 +10,15 @@ from src.models.splits import SplitError
 
 
 def record(**overrides):
-    base = dict(
-        timestamp="2025-06-01T12:00:00Z",
-        direction="UP",
-        probability=0.9,
-        calibrated=True,
-        confidence_interval=(0.8, 0.97),
-        coverage_tier="high",
-        model_version="v1.0",
-    )
+    base = {
+        "timestamp": "2025-06-01T12:00:00Z",
+        "direction": "UP",
+        "probability": 0.9,
+        "calibrated": True,
+        "confidence_interval": (0.8, 0.97),
+        "coverage_tier": "high",
+        "model_version": "v1.0",
+    }
     base.update(overrides)
     return ProbabilityOutput(**base)
 

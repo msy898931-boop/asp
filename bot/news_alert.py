@@ -63,7 +63,7 @@ def format_alert(event: dict) -> str:
     at = event.get("at_utc")
     when = (datetime.fromtimestamp(at, timezone.utc).strftime("%H:%M UTC")
             if at else "—")
-    minutes = int(round((event.get("in_hours") or 0) * 60))
+    minutes = round((event.get("in_hours") or 0) * 60)
     lines = [
         "⏰ تنبيه خبر مهم — بعد %d دقيقة" % minutes,
         "الحدث: %s" % (event.get("title_ar") or event.get("title")),

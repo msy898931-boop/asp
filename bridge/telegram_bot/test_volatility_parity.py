@@ -21,7 +21,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from volatility import (  # noqa: E402
+from volatility import (
     CONTEXT_BARS,
     TRIGGER_WINDOW,
     timeframe_features,

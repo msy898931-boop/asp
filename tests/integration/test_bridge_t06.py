@@ -70,7 +70,7 @@ class Bridge:
             try:
                 self.get("/v1/handshake")
                 return True
-            except Exception:
+            except Exception:  # noqa: BLE001
                 time.sleep(0.1)
         return False
 
@@ -137,7 +137,7 @@ def scenario_stale():
                       "FAKE_MT5_LAST_TIME": str(stale_last)})
     try:
         assert b.wait_ready(), "bridge did not become ready"
-        code, c = b.get("/v1/candles?symbol=XAUUSD&timeframe=M15&count=5")
+        _code, c = b.get("/v1/candles?symbol=XAUUSD&timeframe=M15&count=5")
         check("stale feed rejected", c["status"] == "ERROR" and
               c.get("error", {}).get("code") == "MARKET_DATA_STALE",
               str(c.get("error", {}).get("code")))
@@ -152,7 +152,7 @@ def scenario_insufficient():
                       "FAKE_MT5_LAST_TIME": str(int(time.time()))})
     try:
         assert b.wait_ready(), "bridge did not become ready"
-        code, c = b.get("/v1/candles?symbol=XAUUSD&timeframe=M15&count=9&min_count=9")
+        _code, c = b.get("/v1/candles?symbol=XAUUSD&timeframe=M15&count=9&min_count=9")
         check("insufficient history rejected",
               c["status"] == "ERROR" and
               c.get("error", {}).get("code") == "INSUFFICIENT_HISTORY",
@@ -172,7 +172,7 @@ def scenario_mt5_unavailable():
         check("health initialized false (terminal down)", h["payload"]["initialized"] is False)
         check("health mt5_ready false", h["payload"]["mt5_ready"] is False)
         check("health quality UNKNOWN", h["quality"] == "UNKNOWN")
-        code, c = b.get("/v1/candles?symbol=XAUUSD&timeframe=M15&count=5")
+        _code, c = b.get("/v1/candles?symbol=XAUUSD&timeframe=M15&count=5")
         check("candles fail with MT5_TERMINAL_UNAVAILABLE",
               c.get("error", {}).get("code") == "MT5_TERMINAL_UNAVAILABLE",
               str(c.get("error", {}).get("code")))

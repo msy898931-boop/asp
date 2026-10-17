@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     week = args.week or iso_week()
     try:
         result = build_result(None if args.no_backfill else 120)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         sys.stderr.write("[weekly] study failed: %r\n" % (exc,))
         return 1
 

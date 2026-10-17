@@ -53,8 +53,8 @@ def check_year(path: Path) -> dict:
         for row in rd:
             if not row:
                 continue
-            ts = int(row[0]); o = float(row[1]); h = float(row[2])
-            l = float(row[3]); c = float(row[4])
+            ts = int(row[0])
+            o, h, l, c = (float(row[i]) for i in range(1, 5))
             r["rows"] += 1
             if r["first"] is None:
                 r["first"] = ts
@@ -69,7 +69,8 @@ def check_year(path: Path) -> dict:
             if not (h >= l and h >= o and h >= c and l <= o and l <= c):
                 r["ohlc_violations"] += 1
             if has_vol:
-                v = float(row[5]); r["rows_volume"] += 1
+                v = float(row[5])
+                r["rows_volume"] += 1
                 if v == 0.0:
                     r["zero_volume"] += 1
             if prev is not None:
@@ -80,7 +81,6 @@ def check_year(path: Path) -> dict:
 
     for a, b, gap in r["gaps"]:
         start = dt.datetime.fromtimestamp(a / 1000, dt.timezone.utc)
-        end = dt.datetime.fromtimestamp(b / 1000, dt.timezone.utc)
         span_days = (b - a) / 86400000.0
         covers_sat = False
         d = start.date()

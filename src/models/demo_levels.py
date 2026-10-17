@@ -50,7 +50,6 @@ def main(n: int = 3000) -> int:
     # --- Q-theta / RULE B: SL/TP and cost-tier expectancy on a sample of setups. ---
     print("RULE B — SL/TP expectancy under three cost tiers (sample of setups):")
     print("  (atr_1.5x SL, rr_2x TP; gross expectancy in R before cost)")
-    import math
 
     sample_every = 137
     agg = {t.name: [0.0, 0.0, 0] for t in COST_TIERS}  # sum net_r, sum gross, count

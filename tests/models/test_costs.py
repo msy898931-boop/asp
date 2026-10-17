@@ -5,9 +5,6 @@ from __future__ import annotations
 import unittest
 
 from src.models.costs import (
-    DEFAULT_COMMISSION,
-    DEFAULT_SLIPPAGE,
-    DEFAULT_SPREAD,
     CostAssumptions,
     cost_tiers,
     net_expectancy_r,

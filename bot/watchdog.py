@@ -32,8 +32,8 @@ ROOT = os.path.dirname(HERE)
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import telegram_bot as bot  # noqa: E402
 import astra_env  # noqa: E402
+import telegram_bot as bot  # noqa: E402
 
 ASTRA_URL = astra_env.URL
 REPO = astra_env.REPO

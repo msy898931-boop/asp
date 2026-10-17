@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import mt5_csv_feed
 from mt5_client import ClientResult

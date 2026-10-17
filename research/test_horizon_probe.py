@@ -18,8 +18,7 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from research.horizon_probe import (auc, directional_controls,  # noqa: E402
-                                    spearman, stdev)
+from research.horizon_probe import auc, directional_controls, spearman, stdev  # noqa: E402
 
 
 class StdevTests(unittest.TestCase):
@@ -66,14 +65,14 @@ class DirectionalControlTests(unittest.TestCase):
         # Always rising: every forward move is up, so the base rate is 1.0.
         closes = [float(i) for i in range(50)]
         times = list(range(50))
-        base, mom, rev = directional_controls(closes, times, horizon=1, start=0)
+        base, _mom, _rev = directional_controls(closes, times, horizon=1, start=0)
         self.assertEqual(base, 1.0)
 
     def test_alternating_series_favours_reversal(self):
         # up, down, up, down... : the next move tends to reverse the last.
         closes = [1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0]
         times = list(range(len(closes)))
-        base, mom, rev = directional_controls(closes, times, horizon=1, start=0)
+        _base, mom, rev = directional_controls(closes, times, horizon=1, start=0)
         self.assertGreater(rev, mom)
 
 

@@ -26,6 +26,7 @@ Run: python3 advisor/ai_advisor.py --port 8792
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -407,10 +408,8 @@ def call_groq(prompt: str, api_key: str) -> str | None:
             payload = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = ""
-        try:
+        with contextlib.suppress(OSError):
             detail = exc.read().decode("utf-8", "replace")[:200]
-        except OSError:
-            pass
         sys.stderr.write("[advisor] groq HTTP %s: %s\n" % (exc.code, detail))
         return None
     except (urllib.error.URLError, OSError, ValueError) as exc:
@@ -578,7 +577,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # quieter logs
         sys.stderr.write("[advisor] %s\n" % (fmt % args))
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         path, _, query = self.path.partition("?")
         if path in ("/v1/advisor", "/advisor"):
             force = "refresh=1" in query
@@ -592,7 +591,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json(404, {"error": "unknown route", "path": path})
 
-    def do_HEAD(self):  # noqa: N802
+    def do_HEAD(self):
         self.do_GET()
 
     def _json(self, status: int, obj: dict) -> None:

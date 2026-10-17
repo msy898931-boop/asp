@@ -18,8 +18,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import features  # noqa: E402
 import validation_gate as gate  # noqa: E402
+
+import features  # noqa: E402
 
 
 def bar(time: int, o: float, h: float, l: float, c: float) -> dict:
@@ -76,7 +77,6 @@ class H4Tests(unittest.TestCase):
     def test_h4_alignment_follows_the_trend(self):
         # 900 M15 bars = 225 hours ~= 56 H4 bars, enough for the EMA50.
         bars = ramp(900, step=1.0, period=900, base_time=1_699_948_800)
-        sig = {"index": len(bars) - 1, "direction": "LONG"}
         self.assertEqual(features.h4_alignment(bars, "LONG"), "ALIGNED")
         self.assertEqual(features.h4_alignment(bars, "SHORT"), "AGAINST")
 

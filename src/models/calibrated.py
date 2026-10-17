@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import List, Sequence, Tuple
 
 from src.models.baseline import PartitionMetrics
-from src.models.calibration import CalibrationReport, calibration_report
+from src.models.calibration import calibration_report
 from src.models.calibrators import fit_calibrator
 from src.models.dataset import (
     LabeledExample,
@@ -74,7 +74,7 @@ class CalibratedReport:
 def run_calibrated(
     development: Sequence[LabeledExample],
     validation: Sequence[LabeledExample],
-    oos: Sequence[LabeledExample] = None,  # type: ignore[assignment]
+    oos: Sequence[LabeledExample] | None = None,  # type: ignore[assignment]
     method: str = "platt",
     model_factory=None,
 ) -> CalibratedReport:

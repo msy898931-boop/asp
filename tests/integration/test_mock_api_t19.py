@@ -19,7 +19,6 @@ import os
 import socket
 import subprocess
 import sys
-import threading
 import time
 import urllib.request
 
@@ -123,7 +122,7 @@ def _wait_for(url: str, attempts: int = 30):
     for _ in range(attempts):
         try:
             return fetch(url)
-        except Exception as exc:  # server not up yet
+        except Exception as exc:  # noqa: BLE001 - server not up yet
             last = exc
             time.sleep(0.1)
     raise RuntimeError(f"mock server did not start: {last}")

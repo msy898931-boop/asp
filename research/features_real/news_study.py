@@ -33,6 +33,7 @@ for extra in (os.path.join(REPO, "tracker"), os.path.join(REPO, "akoan"),
     sys.path.insert(0, extra)
 
 import importlib.util  # noqa: E402
+
 import study  # noqa: E402
 import validation_gate as gate  # noqa: E402
 
@@ -61,10 +62,9 @@ _PAD_FWD = 2 * 3600
 def load_jsonl(path: str) -> list[dict]:
     """Read JSONL, transparently gunzipping a .gz path."""
     import gzip
-    opener = ((lambda: gzip.open(path, "rt", encoding="utf-8"))
-              if path.endswith(".gz") else (lambda: open(path, encoding="utf-8")))
+    opener = gzip.open if path.endswith(".gz") else open
     rows: list[dict] = []
-    with opener() as fh:
+    with opener(path, "rt", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if line:

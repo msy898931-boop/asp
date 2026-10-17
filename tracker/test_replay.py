@@ -10,6 +10,7 @@ Run: python3 -m unittest discover -s tracker -p "test_*.py"
 
 from __future__ import annotations
 
+import itertools
 import math
 import os
 import sys
@@ -125,7 +126,7 @@ class BuildSignalsTests(unittest.TestCase):
         signals = replay.build_signals(oscillate_then_trend())
         self.assertTrue(signals, "synthetic series should trigger at least one")
         spans = [(s.time, s.resolved_time) for s in signals]
-        for (_, prev_end), (next_start, _) in zip(spans, spans[1:]):
+        for (_, prev_end), (next_start, _) in itertools.pairwise(spans):
             self.assertGreaterEqual(next_start, prev_end,
                                     "a new idea opened while one was still live")
 

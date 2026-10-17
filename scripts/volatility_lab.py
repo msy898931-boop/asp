@@ -32,18 +32,18 @@ import os
 import random
 import sys
 from datetime import datetime, timezone
-from typing import List, Sequence, Tuple
+from typing import List, Sequence
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.discrimination_lab import auc, fit_predict, permutation_p  # noqa: E402
-from src.models.calibration import calibration_report  # noqa: E402
-from src.models.dataset import (  # noqa: E402
+from scripts.discrimination_lab import auc, fit_predict, permutation_p
+from src.models.calibration import calibration_report
+from src.models.dataset import (
     LabeledExample,
     assert_partitions_separated,
 )
-from src.models.realdata import load_corpus  # noqa: E402
-from src.models.splits import (  # noqa: E402
+from src.models.realdata import load_corpus
+from src.models.splits import (
     DEVELOPMENT_YEARS,
     OOS_YEARS,
     VALIDATION_YEARS,

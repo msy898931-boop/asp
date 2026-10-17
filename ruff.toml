@@ -1,0 +1,35 @@
+# Lint rules for the Python side of the tree.
+#
+# The rule set is deliberately narrow: correctness and clarity, not style
+# churn. Broad modernization rules (UP) and the whole "ALL" set are left off
+# because they would rewrite hundreds of working lines and bury the real
+# findings. What is on here is enforceable today and stays quiet.
+
+target-version = "py311"
+line-length = 88
+
+[lint]
+select = [
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "F",    # pyflakes: unused names, undefined names, bad imports
+  "I",    # import sorting
+  "B",    # bugbear: likely bugs (mutable defaults, loops, unreachable code)
+  "C4",   # comprehensions
+  "SIM",  # simplifiable constructs
+  "BLE",  # blind excepts: a silent `except Exception` hides real failures
+  "RUF",  # ruff-specific: unused noqa, etc.
+]
+ignore = [
+  "E501",   # line length: the tree wraps by hand and 88 is not universal here
+  "E741",   # ambiguous single-letter names (l, I, O) are used in a few maths spots
+  "SIM108", # ternaries are not always clearer than if/else
+  "RUF001", # ambiguous unicode: the UI strings are intentionally bilingual
+  "RUF002",
+  "RUF003",
+  # zip(strict=) is a 3.10 change; the call sites are all equal-length by
+  # construction and rewriting 60+ of them is churn, not a fix.
+  "B905",
+  # list + list is readable where it appears; no need to force [*a, *b].
+  "RUF005",
+]

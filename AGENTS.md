@@ -43,6 +43,36 @@ cd build && ctest          # 19 tests
 
 Frontend is Linux/Qt and Windows-only for the packaged `.exe`.
 
+## Python test suites & lint
+
+The Python side is exercised with the stdlib runner, one suite per component
+(`README.md:78`). All suites are green; run them all after any Python change:
+
+```bash
+for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
+  python3 -m unittest discover -s "$d" -p "test_*.py"
+done
+python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
+# 915 tests total (152/44/50/59/92/119/91 + 308)
+```
+
+Lint is `ruff` with a deliberately narrow rule set (correctness, not style
+churn) — see `ruff.toml`. It must stay clean:
+
+```bash
+ruff check .        # must print "All checks passed!"
+```
+
+Two gotchas that have bitten before:
+
+- **Never run `ruff --select ...` to bypass `ruff.toml`.** An explicit
+  `--select` on the command line ignores the config's `ignore` list and strips
+  `# noqa: E402` comments across the tree. Run bare `ruff check .`.
+- **F401 autofix can delete re-exports.** `src/models/levels.py` re-exports
+  `CostTier`/`tier_by_name` from `costs` for `src/models/horizon.py`; the fix
+  removes them unless the import carries `# noqa: F401`. Grep for importers
+  before trusting a "safe" unused-import fix.
+
 ## Telegram bot
 
 `bridge/telegram_bot/` reads the frontend-facing loopback API

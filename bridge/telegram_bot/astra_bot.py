@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import signal as _signal
@@ -31,11 +32,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from astra_api import ApiError, AstraApi
-from entitlements import Entitlements, from_env as entitlements_from_env
-from price_levels import (DIR_ABOVE, DIR_BELOW, DIR_CROSS, Level, LevelStore,
-                          side_of)
-from volatility import (TIMEFRAMES, VolatilityModel, format_volatility_alert,
-                        timeframe_features)
+from entitlements import Entitlements
+from entitlements import from_env as entitlements_from_env
+from price_levels import DIR_ABOVE, DIR_BELOW, DIR_CROSS, LevelStore
+from volatility import (
+    TIMEFRAMES,
+    VolatilityModel,
+    format_volatility_alert,
+)
 
 # The news-quiet window lives in the advisor package. Its location differs by
 # deployment: the repo keeps it at <root>/advisor, while the container copies it
@@ -716,7 +720,7 @@ def _fetch_news_events(now: float):
     try:
         return calendar_feed.fetch_events(now - lookback * 3600,
                                           now + lookahead * 3600)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return []
 
 
@@ -731,7 +735,7 @@ def news_digest(now: Optional[float] = None) -> Optional[Dict[str, Any]]:
     now = time.time() if now is None else now
     try:
         return news_engine.digest(now, events=_fetch_news_events(now))
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -814,7 +818,7 @@ class NewsWatch:
                 if key not in self._warned:
                     self._warned.add(key)
                     label = active.get("title_ar") or active.get("title") or "خبر"
-                    mins = int(round((at - now) / 60.0))
+                    mins = round((at - now) / 60.0)
                     out.append(
                         "⏸ نافذة خبر: %s (%s) بعد ~%d دقيقة.\n"
                         "السوق عادةً عنيف حول الصدور — يُفضَّل عدم فتح صفقة "
@@ -850,24 +854,24 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
         try:
             for alert in engine.poll():
                 _broadcast(client, subs, alert)
-        except Exception as exc:  # never let the monitor thread die silently
+        except Exception as exc:  # noqa: BLE001 - never let the monitor thread die silently
             print(f"[warn] monitor: {exc}", file=sys.stderr)
         news_reason, news_context = news_snapshot()
         try:
             for alert in watch.poll():
                 _broadcast(client, subs, alert)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             print(f"[warn] news watch: {exc}", file=sys.stderr)
         if levels is not None:
             try:
                 _check_levels(api, levels, ent, client, news_context)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(f"[warn] levels: {exc}", file=sys.stderr)
         if vol_model is not None:
             try:
                 vol_was_high = _check_volatility(api, vol_model, subs, client,
                                                  vol_was_high, news_reason)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 print(f"[warn] volatility: {exc}", file=sys.stderr)
 
 
@@ -995,12 +999,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     def _heartbeat() -> None:
         while not _stop.wait(60):
-            try:
+            with contextlib.suppress(OSError):
                 beat.write_text(
                     json.dumps({"pid": os.getpid(), "at": time.time()}),
                     encoding="utf-8")
-            except OSError:
-                pass
 
     threading.Thread(target=_heartbeat, daemon=True).start()
 

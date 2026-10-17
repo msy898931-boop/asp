@@ -16,7 +16,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "mobile", "icons"))
 
-import make_icons  # noqa: E402  (path set up above)
+import make_icons
 
 # bucket -> launcher icon edge length in pixels
 DENSITIES = {

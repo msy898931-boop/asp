@@ -28,7 +28,6 @@ for extra in (os.path.join(REPO, "tracker"),):
     if extra not in sys.path:
         sys.path.insert(0, extra)
 
-import features  # noqa: E402
 import validation_gate as gate  # noqa: E402
 
 DEFAULT_STORE = os.path.join(HERE, "feature_store.jsonl")

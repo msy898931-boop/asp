@@ -16,7 +16,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.volatility_lab import (  # noqa: E402
+from scripts.volatility_lab import (
     rolling_median,
     stdev,
     vol_series,

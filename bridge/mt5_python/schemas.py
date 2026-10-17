@@ -9,7 +9,7 @@ Standard library only: this module must import even when MetaTrader5 is absent.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 # --- Protocol / schema identity -------------------------------------------

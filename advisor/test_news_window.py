@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import news_window as nw  # noqa: E402
+import news_window as nw
 
 NOW = 1_800_000_000.0
 

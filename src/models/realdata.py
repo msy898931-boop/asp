@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import itertools
 import json
 import math
 import os
@@ -194,7 +195,7 @@ def load_corpus(
             rows.append((fs.asOfBarOpenSec, fs, close))
 
     rows.sort(key=lambda item: item[0])
-    for (t0, _, _), (t1, _, _) in zip(rows, rows[1:]):
+    for (t0, _, _), (t1, _, _) in itertools.pairwise(rows):
         if t1 == t0:
             raise SplitError(f"duplicate decision instant in corpus: {t0}")
 

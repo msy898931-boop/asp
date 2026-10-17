@@ -86,7 +86,7 @@ def fetch_years(years: list[int], sleep_s: float = 0.15,
     seen: dict[str, dict] = {}
     for year in years:
         got = 0
-        for i, (a, b) in enumerate(month_windows(year)):
+        for _i, (a, b) in enumerate(month_windows(year)):
             events = cal.fetch_events(a, b, COUNTRIES)
             for e in events:
                 rec = _record(e)

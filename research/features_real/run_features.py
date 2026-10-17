@@ -148,12 +148,14 @@ def load_m1(paths):
                 sec = _parse_open_time(cols[0])
                 ohlc = [float(cols[i]) for i in (1, 2, 3, 4)]
             except ValueError as exc:
-                raise SystemExit(f"malformed M1 row in {path}: {line!r} ({exc})")
+                raise SystemExit(
+                    f"malformed M1 row in {path}: {line!r} ({exc})"
+                ) from exc
             # Volume is optional (some MT5 tick exports omit it). Where present it
             # may be fractional (Dukascopy, millions of units) - an activity proxy,
             # so round to a whole tick count. Extra columns (MT5 spread) ignored.
             try:
-                vol = int(round(float(cols[5]))) if len(cols) >= 6 else 0
+                vol = round(float(cols[5])) if len(cols) >= 6 else 0
             except ValueError:
                 vol = 0
             rows.append((sec, ohlc[0], ohlc[1], ohlc[2], ohlc[3], vol))

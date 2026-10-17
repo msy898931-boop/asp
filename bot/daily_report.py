@@ -31,8 +31,8 @@ ROOT = os.path.dirname(HERE)
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import telegram_bot as bot  # noqa: E402
 import astra_env  # noqa: E402
+import telegram_bot as bot  # noqa: E402
 
 TRACKER_URL = (os.environ.get("ASTRA_DAILY_URL") or
                astra_env.URL + "/tracker/v1/signals")

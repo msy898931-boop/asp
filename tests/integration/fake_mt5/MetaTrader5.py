@@ -46,7 +46,7 @@ if _bridge_dir and _bridge_dir not in sys.path:
 
 try:
     import mt5_csv_feed  # type: ignore
-except Exception:  # pragma: no cover - feed support is optional
+except Exception:  # noqa: BLE001 - pragma: no cover - feed support is optional
     mt5_csv_feed = None
 
 # Distinct timeframe constants (values mirror the real package's shape).
@@ -87,9 +87,7 @@ def last_error():
 
 
 def initialize(*args, **kwargs):
-    if os.environ.get("FAKE_MT5_AVAILABLE", "1") == "0":
-        return False
-    return True
+    return os.environ.get("FAKE_MT5_AVAILABLE", "1") != "0"
 
 
 def shutdown():

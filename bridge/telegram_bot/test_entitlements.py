@@ -13,9 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from entitlements import Entitlements, TIER_FREE, TIER_PRO  # noqa: E402
-from price_levels import (DIR_ABOVE, DIR_BELOW, DIR_CROSS, LevelStore,  # noqa: E402
-                          crossed, side_of)
+from entitlements import TIER_FREE, Entitlements
+from price_levels import DIR_ABOVE, DIR_BELOW, DIR_CROSS, LevelStore, crossed, side_of
 
 
 class EntitlementsTest(unittest.TestCase):

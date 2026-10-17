@@ -46,7 +46,7 @@ class _StubBridge(BaseHTTPRequestHandler):
     def log_message(self, *a):  # silence
         pass
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         body = json.dumps({"payload": {"bars": _bars()}}).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -57,7 +57,7 @@ class _StubBridge(BaseHTTPRequestHandler):
 
 class _BareStubBridge(_StubBridge):
     """A bare body, to prove the route is not coupled to the envelope."""
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         body = json.dumps({"bars": _bars()}).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")

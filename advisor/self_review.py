@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 
 # A NEUTRAL call counts as right when the price barely moved over the horizon.
 NEUTRAL_BAND_PCT = float(os.environ.get("ASTRA_ADVISOR_NEUTRAL_BAND", "0.2"))

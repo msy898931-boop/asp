@@ -17,10 +17,10 @@ from typing import Any, Dict, List, Optional
 
 from mt5_client import Mt5Client
 from schemas import (
-    TIMEFRAMES,
     QUALITY_MISSING,
-    QUALITY_VALID,
     QUALITY_UNKNOWN,
+    QUALITY_VALID,
+    TIMEFRAMES,
 )
 
 DEFAULT_CANDLE_COUNT = 500

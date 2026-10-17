@@ -134,7 +134,6 @@ def fit_logistic(
 
     standardizer = Standardizer.fit(x)
     xs = standardizer.transform(x)
-    n = len(xs)
     d = len(xs[0])
 
     # Design matrix with an intercept column.

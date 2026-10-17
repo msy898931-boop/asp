@@ -29,7 +29,7 @@ import math
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import Any, ClassVar
 
 SCHEMA_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -474,8 +474,8 @@ def check(schema: dict) -> int:
 # --------------------------------------------------------------------------
 
 class Handler(BaseHTTPRequestHandler):
-    schema: dict = {}
-    calibrated: bool = False
+    schema: ClassVar[dict] = {}
+    calibrated: ClassVar[bool] = False
 
     def log_message(self, fmt, *args):  # quieter, deterministic-ish logging
         sys.stderr.write("mock_api: " + (fmt % args) + "\n")
@@ -488,7 +488,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def do_GET(self) -> None:  # noqa: N802 (http.server API)
+    def do_GET(self) -> None:
         path, _, query = self.path.partition("?")
         payloads = build_payloads(self.schema, self.calibrated)
         by_path = {route.split(" ", 1)[1]: body for route, body in payloads.items()}
@@ -523,7 +523,7 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send(404, error_body("not_found", f"unknown route: {path}"))
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         self._send(405, error_body("method_not_allowed", "only GET is supported"))
 
 

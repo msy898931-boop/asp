@@ -8,6 +8,7 @@ Run: python3 -m unittest discover -s bridge/mt5_python -p "test_*.py"
 
 from __future__ import annotations
 
+import itertools
 import os
 import sys
 import time
@@ -17,8 +18,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from live_client import LiveMt5Client, _TF_MINUTES  # noqa: E402
 import live_client  # noqa: E402  (module handle, for stubbing the HTTP layer)
+from live_client import _TF_MINUTES, LiveMt5Client  # noqa: E402
 from schemas import TIMEFRAMES  # noqa: E402
 
 _MAX_AGE_SECONDS = 399 * 24 * 60 * 60
@@ -28,7 +29,7 @@ def _upstream_reachable() -> bool:
     try:
         LiveMt5Client(candle_pair="PAXGUSD").initialize()
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 
@@ -81,7 +82,7 @@ class LiveClientNetworkTests(unittest.TestCase):
         result = self.client.read_candles("XAUUSD", "M5", 50, closed_only=True)
         self.assertTrue(result.ok)
         bars = result.data["candles"]
-        for prev, cur in zip(bars, bars[1:]):
+        for prev, cur in itertools.pairwise(bars):
             self.assertLess(prev["time"], cur["time"])
         for bar in bars:
             self.assertLessEqual(bar["low"], bar["open"])

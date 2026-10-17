@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import math
 import unittest
 
@@ -83,7 +84,7 @@ class IsotonicTest(unittest.TestCase):
         scores, outcomes = overconfident_sample()
         cal = IsotonicCalibrator.fit(scores, outcomes)
         transformed = cal.transform_batch(scores)
-        for a, b in zip(transformed, transformed[1:]):
+        for a, b in itertools.pairwise(transformed):
             self.assertLessEqual(a, b + 1e-12)
 
     def test_recovers_a_clean_step(self):

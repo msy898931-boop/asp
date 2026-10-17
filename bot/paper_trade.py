@@ -45,9 +45,10 @@ for extra in (os.path.join(ROOT, "tracker"), os.path.join(ROOT, "advisor"),
         sys.path.remove(extra)
     sys.path.insert(0, extra)
 
-import replay  # noqa: E402
-import features  # noqa: E402
 import calendar_feed as cal  # noqa: E402
+
+import features  # noqa: E402
+import replay  # noqa: E402
 
 
 def _load_news_state():
@@ -244,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
     state = load_state()
     try:
         bars = fetch_bars()
-    except Exception as exc:  # feed down: say so, change nothing
+    except Exception as exc:  # noqa: BLE001 - feed down: say so, change nothing
         sys.stderr.write("[paper] feed unavailable: %r\n" % (exc,))
         print(json.dumps({"error": "feed_unavailable"}))
         return 1
@@ -258,7 +259,6 @@ def main(argv: list[str] | None = None) -> int:
     events = cached_events(state, now)
     rows = rule_trades(bars, signals, events)
 
-    before = read_ledger()
     added = 0
     if not args.dry_run:
         added = append_ledger(rows)

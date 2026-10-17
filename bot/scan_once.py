@@ -33,9 +33,10 @@ for extra in (os.path.join(ROOT, "tracker"),
     if extra not in sys.path:
         sys.path.insert(0, extra)
 
-import replay  # noqa: E402
 import telegram_bot as bot  # noqa: E402
 from live_client import LiveMt5Client  # noqa: E402
+
+import replay  # noqa: E402
 
 TIMEFRAME = os.environ.get("ASTRA_SCAN_TF", "M15")
 LOOKBACK = int(os.environ.get("ASTRA_SCAN_LOOKBACK", "200"))
@@ -250,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         bars = fetch_bars()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         sys.stderr.write("[scan] feed unavailable: %r\n" % (exc,))
         return 1
     if len(bars) < replay.MIN_BARS + 1:

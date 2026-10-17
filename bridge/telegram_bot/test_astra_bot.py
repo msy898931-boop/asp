@@ -8,14 +8,12 @@ calls the production objects make.
 
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
 
 import astra_bot as bot
 from astra_api import ApiError, AstraApi
-
 
 HEALTH_ONLINE = {"aggregate": "ONLINE", "decision_grade_data": True,
                  "degraded_reasons": []}
@@ -366,7 +364,7 @@ class ArabicSurfaceTests(unittest.TestCase):
                 self.assertIn(label, bot.BUTTON_COMMANDS)
 
     def test_tapping_a_button_runs_its_command(self):
-        router, _, levels = _paid_router()
+        router, _, _levels = _paid_router()
         out = router.handle("9", "🔔 مستوى جديد")  # same as /level
         self.assertIn("الصيغة", out)              # the /level usage line
 

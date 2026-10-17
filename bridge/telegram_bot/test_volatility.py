@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import sys
-import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from volatility import (  # noqa: E402
+from volatility import (
     DEFAULT_PATH,
     TRIGGER_WINDOW,
     VolatilityModel,
@@ -22,7 +20,7 @@ from volatility import (  # noqa: E402
 
 def _bars(closes, spread=1.0):
     out = []
-    for i, c in enumerate(closes):
+    for _i, c in enumerate(closes):
         out.append({"close": c, "high": c + spread, "low": c - spread})
     return out
 

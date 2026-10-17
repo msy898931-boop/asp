@@ -28,14 +28,13 @@ import argparse
 import os
 import sys
 from datetime import datetime, timezone
-from typing import List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.feature_lab import evaluate_split  # noqa: E402
-from src.models.dataset import build_labeled_examples  # noqa: E402
-from src.models.realdata import load_corpus  # noqa: E402
-from src.models.splits import (  # noqa: E402
+from scripts.feature_lab import evaluate_split
+from src.models.dataset import build_labeled_examples
+from src.models.realdata import load_corpus
+from src.models.splits import (
     DEVELOPMENT_YEARS,
     OOS_YEARS,
     VALIDATION_YEARS,

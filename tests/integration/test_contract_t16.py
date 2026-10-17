@@ -29,8 +29,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, os.path.join(REPO, "src", "models"))
-import mock_api  # noqa: E402
 import contract_checker  # noqa: E402  (T23, Agent-B: shared frozen-set reader)
+import mock_api  # noqa: E402
 
 HOST_BIN = os.path.join(REPO, "build", "aura_backend_host")
 SCHEMA_PATH = mock_api.SCHEMA_PATH
@@ -70,7 +70,7 @@ def wait_for(url: str, attempts: int = 50):
     for _ in range(attempts):
         try:
             return fetch(url)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             last = exc
             time.sleep(0.1)
     raise RuntimeError(f"backend host did not serve: {last}")

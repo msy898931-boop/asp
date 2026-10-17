@@ -304,7 +304,7 @@ def _compute_akoan() -> dict:
         return {"available": False, "reason": "engine unavailable"}
     try:
         result = mod.study()
-    except Exception as exc:  # a bad corpus must not take the app down
+    except Exception as exc:  # noqa: BLE001 - a bad corpus must not take the app down
         return {"available": False, "reason": "study failed: %s" % exc}
     compact = _akoan_compact(result)
     compact["available"] = True
@@ -427,7 +427,7 @@ def warm_akoan_cache() -> None:
     """
     try:
         akoan_body()
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:  # noqa: BLE001 - pragma: no cover - defensive
         print("[warn] akoan warm-up failed: %s" % exc, file=sys.stderr)
 
 
@@ -447,7 +447,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routing ------------------------------------------------------------
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/api/v1/health":
             # Liveness must never need a credential: Render, Fly and the
@@ -489,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._static(path)
 
-    def do_HEAD(self):  # noqa: N802
+    def do_HEAD(self):
         self.do_GET()
 
     # -- access control -----------------------------------------------------

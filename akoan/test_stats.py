@@ -34,9 +34,9 @@ class WilsonTests(unittest.TestCase):
         self.assertAlmostEqual(hi, 0.76341, places=4)
 
     def test_stays_inside_zero_one(self):
-        lo, hi = st.wilson_interval(0, 10)
+        lo, _hi = st.wilson_interval(0, 10)
         self.assertGreaterEqual(lo, 0.0)
-        lo2, hi2 = st.wilson_interval(10, 10)
+        _lo2, hi2 = st.wilson_interval(10, 10)
         self.assertLessEqual(hi2, 1.0)
 
     def test_none_below_min_n(self):
