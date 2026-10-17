@@ -7,6 +7,7 @@ tests run that path for real against a stub bridge — no mocks of the model.
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import re
@@ -24,6 +25,20 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import serve_mobile as sm  # noqa: E402
+
+# The client is split across ordered classic scripts that share one global
+# scope. Tests that assert on client source read them all, in load order, as
+# one string, so a symbol's file may change without breaking the assertion.
+CLIENT_SCRIPTS = ("app.js", "i18n.js", "panels.js", "advisor.js",
+                  "tracker.js", "alerts.js", "vol.js", "akoan.js", "ticker.js")
+
+
+def client_js() -> str:
+    parts = []
+    for name in CLIENT_SCRIPTS:
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            parts.append(fh.read())
+    return "\n".join(parts)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -189,7 +204,7 @@ class JournalTest(unittest.TestCase):
             self.assertIn(anchor, html)
 
     def test_app_wires_the_journal(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("renderJournal", js)
         self.assertIn("bindJournalFilter()", js)
         for key in ("jrn_today", "jrn_all", "jrn_trades", "jrn_record",
@@ -198,7 +213,7 @@ class JournalTest(unittest.TestCase):
 
     def test_open_r_uses_live_price(self):
         # Guard the sign convention: a LONG above entry is positive R.
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("(lastPrice - r.entry) * dir", js)
 
 
@@ -389,7 +404,7 @@ class TabBarTest(unittest.TestCase):
         self.assertIn('html[dir="rtl"] .tab', css)
 
     def test_js_toggles_more_and_keeps_the_overflow_affordance(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("function setMoreOpen", js)
         self.assertIn("function selectView", js)
         self.assertIn("SECONDARY_VIEWS", js)
@@ -419,7 +434,7 @@ class PanelLoadingTest(unittest.TestCase):
         self.assertIn("prefers-reduced-motion", css)
 
     def test_js_toggles_loading_on_the_slow_panels(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("function setPanelLoading", js)
         for view in ("akoan", "chart", "vol", "ai", "tracker"):
             self.assertIn('setPanelLoading("%s"' % view, js,
@@ -442,7 +457,7 @@ class AkoanPanelTest(unittest.TestCase):
             self.assertIn(anchor, html)
 
     def test_app_wires_the_engine_route(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("loadAkoan", js)
         self.assertIn("renderAkoan", js)
         self.assertIn("akoan.json", js)
@@ -452,7 +467,7 @@ class AkoanPanelTest(unittest.TestCase):
             self.assertIn(key, js, "missing akoan string %s" % key)
 
     def test_panel_states_its_disclaimer(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("not financial advice", js)
 
     def test_styles_exist(self):
@@ -588,8 +603,7 @@ class FetchTimeoutTest(unittest.TestCase):
     """No panel may hang forever; the app must bound every request."""
 
     def _js(self):
-        with open(os.path.join(sm.HERE, "app.js"), encoding="utf-8") as fh:
-            return fh.read()
+        return client_js()
 
     def test_requests_are_bounded(self):
         js = self._js()
@@ -858,7 +872,7 @@ class RefreshGuardTest(unittest.TestCase):
             return fh.read()
 
     def test_poll_is_guarded_against_re_entry(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("let refreshing = false", js)
         # The guard must wrap the live fetch and be cleared no matter what.
         self.assertIn("if (refreshing) return", js)
@@ -866,7 +880,7 @@ class RefreshGuardTest(unittest.TestCase):
         self.assertIn("refreshing = false", js)
 
     def test_heavy_panels_follow_the_visible_tab(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("let currentView", js)
         # Candle history only refreshes while the chart tab is open.
         self.assertIn('if (currentView === "chart") loadChart()', js)
@@ -875,7 +889,7 @@ class RefreshGuardTest(unittest.TestCase):
         self.assertIn("loadTicker()", js)
 
     def test_tab_switch_records_the_view(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("currentView = view", js)
 
 
@@ -1074,7 +1088,7 @@ class OfflineCacheTest(unittest.TestCase):
             return fh.read()
 
     def test_app_caches_and_restores_the_last_reading(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("saveLastRead", js)
         self.assertIn("loadLastRead", js)
         self.assertIn("renderSnapshot", js)
@@ -1082,13 +1096,13 @@ class OfflineCacheTest(unittest.TestCase):
         self.assertIn("CACHE_VERSION", js)
 
     def test_refresh_saves_on_success_and_restores_on_failure(self):
-        js = self._read("app.js")
+        js = client_js()
         # The success path must persist; the failure path must restore.
         self.assertIn("saveLastRead({ health, system, bridge: br, analysis", js)
         self.assertIn("renderSnapshot(cached.snap, true)", js)
 
     def test_boot_paints_the_cached_reading_before_the_live_poll(self):
-        js = self._read("app.js")
+        js = client_js()
         # In init(): restore first, then refresh. A live poll on a cold start
         # must not be the only thing standing between the user and a blank app.
         restore = js.index("if (cached) {\n    renderSnapshot(cached.snap, false)")
@@ -1096,7 +1110,7 @@ class OfflineCacheTest(unittest.TestCase):
         self.assertLess(restore, live)
 
     def test_offline_is_labelled_not_faked(self):
-        js = self._read("app.js")
+        js = client_js()
         # The offline banner must exist in both languages, and the cached
         # reading must carry its age rather than looking live.
         self.assertIn("cached_offline", js)
@@ -1104,7 +1118,7 @@ class OfflineCacheTest(unittest.TestCase):
         self.assertIn("offlineMode", js)
 
     def test_online_and_offline_events_are_wired(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn('addEventListener("online"', js)
         self.assertIn('addEventListener("offline"', js)
 
@@ -1138,7 +1152,7 @@ class SkeletonTest(unittest.TestCase):
         self.assertIn('html[data-skeleton="true"]', block)
 
     def test_app_sets_and_clears_the_skeleton(self):
-        js = self._read("app.js")
+        js = client_js()
         self.assertIn("setSkeleton", js)
         self.assertIn('d.setAttribute("data-skeleton"', js)
         self.assertIn('d.removeAttribute("data-skeleton"', js)
@@ -1147,7 +1161,7 @@ class SkeletonTest(unittest.TestCase):
         self.assertIn("setSkeleton(false)", js)
 
     def test_skeleton_is_only_shown_when_there_is_no_cached_reading(self):
-        js = self._read("app.js")
+        js = client_js()
         # In init(): if a cached reading exists, paint it; only otherwise show
         # the skeleton. A cached start must not flash placeholders.
         idx = js.index("const cached = loadLastRead();\n  if (cached) {")
@@ -1248,6 +1262,54 @@ class SubPageOverflowTest(unittest.TestCase):
         for name in ("index.html", "pricing.html", "performance.html",
                      "terminal.html"):
             self.assertIn("viewport-fit=cover", self._read(name), name)
+
+
+class ClientScriptContractTest(unittest.TestCase):
+    """The client is split across ordered classic scripts. Each one must be
+    loaded by the page, precached by the worker and stamped by the server, or
+    a deploy ships a shell that is half-old and half-new — a failure that only
+    shows up on a phone, after a cache has formed."""
+
+    def setUp(self):
+        self.html = self._read("index.html")
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def _loaded(self) -> list[str]:
+        return re.findall(r'<script src="([^"]+\.js)"></script>', self.html)
+
+    def test_page_loads_every_client_script_in_order(self):
+        self.assertEqual(self._loaded(), list(CLIENT_SCRIPTS),
+                         "index.html must load the client scripts in order")
+
+    def test_app_js_still_leads(self):
+        # app.js declares the shared state and the network helpers; every other
+        # script reads them, so a reorder would break the shell at load.
+        self.assertEqual(self._loaded()[0], "app.js")
+
+    def test_worker_precaches_every_client_script(self):
+        sw = self._read("sw.js")
+        for name in CLIENT_SCRIPTS:
+            self.assertIn('"./%s"' % name, sw,
+                          "%s is not precached by sw.js" % name)
+
+    def test_server_stamps_every_client_script(self):
+        stamp_src = inspect.getsource(sm._build_stamp)
+        for name in CLIENT_SCRIPTS:
+            # The stamp regex must actually match the tag the page emits, or a
+            # redeploy serves the old file from cache.
+            self.assertIsNotNone(
+                sm._SHELL_ASSET_RE.search(b'src="%s"' % name.encode()),
+                "%s is not stamped into the shell URL" % name)
+            self.assertIn('"%s"' % name, stamp_src,
+                          "%s is not part of the build stamp" % name)
+
+    def test_worker_cache_name_was_bumped(self):
+        # A new asset list under the old cache name never installs.
+        sw = self._read("sw.js")
+        self.assertRegex(sw, r'const SHELL = "astra-shell-v\d+"')
 
 
 if __name__ == "__main__":

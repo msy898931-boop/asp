@@ -37,6 +37,17 @@ Everything is read-only and shadow-mode: the app never places trades, and the
 footer states this. The bridge stays bound to `127.0.0.1`; the launcher only
 proxies `GET` requests to it.
 
+## Client source layout
+
+The client is plain JavaScript with no build step. `index.html` loads nine
+classic scripts in a fixed order — `app.js`, then `i18n`, `panels`, `advisor`,
+`tracker`, `alerts`, `vol`, `akoan`, `ticker` — and they share one global scope,
+exactly as a single file did before the split. `app.js` holds the shared state
+and the network helpers, so it must stay first. Each script is precached in
+`sw.js` and stamped with the build token by `serve_mobile.py`; the
+`ClientScriptContractTest` in `test_serve_mobile.py` pins that, so a new script
+cannot ship half-wired.
+
 ## Run the server
 
 The backend must already be running (it publishes the loopback API on 8790 and

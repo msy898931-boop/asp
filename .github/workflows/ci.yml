@@ -63,7 +63,9 @@ jobs:
 
       - name: Syntax-check the phone app
         run: |
-          node --check mobile/app.js
+          for f in app i18n panels advisor tracker alerts vol akoan ticker; do
+            node --check "mobile/$f.js"
+          done
           node --check mobile/sw.js
           node --check mobile/terminal.js
 

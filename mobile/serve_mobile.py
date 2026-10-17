@@ -191,7 +191,9 @@ def _build_stamp() -> str:
     files immediately instead of serving the previously cached shell.
     """
     h = hashlib.sha1()
-    for name in ("index.html", "styles.css", "app.js", "sw.js",
+    for name in ("index.html", "styles.css", "app.js", "i18n.js", "panels.js",
+                 "advisor.js", "tracker.js", "alerts.js", "vol.js", "akoan.js",
+                 "ticker.js", "sw.js",
                  "terminal.html", "terminal.css", "terminal.js"):
         try:
             with open(os.path.join(HERE, name), "rb") as fh:
@@ -203,7 +205,9 @@ def _build_stamp() -> str:
 
 _BUILD = _build_stamp()
 _SHELL_ASSET_RE = re.compile(
-    rb'(href|src)="(styles\.css|app\.js|terminal\.css|terminal\.js)"')
+    rb'(href|src)="(styles\.css|app\.js|i18n\.js|panels\.js|advisor\.js|'
+    rb'tracker\.js|alerts\.js|vol\.js|akoan\.js|ticker\.js|'
+    rb'terminal\.css|terminal\.js)')
 _STARTED_AT = time.time()
 
 
