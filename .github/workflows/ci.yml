@@ -79,6 +79,17 @@ jobs:
       - name: Test the web terminal
         run: python3 mobile/test_terminal.py
 
+      - name: Install the browser and the driver
+        # The DOM tests drive the real shell in a real browser. They are the
+        # only check that a control works rather than merely exists; every
+        # other phone test reads the source as text.
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Test the phone UI in a real browser
+        run: python3 mobile/test_dom_browser.py
+
       - name: Test the signal engine and its honesty guarantees
         run: python3 -m unittest discover -s tracker -p "test_*.py"
 
