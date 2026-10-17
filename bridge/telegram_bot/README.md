@@ -67,6 +67,17 @@ state-machine against recorded API payloads. No network is used: the API and
 Telegram transports are in-process fakes that implement the same calls the
 production objects make.
 
+```bash
+python3 test_astra_connection.py
+```
+
+This second suite is the one that exercises the real transports. It starts
+loopback servers — the canonical `scripts/mock_api.py` backend, a bridge
+answering the candle envelope, and a recording Bot API — and drives the
+production `urllib` clients through them. It catches what the fakes cannot: a
+contract rename, a bridge envelope read with the wrong key, or a Bot API call
+Telegram would reject. Nothing reaches the network.
+
 ## Security
 
 - Reads only the loopback API; never binds a public socket.
