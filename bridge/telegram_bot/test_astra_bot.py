@@ -722,5 +722,30 @@ class NewsWatchTests(unittest.TestCase):
             bot.news_window = saved
 
 
+class CommandMenuPayloadTest(unittest.TestCase):
+    """Telegram rejects a command name that carries the leading slash with
+    BOT_COMMAND_INVALID and drops the entire list, so the menu stays empty in
+    the app while every command still works when typed. The registered payload
+    must carry the bare names."""
+
+    def test_registered_names_have_no_slash(self):
+        client = bot.TelegramClient("tok")
+        captured = {}
+
+        def fake_call(method, payload, timeout):
+            captured.update(method=method, payload=payload)
+            return {"ok": True}
+
+        client._call = fake_call
+        client.set_my_commands()
+        self.assertEqual(captured["method"], "setMyCommands")
+        commands = captured["payload"]["commands"]
+        self.assertEqual(len(commands), len(bot.BOT_COMMANDS))
+        for entry in commands:
+            self.assertNotIn("/", entry["command"],
+                             "Telegram would reject this name")
+            self.assertRegex(entry["command"], r"^[a-z0-9_]{1,32}$")
+
+
 if __name__ == "__main__":
     unittest.main()

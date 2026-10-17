@@ -197,8 +197,14 @@ class TelegramClient:
         self._call("sendMessage", payload, _SEND_TIMEOUT_SECONDS)
 
     def set_my_commands(self) -> None:
-        """Register the command menu. Overrides anything set in BotFather."""
-        payload = {"commands": [{"command": c, "description": d}
+        """Register the command menu. Overrides anything set in BotFather.
+
+        Telegram rejects a command name that carries the leading slash (it
+        returns BOT_COMMAND_INVALID and drops the whole list), so the stored
+        "/price" is registered as "price". The slash is how the user types it,
+        not how the menu stores it.
+        """
+        payload = {"commands": [{"command": c.lstrip("/"), "description": d}
                                 for c, d in BOT_COMMANDS]}
         self._call("setMyCommands", payload, _SEND_TIMEOUT_SECONDS)
 
