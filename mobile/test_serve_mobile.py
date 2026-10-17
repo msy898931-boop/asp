@@ -1206,6 +1206,16 @@ class NarrowHeaderTest(unittest.TestCase):
         for sel in (".readout dt", ".levels dt", ".bar span", ".foot"):
             self.assertIn(sel, floor)
 
+    def test_footer_links_are_thumb_sized(self):
+        css = self._read("styles.css")
+        # The APK and the two page links were 33px tall text pills, below the
+        # 44px a thumb needs. They are now flex boxes with a 44px floor.
+        for sel in (".apk-link", ".plans-link"):
+            block = css[css.index(sel + " {"):]
+            block = block[:block.index("}")]
+            self.assertIn("display: inline-flex", block)
+            self.assertIn("min-height: 44px", block)
+
 
 if __name__ == "__main__":
     unittest.main()

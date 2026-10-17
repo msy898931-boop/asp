@@ -5,7 +5,7 @@
    offline. The app keeps the *last reading* itself (localStorage), so offline
    it opens to that reading rather than an empty panel. */
 
-const SHELL = "astra-shell-v33";
+const SHELL = "astra-shell-v34";
 const ASSETS = [
   "./",
   "./index.html",

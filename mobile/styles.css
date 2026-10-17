@@ -691,8 +691,8 @@ html[dir="rtl"] .tab { letter-spacing: normal; }
   align-items: center;
 }
 .apk-link {
-  display: inline-block;
-  padding: 12px 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 18px;
   border: 1px solid var(--gold-dim);
   border-radius: 999px;
   color: var(--gold);
@@ -704,8 +704,8 @@ html[dir="rtl"] .tab { letter-spacing: normal; }
 /* Inside the installed app the APK is already on the phone — hide the link. */
 @media (display-mode: standalone) { .apk-link { display: none; } }
 .plans-link {
-  display: inline-block;
-  padding: 9px 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 16px;
   border: 1px solid var(--edge);
   border-radius: 999px;
   color: var(--muted);
