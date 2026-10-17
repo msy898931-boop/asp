@@ -45,6 +45,8 @@ const STRINGS = {
     ai_unavail: "AI advisor unreachable",
     ver: "decision support · not financial advice",
     connecting: "connecting",
+    cached_offline: "offline · showing the last reading",
+    cached_offline_sub: "Reconnecting…",
     alerts_off: "Signal alerts off",
     alerts_on: "Alerts on — you'll be told when the state changes",
     lang_toggle: "العربية",
@@ -174,6 +176,8 @@ const STRINGS = {
     ai_unavail: "المستشار الذكي غير متاح",
     ver: "دعم قرار · ليس نصيحة مالية",
     connecting: "جارٍ الاتصال",
+    cached_offline: "غير متصل · نعرض آخر قراءة",
+    cached_offline_sub: "جارٍ إعادة الاتصال…",
     alerts_off: "تنبيهات الإشارة متوقفة",
     alerts_on: "التنبيهات مفعّلة — سنخبرك عند تغيّر حالة السوق",
     lang_toggle: "English",
@@ -314,6 +318,69 @@ let refreshing = false;   // an in-flight live poll; stops slow polls from stack
 let currentView = "status"; // the visible tab, so polling only fetches what is shown
 const LEVELS_KEY = "astra-levels";
 const connStats = {}; // path -> { ok, ms }
+
+// The last successful live read, so a phone with no network still opens to the
+// most recent reading instead of a blank panel. Only live data is cached (not
+// the akoan study, which is heavy and re-rendered from its own state).
+const CACHE_KEY = "astra-last-read";
+const CACHE_VERSION = 1;
+let offlineMode = false;  // true while the app is showing the cached reading
+
+/* ── last-reading cache ─────────────────────────────────────────────────
+   Written on every successful live poll and read back only when the network
+   fails, so the app degrades to "here is the last thing I knew" rather than an
+   empty screen. It is never used to fake freshness: the banner says "offline",
+   and the reading's own age is shown next to the gauge. */
+
+function saveLastRead(snap) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      v: CACHE_VERSION, at: Date.now(), snap,
+    }));
+  } catch (e) { /* private mode, or quota — caching is a bonus, not a need */ }
+}
+
+function loadLastRead() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.v !== CACHE_VERSION || !parsed.snap) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+// "3m ago" / "2h ago" / "4d ago" in the active language.
+function agoText(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return lang === "ar" ? `${s} ث` : `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return lang === "ar" ? `${m} د` : `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return lang === "ar" ? `${h} س` : `${h}h ago`;
+  const d = Math.round(h / 24);
+  return lang === "ar" ? `${d} ي` : `${d}d ago`;
+}
+
+// Render a stored snapshot through the same paths a live one uses. When
+// `offline` is true the panels are also labelled as a cached read; on a cold
+// online start we paint the panels only and let the live poll relabel them.
+function renderSnapshot(snap, offline) {
+  if (!snap) return;
+  renderStatus({
+    health: snap.health || {}, system: snap.system || {}, bridge: snap.bridge || {},
+  });
+  renderSignal(snap.analysis || {});
+  renderBridge(snap.bridge || {});
+  if (snap.ticker) renderTicker(snap.ticker);
+  if (!offline) return;
+  offlineMode = true;
+  const at = snap.at;
+  banner("offline", `${T("cached_offline")}${at ? " · " + agoText(at) : ""}`);
+  $("health-sub").textContent = T("cached_offline_sub");
+}
 
 /* ── theme ──────────────────────────────────────────────────────────── */
 
@@ -1256,11 +1323,22 @@ async function refresh() {
     renderSignal(analysis);
     renderBridge(br);
     maybeAlert(analysis);
+    offlineMode = false;
     banner(aggregate === "ONLINE" ? "online"
       : aggregate === "OFFLINE" ? "offline" : "degraded",
       `${aggregate.toLowerCase()} · ${br.broker || "no source"}`);
+    // Remember this read so the next cold start with no network is not blank.
+    saveLastRead({ health, system, bridge: br, analysis, at: Date.now() });
   } catch (err) {
-    banner("offline", "backend unreachable");
+    // The network failed. Fall back to the last reading if we have one, and
+    // say plainly that it is the last reading rather than a fresh one.
+    const cached = loadLastRead();
+    if (cached) {
+      renderSnapshot(cached.snap, true);
+    } else {
+      offlineMode = true;
+      banner("offline", "backend unreachable");
+    }
   } finally {
     btn.classList.remove("busy");
     refreshing = false;
@@ -1501,22 +1579,44 @@ async function loadTicker() {
     const change = price - prev.close;
     const pct = prev.close ? (change / prev.close) * 100 : 0;
 
-    $("price").textContent = num(price);
-    const chg = $("price-chg");
-    chg.textContent = `${change >= 0 ? "+" : ""}${num(change)}  `
-      + `${change >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
-    chg.className = "ticker-chg " + (change > 0 ? "up" : change < 0 ? "down" : "");
-    $("price-basis").textContent = live !== null
-      ? `live · gold-api.com`
-      : `${activeTf} close · gold-api.com`;
-    $("ticker").hidden = false;
+    renderTicker({ price, change, pct, live: live !== null, tf: activeTf });
+    // Remember the ticker too, so an offline start still shows a price.
+    const cached = loadLastRead();
+    if (cached && !offlineMode) {
+      saveLastRead(Object.assign({}, cached.snap, {
+        ticker: { price, change, pct, live: live !== null, tf: activeTf },
+      }));
+    }
     checkLevels(price);
     // Keep an open idea's live R fresh while the journal tab is on screen.
     const jrn = $("view-tracker");
     if (jrn && !jrn.hidden && trkData) renderJournal(trkData);
   } catch (err) {
+    // No live ticker; if we have a cached one and we are offline, show it.
+    if (offlineMode) {
+      const cached = loadLastRead();
+      if (cached && cached.snap && cached.snap.ticker) {
+        renderTicker(cached.snap.ticker);
+        return;
+      }
+    }
     $("ticker").hidden = true;
   }
+}
+
+// Draws the header price from a {price, change, pct} reading. Kept separate from
+// the fetch so a cached reading renders through the same path.
+function renderTicker(t) {
+  $("price").textContent = num(t.price);
+  const chg = $("price-chg");
+  chg.textContent = `${t.change >= 0 ? "+" : ""}${num(t.change)}  `
+    + `${t.change >= 0 ? "+" : ""}${Number(t.pct).toFixed(2)}%`;
+  chg.className = "ticker-chg "
+    + (t.change > 0 ? "up" : t.change < 0 ? "down" : "");
+  $("price-basis").textContent = t.live
+    ? "live · gold-api.com"
+    : `${t.tf || activeTf} close · gold-api.com`;
+  $("ticker").hidden = false;
 }
 
 function banner(kind, text) {
@@ -1660,8 +1760,21 @@ function init() {
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refresh();
   });
+  // The OS tells us the network went away or came back; use it to label the
+  // banner immediately instead of waiting for the next poll to time out.
+  window.addEventListener("online", () => refresh());
+  window.addEventListener("offline", () => {
+    offlineMode = true;
+    banner("offline", T("cached_offline"));
+  });
   window.addEventListener("resize", updateTabFades);
   window.addEventListener("orientationchange", () => setTimeout(updateTabFades, 150));
+
+  // Paint the last reading first so a cold, offline start is never blank, then
+  // let the live poll overwrite it the moment the backend answers.
+  const cached = loadLastRead();
+  if (cached) renderSnapshot(cached.snap, false);
+
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
 

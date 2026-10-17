@@ -949,5 +949,54 @@ class AndroidShellTest(unittest.TestCase):
         self.assertIn("getStatusCode() == 401", java)
 
 
+class OfflineCacheTest(unittest.TestCase):
+    """A phone with no network must open to the last reading, not a blank
+    screen, and must say plainly that the reading is cached."""
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_app_caches_and_restores_the_last_reading(self):
+        js = self._read("app.js")
+        self.assertIn("saveLastRead", js)
+        self.assertIn("loadLastRead", js)
+        self.assertIn("renderSnapshot", js)
+        # The cache is versioned so a shape change cannot be misread as current.
+        self.assertIn("CACHE_VERSION", js)
+
+    def test_refresh_saves_on_success_and_restores_on_failure(self):
+        js = self._read("app.js")
+        # The success path must persist; the failure path must restore.
+        self.assertIn("saveLastRead({ health, system, bridge: br, analysis", js)
+        self.assertIn("renderSnapshot(cached.snap, true)", js)
+
+    def test_boot_paints_the_cached_reading_before_the_live_poll(self):
+        js = self._read("app.js")
+        # In init(): restore first, then refresh. A live poll on a cold start
+        # must not be the only thing standing between the user and a blank app.
+        restore = js.index("if (cached) renderSnapshot(cached.snap, false)")
+        live = js.index("refresh();\n  setInterval")
+        self.assertLess(restore, live)
+
+    def test_offline_is_labelled_not_faked(self):
+        js = self._read("app.js")
+        # The offline banner must exist in both languages, and the cached
+        # reading must carry its age rather than looking live.
+        self.assertIn("cached_offline", js)
+        self.assertIn("agoText", js)
+        self.assertIn("offlineMode", js)
+
+    def test_online_and_offline_events_are_wired(self):
+        js = self._read("app.js")
+        self.assertIn('addEventListener("online"', js)
+        self.assertIn('addEventListener("offline"', js)
+
+    def test_service_worker_falls_back_to_the_shell_for_navigations(self):
+        sw = self._read("sw.js")
+        self.assertIn('mode === "navigate"', sw)
+        self.assertIn('caches.match("./index.html")', sw)
+
+
 if __name__ == "__main__":
     unittest.main()

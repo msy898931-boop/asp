@@ -2,9 +2,10 @@
    Live endpoints (API, bridge, advisor) are network-only so readings are never
    stale. The shell is network-first with a cache fallback: a deploy is picked
    up on the next load instead of the load after next, and the app still opens
-   offline. */
+   offline. The app keeps the *last reading* itself (localStorage), so offline
+   it opens to that reading rather than an empty panel. */
 
-const SHELL = "astra-shell-v29";
+const SHELL = "astra-shell-v30";
 const ASSETS = [
   "./",
   "./index.html",
@@ -66,7 +67,13 @@ self.addEventListener("fetch", (event) => {
         }
         return res;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() => caches.match(event.request).then((hit) => {
+        if (hit) return hit;
+        // A navigation for a path we never cached (a deep link, say) must still
+        // land on the app shell rather than the browser's offline page.
+        if (event.request.mode === "navigate") return caches.match("./index.html");
+        return undefined;
+      }))
   );
 });
 
