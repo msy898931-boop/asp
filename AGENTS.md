@@ -1276,3 +1276,30 @@ are positive R on both halves but below the Wilson bar. No session/weekday/
 direction/regime filter has an edge alone. Full write-up:
 `docs/research/PLAN_A_FEATURE_STORE_AND_GATE.md`.
 
+### Quality gate (lint · types · coverage)
+
+CI's `quality` job runs three checks on the Python side. Reproduce them locally
+after installing `requirements-dev.txt`:
+
+```
+ruff check .
+mypy bot tracker akoan advisor bridge mobile src     # shipped surface only
+python3 -m coverage run -a --source=bot,tracker,research,akoan,advisor,mobile,src \
+  -m unittest discover -s <dir> -p "test_*.py"       # per suite, then report
+python3 -m coverage report --fail-under=75
+```
+
+Scope decisions worth keeping:
+
+* **mypy covers the shipped surface only** — `bot tracker akoan advisor bridge
+  mobile src`. `research/` is exploratory analysis, not shipped code; typing it
+  would be noise. The gate was not free: it surfaced real Optional bugs (a
+  `Tree.predict` that indexed an unset feature, `X = None` fields that should be
+  `Optional[X]`, unchecked JSON lookups in the bot and the phone server).
+* **coverage floor is 75%**, well under the measured ~82% so ordinary churn does
+  not trip it while a real regression still would.
+* The suites are stdlib `unittest`; there is no pytest dependency. Coverage is
+  aggregated across all eight suites in one `.coverage` file.
+* `explicit_package_bases = True` in `mypy.ini` is required: two files share the
+  leaf name `study.py` (`akoan/study.py`, `research/features_real/study.py`).
+
