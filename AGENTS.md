@@ -53,7 +53,7 @@ for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
   python3 -m unittest discover -s "$d" -p "test_*.py"
 done
 python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
-# 953 tests total (152/44/50/59/92/154/94 + 308)
+# 957 tests total (152/44/50/59/92/158/94 + 308)
 ```
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style
@@ -569,6 +569,22 @@ Two things to remember:
 
 The app header shows a live price ticker (newest closed close + change vs the
 prior close) from the same loopback bridge candles as the chart.
+
+**The header has to fit a 320px phone.** A brand plus four controls in one row
+needs 422px at full size, so every common phone (320-390px) scrolled sideways
+and the refresh button sat half off-screen. Two media queries fix it by measured
+numbers, not by eye: below 419px the controls drop to 40px wide (height stays
+44px, so the tap target does not shrink) and the wordmark steps to 22px; below
+359px the gaps tighten, the mark shrinks to 28px and the wordmark to 19px. The
+brand is the side that yields — `.brand { min-width: 0 }` lets it shrink, its
+subtitle ellipsizes, and `.controls { flex: none }` keeps the buttons whole.
+`html, body { overflow-x: hidden }` is a safety net, not the fix.
+
+The 10px micro-labels (and the bottom tab bar) step up to 11px below 480px;
+they are legible on a desktop panel but strain a phone held at arm's length.
+`mobile/test_serve_mobile.py::NarrowHeaderTest` pins all of this so it cannot
+silently regress — the sizes were measured in a headless browser at 320/360/375/
+390/412/430px, in both directions (the app runs RTL in Arabic).
 
 ## Model edge — what is and is not signal
 

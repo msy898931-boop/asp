@@ -1156,5 +1156,56 @@ class SkeletonTest(unittest.TestCase):
         self.assertIn("setSkeleton(true)", window)
 
 
+class NarrowHeaderTest(unittest.TestCase):
+    """The header must fit a 320px phone without a sideways scroll.
+
+    It packed a brand plus four controls into one row, which needs 422px: every
+    common phone (320-390px) scrolled sideways and the refresh button sat half
+    off-screen. The fix is a measured one, so the numbers in the stylesheet are
+    part of the contract and are checked here rather than eyeballed.
+    """
+
+    def _read(self, name):
+        with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_css_shrinks_the_header_on_narrow_screens(self):
+        css = self._read("styles.css")
+        self.assertIn("@media (max-width: 419px)", css)
+        self.assertIn("@media (max-width: 359px)", css)
+        # The controls keep their 44px height (tap target); only the width and
+        # the gaps step down.
+        narrow = css[css.index("@media (max-width: 419px)"):]
+        self.assertIn(".icon-btn { width: 40px; }", narrow)
+        self.assertIn(".controls { gap: 6px; }", narrow)
+        # The wordmark steps down at the narrowest step.
+        self.assertIn("h1 { font-size: 19px; letter-spacing: .06em; }", narrow)
+
+    def test_the_brand_yields_before_the_controls(self):
+        css = self._read("styles.css")
+        # A flex item refuses to shrink below its content without min-width: 0,
+        # which is what pushed the row past the viewport in the first place.
+        self.assertIn(".brand { min-width: 0; }", css)
+        self.assertIn(".brand > div { min-width: 0; overflow: hidden; }", css)
+        self.assertIn(".brand .sub { white-space: nowrap; overflow: hidden;"
+                      " text-overflow: ellipsis; }", css)
+        # The controls are the fixed side of the trade.
+        self.assertIn(".controls { flex: none; }", css)
+
+    def test_the_page_never_scrolls_sideways(self):
+        css = self._read("styles.css")
+        self.assertIn("html, body { overflow-x: hidden; }", css)
+
+    def test_micro_labels_step_up_on_a_phone(self):
+        css = self._read("styles.css")
+        floor = css[css.index("@media (max-width: 480px)"):]
+        # The 10px labels (and the bottom tab bar) move to 11px on a narrow
+        # screen; the bottom bar is the one a thumb actually reads.
+        self.assertIn(".tab", floor)
+        self.assertIn("font-size: 11px", floor)
+        for sel in (".readout dt", ".levels dt", ".bar span", ".foot"):
+            self.assertIn(sel, floor)
+
+
 if __name__ == "__main__":
     unittest.main()

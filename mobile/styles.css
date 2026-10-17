@@ -120,6 +120,51 @@ h1 {
 }
 .text-btn:active { background: var(--ink-3); transform: scale(.94); }
 
+/* ── narrow phones ──────────────────────────────────────────────────────
+   The header packs a brand and four controls into one row. At full size that
+   needs 422px, so every phone from 320-390px scrolled sideways and the refresh
+   button sat half off-screen. Two things fix it: the brand gives way (its
+   wordmark steps down and its subtitle ellipsizes) while the controls keep
+   their size, and the row tightens its gaps. Button heights stay 44px, so the
+   tap targets never shrink.
+
+   The wordmark sizes below are measured, not guessed: "ASTRA" is 115px wide at
+   26px/0.16em, and the brand box leaves 75px for it at 320px once the 34px mark
+   and gap are removed. 22px/0.08em (~89px) fits from 360px, and 19px/0.06em
+   (75px) fits at 320px. */
+@media (max-width: 419px) {
+  .top { padding-left: 12px; padding-right: 12px; gap: 8px; }
+  .brand { gap: 8px; }
+  .controls { gap: 6px; }
+  .icon-btn { width: 40px; }
+  .text-btn { padding: 0 9px; }
+  h1 { font-size: 22px; letter-spacing: .08em; }
+}
+@media (max-width: 359px) {
+  .top { padding-left: 10px; padding-right: 10px; gap: 6px; }
+  .brand { gap: 6px; }
+  .controls { gap: 4px; }
+  .mark { width: 28px; height: 28px; }
+  h1 { font-size: 19px; letter-spacing: .06em; }
+  .text-btn { padding: 0 7px; }
+}
+
+/* The controls are fixed; the brand absorbs the squeeze. Without min-width: 0 a
+   flex item refuses to shrink below its content, which is what pushed the row
+   past the viewport in the first place. overflow: hidden is a safety net so a
+   future wordmark that outgrows its box clips cleanly instead of sliding under
+   the buttons. */
+.brand { min-width: 0; }
+.brand > div { min-width: 0; overflow: hidden; }
+.brand h1 { white-space: nowrap; overflow: hidden; }
+.brand .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.controls { flex: none; }
+
+/* Belt and braces: nothing should make the page scroll sideways. This is not
+   the fix for the header (that is above) — it keeps a stray wide child, like
+   the SVG grain overlay, from dragging the whole app along. */
+html, body { overflow-x: hidden; }
+
 /* ── toast ──────────────────────────────────────────────────────────── */
 .toast {
   position: fixed;
@@ -647,12 +692,12 @@ html[dir="rtl"] .tab { letter-spacing: normal; }
 }
 .apk-link {
   display: inline-block;
-  padding: 10px 16px;
+  padding: 12px 18px;
   border: 1px solid var(--gold-dim);
   border-radius: 999px;
   color: var(--gold);
   text-decoration: none;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: .05em;
 }
 .apk-link:active { background: var(--ink-3); }
@@ -945,4 +990,16 @@ html[dir="rtl"] .ai-events li::before { left: auto; right: 0; }
   color: var(--muted);
 }
 .jrn-day:first-child { margin-top: 0; }
+
+/* ── small-screen typography floor ──────────────────────────────────────
+   Twelve rules use 10px for uppercase micro-labels (and the bottom tab bar).
+   That is legible on a desktop panel but strains a phone held at arm's length,
+   so on a narrow screen they step up to 11px. Nothing else moves: every other
+   text size is already 12px or more. */
+@media (max-width: 480px) {
+  .readout dt, .levels dt, .bar span, .axis, .akoan-dim-title,
+  .conn th, .tab, .foot, .trk-stat-label, .trk-meta, .trk-oc, .jrn-day {
+    font-size: 11px;
+  }
+}
 
