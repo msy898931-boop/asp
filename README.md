@@ -72,10 +72,12 @@ Measured on this fork (2026-10-16):
 | `advisor/` | 92 |
 | `mobile/` | 119 |
 | `bridge/telegram_bot/` | 91 |
-| **Total (Python)** | **607** |
+| `tests/` (models, integration, features) | 308 |
+| **Total (Python)** | **915** |
 
-Plus 19 C++ test binaries. Run a suite with
-`python3 -m unittest discover -s <suite> -p "test_*.py"`.
+Plus 19 C++ test binaries (`ctest`). Run a suite with
+`python3 -m unittest discover -s <suite> -p "test_*.py"`. Every Python suite
+also runs in CI, so the figures above are re-measured on each push.
 
 _All links are published by an AI agent (OpenHands) on behalf of @msy898931-boop._
 
