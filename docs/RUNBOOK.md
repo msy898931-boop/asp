@@ -164,8 +164,42 @@ persistent disk to a free service.
 
 The Qt desktop UI is a separate build and is **not** part of the server image.
 Packaging scripts live under `packaging/`; the rolling desktop release is the
-`bff7c28` line. Building the `.exe` on Linux requires a Windows toolchain or a
-cross-build; it has not been produced in this environment.
+`bff7c28` line. The build runs on `windows-latest` via
+`.github/workflows/build-windows.yml` (Qt 6.8 + MSVC 2022), which publishes two
+permanent downloads to the rolling `desktop` release:
+
+| Asset | What it is |
+|---|---|
+| `ASTRA-windows.zip` (~23 MB) | The Qt UI alone (needs a backend already running) |
+| `ASTRA-full.zip` (~62 MB) | UI + `aura_backend_host.exe` + embedded Python — runs standalone |
+
+### Running it on a laptop
+
+Unzip `ASTRA-full.zip` and **double-click `ASTRA.bat`** — not
+`astra_desktop.exe`. The bundle ships two executables and the UI is useless
+alone: it polls `127.0.0.1:8790` and shows an empty window until the host binds
+that port. `ASTRA.bat` starts the host, waits four seconds, then opens the UI;
+`README.txt` beside it says the same thing in Arabic.
+
+Manual equivalent, one terminal in the bundle folder:
+
+```bat
+aura_backend_host.exe
+astra_desktop.exe
+```
+
+Notes that matter:
+
+- **Read-only, shadow mode.** It never places a trade and carries no credentials.
+- **Data source is `live` by default** (gold-api.com + Kraken PAXGUSD), so it
+  needs internet. Set `ASTRA_DATA_SOURCE=replay` for the offline synthetic demo.
+- **MetaTrader 5 is optional.** Without an MT5 terminal the host still runs on
+  live prices; only the `mt5` data source needs the terminal.
+- **Do not run the bot on two machines.** One token = one poller. If the
+  deployed Render service already polls it, leave `TELEGRAM_BOT_TOKEN` unset
+  locally or both stop with HTTP 409 (see §5).
+- **SmartScreen will warn** because the exe is not code-signed: More info, then
+  Run anyway.
 
 ## 9. Research tools (and the honest result)
 

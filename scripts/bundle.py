@@ -7,6 +7,8 @@ from the executable location:
 
     <out>/
       aura_backend_host        (optional: copied when --backend-host is given)
+      ASTRA.bat                (Windows launcher: host first, then the UI)
+      README.txt               (how to run it, in Arabic)
       resources/
         bridge/mt5_python/     (bridge files copied verbatim)
       runtime/python/          (bundled interpreter goes here)
@@ -81,12 +83,96 @@ def _make_dirs(manifest: Dict, out_dir: str) -> List[str]:
     return made
 
 
+# The bundle ships two executables and no hint of the order they go in: the
+# desktop UI connects to 127.0.0.1:8790 and shows nothing until the backend
+# host is listening there. A user who double-clicks the UI first sees an empty
+# window and concludes the app is broken. These two files are the missing
+# instructions — a one-click launcher and a plain-language README.
+_LAUNCHER = """@echo off
+rem ASTRA launcher: the UI needs the backend host listening on 8790 first.
+rem Double-click this file, not astra_desktop.exe, or the UI opens empty.
+setlocal
+cd /d "%~dp0"
+
+start "" /min "aura_backend_host.exe"
+
+rem Give the host time to bind its loopback API before the UI connects.
+timeout /t 4 /nobreak >nul
+
+start "" "astra_desktop.exe"
+"""
+
+_README = """\
+ASTRA — Windows desktop
+=======================
+
+كيف تشغّل التطبيق
+-----------------
+انقر مرّتين على:  ASTRA.bat
+
+هذا كل شيء. الملف يشغّل الخادم الخلفي (aura_backend_host.exe) ثم ينتظر
+أربع ثوانٍ ثم يفتح الواجهة (astra_desktop.exe).
+
+لماذا ملف التشغيل وليس الواجهة مباشرة؟
+-------------------------------------
+الحزمة تحتوي برنامجين:
+
+  1) aura_backend_host.exe  — الخادم: يقرأ السوق ويجهّز الأرقام.
+  2) astra_desktop.exe      — الواجهة: نافذة تعرض الأرقام.
+
+الواجهة تتصل بالخادم على العنوان 127.0.0.1:8790. إذا فتحت الواجهة أولاً
+فلن تجد الخادم وستبقى النافذة فارغة. لهذا نبدأ بالخادم أولاً.
+
+التشغيل اليدوي (نفس النتيجة)
+----------------------------
+نافذة أوامر واحدة في مجلد الحزمة:
+
+    aura_backend_host.exe
+    astra_desktop.exe
+
+أو انقر مرّتين على كل ملف بالترتيب.
+
+ملاحظات
+------
+- قراءة فقط: البرنامج لا ينفّذ أي صفقة ولا يحمل أي كلمة سر أو مفتاح.
+- مصدر البيانات الافتراضي: أسعار حيّة (gold-api.com + Kraken PAXGUSD).
+  يحتاج اتصال إنترنت. بلا إنترنت تعمل الواجهة لكن بلا أرقام جديدة.
+- لتشغيل بوت تلغرام من هذه الحزمة: ضع TELEGRAM_BOT_TOKEN في البيئة
+  (set TELEGRAM_BOT_TOKEN=...) قبل تشغيل aura_backend_host.exe.
+  مهم: توكن واحد = بوت واحد. إذا كان البوت يعمل على سيرفر، لا تشغّله
+  هنا أيضاً، وإلا يتوقف الاثنان بتعارض 409.
+- MetaTrader 5 اختياري تماماً. بدون منصّة MT5 تعمل الحزمة بالأسعار الحيّة.
+
+المشاكل الشائعة
+---------------
+* النافذة تفتح فارغة  -> الخادم لم يبدأ. شغّل ASTRA.bat أو ابدأ
+  aura_backend_host.exe أولاً.
+* «Windows protected your PC» -> انقر More info ثم Run anyway. الملف غير
+  موقّع رقمياً (لا شهادة دفع).
+* لا أرقام جديدة -> تحقّق من اتصال الإنترنت.
+"""
+
+
+def _write_launcher(out_dir: str) -> None:
+    """Stage the Windows launcher and the Arabic README.
+
+    ASCII-only, CRLF line endings: .bat files with LF endings and non-ASCII
+    bytes misbehave under the Windows console's default code page.
+    """
+    with open(os.path.join(out_dir, "ASTRA.bat"), "w", encoding="ascii",
+              newline="\r\n") as fh:
+        fh.write(_LAUNCHER)
+    with open(os.path.join(out_dir, "README.txt"), "w", encoding="utf-8") as fh:
+        fh.write(_README)
+
+
 def stage(out_dir: str, backend_host: str | None = None) -> Dict:
     manifest = load_manifest()
     os.makedirs(out_dir, exist_ok=True)
     copied = _copy_bridge(manifest, out_dir)
     bot_copied = _copy_telegram_bot(manifest, out_dir)
     made = _make_dirs(manifest, out_dir)
+    _write_launcher(out_dir)
 
     host_name = manifest.get("product", "ASTRA")
     backend_copied = None
@@ -107,6 +193,8 @@ def stage(out_dir: str, backend_host: str | None = None) -> Dict:
         "telegram_bot_files": bot_copied,
         "dirs_created": made,
         "backend_host": backend_copied,
+        "launcher": "ASTRA.bat",
+        "readme": "README.txt",
     }
     with open(os.path.join(out_dir, "bundle_report.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2)
@@ -145,6 +233,12 @@ def verify(out_dir: str) -> tuple[bool, List[str]]:
     for key in ("python_runtime_dir", "config_dir", "data_dir", "log_dir"):
         if not os.path.isdir(os.path.join(out_dir, rel[key])):
             problems.append(f"missing directory: {rel[key]}")
+
+    # The two executables are useless without the order-of-operations note: the
+    # UI talks to the host on 8790 and stays blank if the host is not up.
+    for name in ("ASTRA.bat", "README.txt"):
+        if not os.path.isfile(os.path.join(out_dir, name)):
+            problems.append(f"missing launcher/documentation: {name}")
 
     # No forbidden artifacts may leak into the bundle.
     for root, dirs, files in os.walk(out_dir):

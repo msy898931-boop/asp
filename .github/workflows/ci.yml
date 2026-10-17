@@ -96,6 +96,12 @@ jobs:
           python3 bridge/telegram_bot/test_astra_bot.py
           python3 bridge/telegram_bot/test_volatility.py
 
+      - name: The desktop bundle must ship its launcher
+        # Two executables land side by side and the Qt UI is useless alone (it
+        # polls 127.0.0.1:8790). The stager also writes ASTRA.bat + README.txt,
+        # and this keeps that contract from silently regressing.
+        run: python3 tests/integration/test_bundling_t07.py
+
   quality:
     # Lint, types and coverage over the Python side. These are cheap and
     # catch whole classes of defect (dead ignores, unhandled Optional,

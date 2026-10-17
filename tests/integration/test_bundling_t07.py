@@ -91,6 +91,39 @@ def main() -> int:
         ok, problems = bundle.verify(out)
         check("bundle verifies clean", ok, "; ".join(problems))
 
+        print("Launcher: the bundle must say which executable goes first")
+        # Two exes ship side by side and the UI is useless alone: it polls
+        # 127.0.0.1:8790 and shows an empty window until the host binds it.
+        launcher = os.path.join(out, "ASTRA.bat")
+        readme = os.path.join(out, "README.txt")
+        check("launcher staged", os.path.isfile(launcher))
+        check("readme staged", os.path.isfile(readme))
+        with open(launcher, "rb") as fh:
+            raw = fh.read()
+        # A .bat carrying non-ASCII bytes is decoded with the console code page
+        # and the line is mis-executed; the launcher must stay ASCII.
+        check("launcher is pure ASCII",
+              all(b < 128 for b in raw), f"non-ascii bytes: {[b for b in raw if b > 127][:5]}")
+        # Every newline must be part of a CRLF pair; a bare LF is what a Windows
+        # .bat mis-handles.
+        lf = raw.count(b"\n")
+        crlf = raw.count(b"\r\n")
+        check("launcher uses CRLF", lf == crlf, f"lf={lf} crlf={crlf}")
+        text = raw.decode("ascii")
+        # Compare the two start commands, not the file offsets of the names:
+        # the header comment mentions astra_desktop.exe before either runs.
+        host_cmd = text.find('start "" /min "aura_backend_host.exe"')
+        ui_cmd = text.find('start "" "astra_desktop.exe"')
+        check("launcher starts the host before the UI",
+              host_cmd != -1 and ui_cmd != -1 and host_cmd < ui_cmd,
+              f"host-cmd@{host_cmd} ui-cmd@{ui_cmd}")
+        with open(readme, encoding="utf-8") as fh:
+            doc = fh.read()
+        check("readme names both executables",
+              "aura_backend_host.exe" in doc and "astra_desktop.exe" in doc)
+        check("readme warns about the 409 single-poller rule",
+              "409" in doc and "توكن" in doc)
+
         # Scope limit (F1), asserted rather than only documented: the stager
         # arranges the layout but places NO interpreter binary, so the bundle is
         # not runtime-complete until a real distribution is added.
@@ -105,6 +138,12 @@ def main() -> int:
             fh.write("x")
         ok2, problems2 = bundle.verify(out)
         check("verify catches forbidden artifacts", not ok2, "; ".join(problems2))
+
+        # verify must also catch a bundle shipped without the launcher.
+        os.remove(launcher)
+        ok3, problems3 = bundle.verify(out)
+        check("verify catches a missing launcher",
+              not ok3 and any("ASTRA.bat" in p for p in problems3), "; ".join(problems3))
     finally:
         shutil.rmtree(out, ignore_errors=True)
 

@@ -17,7 +17,10 @@ It is the source-side counterpart to the runtime path logic in
 
 ```text
 ASTRA/
-  aura_backend_host            # backend host entry point (double-click)
+  ASTRA.bat                    # one-click launcher: host first, then the UI
+  README.txt                   # how to run it (Arabic, for the end user)
+  astra_desktop.exe            # Qt UI (talks to 127.0.0.1:8790)
+  aura_backend_host.exe        # backend host entry point
   resources/
     bridge/mt5_python/         # bundled bridge (copied verbatim)
       bridge_service.py
@@ -32,8 +35,15 @@ ASTRA/
   logs/
 ```
 
+`ASTRA.bat` exists because the bundle ships **two** executables and the UI is
+useless alone: it polls `127.0.0.1:8790` and shows an empty window until the
+host binds that port. The launcher starts the host, waits four seconds, then
+opens the UI. It is ASCII-only with CRLF endings, since a `.bat` carrying
+non-ASCII bytes is decoded with the console code page and mis-executed.
+
 The layout is declared once in `bundle_manifest.json`. `scripts/bundle.py`
-stages it and verifies it; nothing resolves a path from the CWD.
+stages it, writes the launcher and the README, and verifies it; nothing
+resolves a path from the CWD.
 
 ## Bundling
 
