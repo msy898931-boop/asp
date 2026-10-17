@@ -24,6 +24,7 @@ If you are new, read these four, in order:
 | Audit | `docs/ASSESSMENT_2026-10-16.md` | Independent re-assessment (84.5), measured live; supersedes the audit's test counts |
 | Product | `docs/SELLING.md` | Pricing and what the tool honestly does |
 | Mobile | `mobile/README.md` | The PWA: routes, tabs, offline shell |
+| Evidence | `docs/evidence/FIELD_TEST_apk_2026-10-17.md` | The `.apk` run on real hardware (first such record) |
 | Bot | `bridge/telegram_bot/README.md` | Telegram bot, entitlements, watchdog |
 | akoan | `akoan/README.md` | The news-statistics engine and its verdicts |
 | Advisor | `advisor/README.md` | The external second-opinion model |
