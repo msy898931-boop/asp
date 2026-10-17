@@ -1026,6 +1026,22 @@ class ServiceWorkerGateTest(unittest.TestCase):
         sw = self._read("sw.js")
         self.assertIn('url.pathname.endsWith(".apk")', sw)
 
+    def test_panel_readings_are_never_cached(self):
+        # /vol.json and /akoan.json carry a current number, exactly like the
+        # live endpoints above them. Caching one would serve a stale reading —
+        # and because the volatility panel stamps the *render* time, not the
+        # data time, the stale number would look freshly computed.
+        sw = self._read("sw.js")
+        self.assertIn('url.pathname.endsWith("/vol.json")', sw)
+        self.assertIn('url.pathname.endsWith("/akoan.json")', sw)
+        # The guard has to sit with the live guard, inside the fetch handler and
+        # before its cache write (the install-time caches.open is elsewhere).
+        fetch_handler = sw[sw.index('addEventListener("fetch"'):]
+        guard = fetch_handler.index("const reading =")
+        cache_write = fetch_handler.index("caches.open(SHELL)")
+        self.assertLess(guard, cache_write,
+                        "the reading guard must precede the cache write")
+
 
 class AndroidShellTest(unittest.TestCase):
     """The APK is a WebView shell that opens the hosted app. Its baked-in target

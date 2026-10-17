@@ -1,11 +1,12 @@
 /* ASTRA service worker — offline shell, live data.
-   Live endpoints (API, bridge, advisor) are network-only so readings are never
-   stale. The shell is network-first with a cache fallback: a deploy is picked
-   up on the next load instead of the load after next, and the app still opens
-   offline. The app keeps the *last reading* itself (localStorage), so offline
-   it opens to that reading rather than an empty panel. */
+   Live endpoints (API, bridge, advisor) and the panel readings (vol, akoan)
+   are network-only so readings are never stale. The shell is network-first
+   with a cache fallback: a deploy is picked up on the next load instead of the
+   load after next, and the app still opens offline. The app keeps the *last
+   reading* itself (localStorage), so offline it opens to that reading rather
+   than an empty panel. */
 
-const SHELL = "astra-shell-v36";
+const SHELL = "astra-shell-v37";
 const ASSETS = [
   "./",
   "./index.html",
@@ -52,7 +53,12 @@ self.addEventListener("fetch", (event) => {
                url.pathname.includes("/bridge/") ||
                url.pathname.includes("/tracker/") ||
                url.pathname.includes("/advisor/");
-  if (live || event.request.method !== "GET") return; // network only
+  // The panel readings are the same kind of thing as a live endpoint: a number
+  // that must be the current one. /vol.json and /akoan.json are not shell
+  // assets — caching one serves a stale reading under a fresh timestamp.
+  const reading = url.pathname.endsWith("/vol.json") ||
+                  url.pathname.endsWith("/akoan.json");
+  if (live || reading || event.request.method !== "GET") return; // network only
 
   // The push capability reading must be fresh, never cached: a stale one would
   // tell the app there is no VAPID key after the operator has set one.
