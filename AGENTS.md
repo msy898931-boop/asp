@@ -422,6 +422,16 @@ instrument-panel shell that reads the same loopback API through its own origin.
 Run it on a public port; icons are generated with `mobile/icons/make_icons.py`
 (stdlib only). Install on the phone via the browser's "Add to Home screen".
 
+The client is nine classic scripts, not one. `index.html` loads `app.js` first,
+then `i18n`, `panels`, `advisor`, `tracker`, `alerts`, `vol`, `akoan`, `ticker`;
+they share one global scope, so there is no module loader and no build step.
+`app.js` holds the shared state and the network helpers and must stay first.
+Each script repeats `"use strict"` (a separate classic script would otherwise be
+sloppy). A script ships correctly only if it is loaded by the page, precached in
+`sw.js` and stamped by `serve_mobile.py`; `ClientScriptContractTest` in
+`mobile/test_serve_mobile.py` pins all three, and the source-reading tests read
+the nine as one string so a symbol may move file without breaking an assertion.
+
 Access control: the server is **open by default**. Set `ASTRA_ACCESS_TOKEN`
 (or pass `--access-token`) and every route but `/api/v1/health` answers `401`
 without the key. Health stays open on purpose — Render, Fly and the keepalive
