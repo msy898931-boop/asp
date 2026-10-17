@@ -113,6 +113,13 @@ That is the layer that catches a contract rename, a bridge-envelope mix-up, or a
 Bot API call Telegram would reject. It never reaches the network: the deployment
 owns the token and a second poller would 409 it.
 
+Before wiring a token, confirm it is *this* bot's: `getMe` should name the bot
+you expect, and after boot `getMyCommands` should list all of `BOT_COMMANDS`.
+A foreign token (a different bot's) registers its own menu silently, so the app
+shows the wrong commands while nothing errors. Also check `getWebhookInfo`: the
+bot long-polls `getUpdates`, so a non-empty `url` there means a webhook would
+starve polling.
+
 **Language: Arabic.** Everything the user sees is Arabic ŌĆö command replies,
 alerts, and the startup message. On boot the bot calls `setMyCommands` with
 `BOT_COMMANDS` and `setChatMenuButton`, so the Telegram menu always shows the
