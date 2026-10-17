@@ -139,7 +139,15 @@ expire after 30 days). Two assets:
 
 - `ASTRA-windows.zip` — the Qt UI alone (~24 MB).
 - `ASTRA-full.zip` — UI + backend host + embedded Python, runs standalone
-  (~64 MB): unzip and launch `astra_desktop.exe`.
+  (~64 MB): unzip and double-click `ASTRA.bat`.
+
+`ASTRA.bat` (written by `scripts/bundle.py`) starts `aura_backend_host.exe`,
+waits four seconds, then opens `astra_desktop.exe`. The order matters: the Qt
+UI polls `127.0.0.1:8790` and paints an empty window until the host binds that
+port, so launching the UI alone looks like a broken app. `README.txt` in the
+bundle says the same in Arabic. `tests/integration/test_bundling_t07.py`
+asserts the launcher exists, is ASCII-only with CRLF endings, and starts the
+host first; CI runs that test.
 
 Permanent link: `https://github.com/msy898931-boop/asp/releases/download/desktop/ASTRA-full.zip`.
 It triggers on pushes that touch `frontend/qt/**`, or manually
