@@ -134,7 +134,15 @@ def ensure_bundle(include_replay: bool = False):
             "MetaTrader5.py"))
     for src, name in sources:
         dest = os.path.join(target, name)
-        if not os.path.exists(dest):
+        if os.path.exists(dest):
+            # A packaged checkout already carries this tree, and a checkout
+            # where build/resources/bridge is a symlink back to the repo makes
+            # src and dest the same inode. Copying then raises SameFileError,
+            # and `created` must not list it or the replay cleanup would delete
+            # a tracked source file.
+            if os.path.samefile(src, dest):
+                continue
+        else:
             created.append(dest)
         shutil.copy(src, dest)
     return created
@@ -287,15 +295,24 @@ def main() -> int:
         check("real host analysis passes semantic invariants", not violations,
               "; ".join(violations))
 
-        # Honest posture: no staged bridge => DEGRADED, shadow_only, never ready.
+        # Honest posture. The mode follows the bridge, so the assertion is
+        # derived rather than assumed: a bridge that is ONLINE (the default
+        # ASTRA_DATA_SOURCE=LIVE checkout, or a packaged tree symlinked into
+        # build/) gives SHADOW + ready, a bridge that is not gives DEGRADED +
+        # not ready. shadow_only is true either way - the product never claims
+        # to trade, and that is the invariant that must hold in both postures.
         _, state = fetch(base + "/api/v1/system/state")
         data = state["data"]
-        check("real host reports mode DEGRADED (no staged bridge)",
-              data.get("mode") == "DEGRADED", str(data.get("mode")))
-        check("real host shadow_only true during DEGRADED",
+        bridge_online = data.get("bridge_state") == "ONLINE"
+        want_mode = "SHADOW" if bridge_online else "DEGRADED"
+        check(f"real host mode matches its bridge ({want_mode})",
+              data.get("mode") == want_mode,
+              f"mode={data.get('mode')} bridge_state={data.get('bridge_state')}")
+        check("real host shadow_only always true",
               data.get("shadow_only") is True)
-        check("real host does not claim ready (no real data, E05)",
-              data.get("ready") is False)
+        check("real host ready follows the bridge, never ahead of it",
+              data.get("ready") is bridge_online,
+              f"ready={data.get('ready')} bridge_state={data.get('bridge_state')}")
     finally:
         reap(proc)
 

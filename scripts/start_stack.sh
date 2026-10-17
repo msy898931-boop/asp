@@ -46,9 +46,12 @@ alive() {
 }
 pid_of() { [ -f "$RUNDIR/$1.pid" ] && cat "$RUNDIR/$1.pid" || echo ""; }
 
-# The host resolves resources/ next to its own binary.
-mkdir -p build/resources/python
-[ -e build/resources/bridge ] || ln -sfn "$ROOT/bridge" build/resources/bridge
+# The host resolves resources/ next to its own binary. Real directories, not
+# symlinks: tests/integration stages this tree by copying from the repo, and a
+# symlink back to the repo turns that copy into a same-file error.
+mkdir -p build/resources/python build/resources/bridge
+[ -e build/resources/bridge/mt5_python ] || cp -R "$ROOT/bridge/mt5_python" \
+    build/resources/bridge/
 [ -e build/resources/python/python3 ] || ln -sfn "$(command -v python3)" \
     build/resources/python/python3
 

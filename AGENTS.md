@@ -188,6 +188,31 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   `ASTRA_DISABLE_ADVISOR=1`. A failure there must never affect the rest of the
   stack.
 
+## The frozen v1 contract has four copies — keep them in step
+
+A field on a host route lives in four places, and CI now checks all of them:
+
+1. the route implementation (`src/api/BackendFacade.cpp`),
+2. `docs/architecture/API_V1_SCHEMA.json` (the frozen declaration),
+3. `scripts/mock_api.py` (the twin the frontend tests read), and
+4. `tests/fixtures/api_v1/valid/*.json` (the reference corpus).
+
+`tests/integration/test_e2e_frozen_v1.py` cross-checks the mock and the
+fixtures against the schema; `tests/integration/test_e2e_real_host_t13.py`
+starts the built host and checks every route against the schema in both
+postures (no-data and the `T13_REAL_DATA=1` real-corpus replay). T13 runs in
+CI's `backend` job. If you change a host field and only update the C++, the
+`timeframes`/`snapshot` exact-shape checks go red — that drift is what this
+gate exists to catch, and it stayed hidden for a while because T13 was not
+wired into CI and the mock silently lagged the host.
+
+- `scripts/start_stack.sh` must stage `build/resources/bridge/mt5_python` as a
+  **real copy**, never a symlink back to the repo: T13 copies into that tree,
+  and a symlink makes source and destination the same inode, which raises
+  `SameFileError` and — worse — would list a tracked source file for deletion
+  during replay cleanup. `ensure_bundle()` guards this with `os.path.samefile`,
+  but the staging must not create the situation in the first place.
+
 ## Always-on server (Docker)
 
 For a 24/7 bot (no PC needed) the repo ships a headless image. One container

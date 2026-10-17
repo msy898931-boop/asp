@@ -293,6 +293,8 @@ def build_payloads(schema: dict, calibrated: bool) -> dict:
                         "max_age_millis": 60000,
                     },
                     "last_successful_update": 1760000000,
+                    "last_closed_bar_open": 1760000000,
+                    "sequence": 42,
                 }
                 for tf in ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN1"]
             ]
@@ -396,7 +398,19 @@ def build_payloads(schema: dict, calibrated: bool) -> dict:
     # Snapshot is templated on the timeframe; validate a representative one.
     snapshot = schema["endpoints"]["GET /api/v1/timeframes/{tf}/snapshot"]
     payloads["GET /api/v1/timeframes/{tf}/snapshot"] = envelope(
-        {"timeframe": "M15", "observed": True, "quality": {"state": "VALID", "decision_grade": True}}
+        {
+            "timeframe": "M15",
+            "observed": True,
+            "quality": {"state": "VALID", "decision_grade": True},
+            "has_closed_bar": True,
+            "last_successful_update": 1760000000,
+            "sequence": 42,
+            "open": 2412.5,
+            "high": 2415.0,
+            "low": 2410.0,
+            "close": 2413.75,
+            "open_time": 1760000000,
+        }
     )
     payloads["GET /api/v1/analysis/history"] = envelope(
         [analysis_obj(calibrated, i) for i in range(3)]
@@ -515,10 +529,9 @@ class Handler(BaseHTTPRequestHandler):
         prefix = "/api/v1/timeframes/"
         if path.startswith(prefix) and path.endswith("/snapshot"):
             tf = path[len(prefix):-len("/snapshot")]
-            self._send(
-                200,
-                envelope({"timeframe": tf, "observed": True, "quality": {"state": "VALID", "decision_grade": True}}),
-            )
+            body = by_path["/api/v1/timeframes/{tf}/snapshot"]
+            body["data"]["timeframe"] = tf
+            self._send(200, body)
             return
 
         self._send(404, error_body("not_found", f"unknown route: {path}"))

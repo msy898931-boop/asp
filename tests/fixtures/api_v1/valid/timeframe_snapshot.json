@@ -7,6 +7,14 @@
     "quality": {
       "state": "VALID",
       "decision_grade": true
-    }
+    },
+    "has_closed_bar": true,
+    "last_successful_update": 1760000000,
+    "sequence": 42,
+    "open": 2412.5,
+    "high": 2415.0,
+    "low": 2410.0,
+    "close": 2413.75,
+    "open_time": 1760000000
   }
 }

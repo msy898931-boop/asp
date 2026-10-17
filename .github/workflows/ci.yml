@@ -30,6 +30,15 @@ jobs:
       - name: The bot's volatility features must match the real engine
         run: python3 bridge/telegram_bot/test_volatility_parity.py
 
+      - name: The real host must honour the frozen v1 contract (T13, E05)
+        # The mock is only a twin; T13 starts the just-built host and checks
+        # every route against the frozen schema. Run both postures: the default
+        # no-data checkout, and the evidential real-corpus replay that catches
+        # host/schema shape drift the mock never exercised.
+        run: |
+          python3 tests/integration/test_e2e_real_host_t13.py
+          T13_REAL_DATA=1 python3 tests/integration/test_e2e_real_host_t13.py
+
   baseline:
     runs-on: ubuntu-latest
     steps:

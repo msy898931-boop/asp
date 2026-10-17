@@ -18,7 +18,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     },
     {
       "timeframe": "M5",
@@ -36,7 +38,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     },
     {
       "timeframe": "M15",
@@ -54,7 +58,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     },
     {
       "timeframe": "M30",
@@ -72,7 +78,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     },
     {
       "timeframe": "H1",
@@ -90,7 +98,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     },
     {
       "timeframe": "H4",
@@ -108,7 +118,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     },
     {
       "timeframe": "D1",
@@ -126,7 +138,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     },
     {
       "timeframe": "W1",
@@ -144,7 +158,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     },
     {
       "timeframe": "MN1",
@@ -162,7 +178,9 @@
         "age_millis": 0,
         "max_age_millis": 60000
       },
-      "last_successful_update": 1760000000
+      "last_successful_update": 1760000000,
+      "last_closed_bar_open": 1760000000,
+      "sequence": 42
     }
   ]
 }

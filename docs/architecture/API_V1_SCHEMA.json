@@ -81,6 +81,8 @@
           }
         },
         "last_successful_update": {"type": ["integer", "null"]},
+        "last_closed_bar_open": {"type": ["integer", "null"]},
+        "sequence": {"type": ["integer", "null"]},
         "capability_impact": {
           "type": "array",
           "element_required": ["capability", "impact", "reason"],
@@ -128,7 +130,13 @@
           }
         },
         "has_closed_bar": {"type": "boolean"},
-        "last_successful_update": {"type": ["integer", "null"]}
+        "last_successful_update": {"type": ["integer", "null"]},
+        "sequence": {"type": ["integer", "null"]},
+        "open": {"type": ["number", "null"]},
+        "high": {"type": ["number", "null"]},
+        "low": {"type": ["number", "null"]},
+        "close": {"type": ["number", "null"]},
+        "open_time": {"type": ["integer", "null"]}
       }
     },
     "GET /api/v1/analysis/latest": {
