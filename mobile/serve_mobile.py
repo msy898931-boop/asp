@@ -621,6 +621,8 @@ class Handler(BaseHTTPRequestHandler):
             self._push_subscribe()
         elif path == "/push/unsubscribe":
             self._push_unsubscribe()
+        elif path == "/push/test":
+            self._push_test()
         else:
             self._send(404, b"not found", "text/plain; charset=utf-8")
 
@@ -852,6 +854,27 @@ class Handler(BaseHTTPRequestHandler):
                        "application/json; charset=utf-8")
             return
         self._send(200, b'{"ok":true}', "application/json; charset=utf-8")
+
+    def _push_test(self) -> None:
+        """Send one deliberate test notification to the registered devices.
+
+        So the operator can prove the background path works without waiting for
+        a real market signal. It reports how many devices the push service
+        accepted, so "0 sent" is a diagnosable answer, not a silent no-op.
+        """
+        try:
+            result = webpush.test_broadcast()
+        except OSError:
+            self._send(503, b'{"error":"could not read subscriptions"}',
+                       "application/json; charset=utf-8")
+            return
+        payload = json.dumps({
+            "ok": bool(result.get("sent")),
+            "sent": result.get("sent", 0),
+            "subscribers": len(webpush.load_subscriptions()),
+            "available": result.get("configured", False),
+        }, ensure_ascii=False).encode("utf-8")
+        self._send(200, payload, "application/json; charset=utf-8")
 
     def _volatility(self) -> None:
         """Re-score the bot's calibrated model for the phone.

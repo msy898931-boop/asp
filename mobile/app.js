@@ -52,6 +52,10 @@ const STRINGS = {
     push_on: "Background alerts on — you'll be notified even when the app is closed",
     push_off: "Background alerts off",
     push_blocked: "Notifications are blocked in the browser settings",
+    push_test: "Send a test notification",
+    push_test_sent: "Test sent — check your notifications",
+    push_test_none: "No device registered yet — turn Alerts on first",
+    push_test_off: "Background alerts are off on the server",
     lang_toggle: "العربية",
     theme: "Theme", refresh: "Refresh", alerts: "Alerts",
     health: "System health", waiting: "waiting for data",
@@ -186,6 +190,10 @@ const STRINGS = {
     push_on: "التنبيهات بالخلفية مفعّلة — سنخبرك حتى لو كان التطبيق مغلقًا",
     push_off: "التنبيهات بالخلفية متوقفة",
     push_blocked: "الإشعارات محظورة من إعدادات المتصفح",
+    push_test: "أرسل إشعارًا تجريبيًا",
+    push_test_sent: "أُرسل الاختبار — تحقّق من إشعاراتك",
+    push_test_none: "لا يوجد جهاز مسجّل بعد — فعّل التنبيهات أولًا",
+    push_test_off: "التنبيهات بالخلفية متوقفة على الخادم",
     lang_toggle: "English",
     theme: "المظهر", refresh: "تحديث", alerts: "تنبيهات",
     health: "صحة النظام", waiting: "في انتظار البيانات",
@@ -1282,6 +1290,7 @@ async function toggleAlerts() {
   if (alertsOn) {
     alertsOn = false;
     btn.setAttribute("aria-pressed", "false");
+    $("push-test").hidden = true;
     toast(T("alerts_off"));
     syncPush(false);
     return;
@@ -1295,7 +1304,43 @@ async function toggleAlerts() {
     }
     if (Notification.permission === "granted") pushed = await syncPush(true);
   }
+  $("push-test").hidden = !pushed;
   toast(pushed ? T("push_on") : T("alerts_on"));
+}
+
+/* A deliberate, one-tap proof that the background path works: ask the server to
+   send a test notification to the registered devices, then report what it did. */
+async function sendTestPush() {
+  const btn = $("push-test");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch("/push/test", { method: "POST" });
+    const info = await res.json().catch(() => ({}));
+    if (info.sent > 0) toast(T("push_test_sent"));
+    else if (!info.available) toast(T("push_test_off"));
+    else toast(T("push_test_none"));
+  } catch (e) {
+    toast(T("push_test_none"));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* On boot the subscription survives but `alertsOn` does not, so the test button
+   would vanish on every reload. Re-derive it: if this device still has a live
+   push subscription, the background path is on and the proof button belongs. */
+async function restoreAlerts() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  try {
+    const reg = swReg || await navigator.serviceWorker.ready;
+    if (!reg || !reg.pushManager) return;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    alertsOn = true;
+    $("alerts").setAttribute("aria-pressed", "true");
+    $("push-test").hidden = false;
+  } catch (e) { /* no worker, or no subscription: nothing to restore */ }
 }
 
 /* ── price levels ───────────────────────────────────────────────────── */
@@ -1823,6 +1868,7 @@ function init() {
   $("refresh").addEventListener("click", refresh);
   $("ai-refresh").addEventListener("click", () => loadAdvisor(true));
   $("alerts").addEventListener("click", toggleAlerts);
+  $("push-test").addEventListener("click", sendTestPush);
   $("level-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const v = parseFloat($("level-input").value);
@@ -1869,7 +1915,7 @@ function init() {
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js")
-      .then((reg) => { swReg = reg; })
+      .then((reg) => { swReg = reg; return restoreAlerts(); })
       .catch(() => {});
   }
 }

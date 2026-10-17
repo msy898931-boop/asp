@@ -213,6 +213,21 @@ def body() -> bytes:
     }, ensure_ascii=False).encode("utf-8")
 
 
+def test_broadcast() -> dict:
+    """Send one self-describing notification to every subscriber.
+
+    Turning alerts on is silent, so the operator has no way to tell a working
+    background path from one that never registered. This is the deliberate
+    "prove it" button: the same send path the bot uses, with a payload that
+    says it is a test.
+    """
+    return broadcast({
+        "title": "ASTRA",
+        "body": "الإشعارات بالخلفية تعمل ✅",
+        "tag": "astra-test",
+    })
+
+
 def generate_keys() -> tuple[str, str]:
     """A fresh VAPID pair as (public, private), base64url without padding.
 

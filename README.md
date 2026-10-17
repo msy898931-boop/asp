@@ -70,7 +70,10 @@ a volatility crossing, a price level you set) raises an in-app notification, and
 — when the operator has set the Web Push keys — a real push that reaches the app
 even when it is closed. Web Push is free: the key pair is generated locally, no
 account or service is involved, and the feature stays off (falling back to
-in-app alerts) until `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` are set. See
+in-app alerts) until `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` are set. Once a
+device is subscribed, the alerts panel offers **Send a test notification**, which
+pushes one labelled notification through the same path the bot uses — a one-tap
+proof the background channel works without waiting for a market signal. See
 *Web Push* in `AGENTS.md`.
 
 ## Tests
@@ -87,7 +90,7 @@ Measured on this fork (2026-10-16):
 | `mobile/` | 151 |
 | `bridge/telegram_bot/` | 94 |
 | `tests/` (models, integration, features) | 308 |
-| **Total (Python)** | **950** |
+| **Total (Python)** | **953** |
 
 Plus 19 C++ test binaries (`ctest`). Run a suite with
 `python3 -m unittest discover -s <suite> -p "test_*.py"`. Every Python suite

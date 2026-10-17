@@ -53,7 +53,7 @@ for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
   python3 -m unittest discover -s "$d" -p "test_*.py"
 done
 python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
-# 950 tests total (152/44/50/59/92/151/94 + 308)
+# 953 tests total (152/44/50/59/92/154/94 + 308)
 ```
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style
@@ -1298,9 +1298,17 @@ Because the crypto is real ECDH/AES-GCM, `mobile/test_webpush.py` does not mock
 it: it stands up a local push service, subscribes a real client key pair,
 encrypts, and decrypts the captured body back to the original payload. The
 `container` CI job separately proves the image ships `pywebpush` (a source-tree
-test cannot). The routes are `/push.json`, `POST /push/subscribe` and
-`POST /push/unsubscribe`, all covered by the access gate when
-`ASTRA_ACCESS_TOKEN` is set.
+test cannot). The routes are `/push.json`, `POST /push/subscribe`,
+`POST /push/unsubscribe` and `POST /push/test`, all covered by the access gate
+when `ASTRA_ACCESS_TOKEN` is set.
+
+`POST /push/test` is the proof button: turning alerts on is silent, so there was
+no way to tell a working background path from one that never registered. It
+sends one labelled notification through the same `broadcast()` the bot uses and
+answers `{ok, sent, subscribers, available}`, so "0 sent" is a diagnosable
+answer rather than a silent no-op. The button appears in the alerts panel only
+once this device has a live subscription, and `restoreAlerts()` re-derives it on
+boot (the subscription survives a reload; the JS flag does not).
 
 CI runs the `bot` suite too (alerts, watchdog, scanner); before, only tracker,
 advisor and the paid-tool layer were covered, so a broken alert could ship green.

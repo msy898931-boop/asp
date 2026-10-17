@@ -540,6 +540,19 @@ html[data-skeleton="true"] .banner .dot { background: var(--flat); box-shadow: n
 }
 .lvl-form button:active { background: var(--gold-dim); }
 
+/* A quiet, secondary action: outlines only, so it reads as "check this" rather
+   than competing with the gold "Add" button above it. */
+.ghost-btn {
+  width: 100%; margin-top: 14px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .04em;
+  color: var(--gold); background: transparent;
+  border: 1px solid var(--edge); border-radius: 10px;
+  padding: 11px 14px; cursor: pointer;
+  transition: background .2s, border-color .2s, transform .12s;
+}
+.ghost-btn:active { background: var(--ink-3); transform: scale(.98); }
+.ghost-btn[disabled] { opacity: .5; cursor: default; }
+
 .lvl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .lvl {
   display: flex; align-items: center; justify-content: space-between;

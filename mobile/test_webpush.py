@@ -263,6 +263,30 @@ class BroadcastCryptoTest(_EnvMixin):
         # The dead endpoint is gone, so the next broadcast does not retry it.
         self.assertEqual(webpush.load_subscriptions(), [])
 
+    def test_test_broadcast_encrypts_a_labelled_payload(self):
+        import http_ece
+
+        service = _serve(_PushService)
+        _PushService.captured = {}
+        _PushService.status = 201
+        try:
+            endpoint = "http://127.0.0.1:%d/push" % service.server_address[1]
+            sub, client_priv = _client_subscription(endpoint)
+            self._force_subscribe(sub)
+            result = webpush.test_broadcast()
+        finally:
+            _stop(service)
+
+        self.assertEqual(result, {"configured": True, "sent": 1, "removed": 0})
+        plain = http_ece.decrypt(
+            _PushService.captured["body"],
+            private_key=client_priv,
+            auth_secret=base64.urlsafe_b64decode(sub["keys"]["auth"] + "=="),
+            version="aes128gcm",
+        )
+        # The notification the operator sees must identify itself as a test.
+        self.assertEqual(json.loads(plain.decode("utf-8"))["tag"], "astra-test")
+
 
 class PushRouteTest(_EnvMixin):
     """The routes the phone actually calls."""
@@ -338,6 +362,22 @@ class PushRouteTest(_EnvMixin):
     def test_unknown_post_path_is_404(self):
         status, _ = self._request("/push/whatever", data={"a": 1})
         self.assertEqual(status, 404)
+
+    def test_test_push_says_unavailable_without_keys(self):
+        status, body = self._request("/push/test", data={})
+        self.assertEqual(status, 200)
+        self.assertFalse(body["ok"])
+        self.assertFalse(body["available"])
+        self.assertEqual(body["sent"], 0)
+
+    def test_test_push_says_none_when_no_device_is_registered(self):
+        os.environ["VAPID_PUBLIC_KEY"], os.environ["VAPID_PRIVATE_KEY"] = \
+            webpush.generate_keys()
+        status, body = self._request("/push/test", data={})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["available"])
+        self.assertEqual(body["sent"], 0)
+        self.assertEqual(body["subscribers"], 0)
 
     def test_the_gate_covers_the_push_routes(self):
         sm.ACCESS_TOKEN = "s3cret"
