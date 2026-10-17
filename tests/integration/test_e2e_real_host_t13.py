@@ -44,6 +44,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -79,15 +80,22 @@ def fetch(url: str, timeout: float = 5.0):
         return response.status, json.loads(response.read().decode("utf-8"))
 
 
-def wait_for(url: str, attempts: int = 50):
+def wait_for(url: str, attempts: int = 50, delay: float = 0.1,
+             log_path: str | None = None):
     last = None
     for _ in range(attempts):
         try:
             return fetch(url)
         except Exception as exc:  # noqa: BLE001 - last error surfaced below
             last = exc
-            time.sleep(0.1)
-    raise RuntimeError(f"real host did not serve: {last}")
+            time.sleep(delay)
+    detail = ""
+    if log_path and os.path.isfile(log_path):
+        with open(log_path, encoding="utf-8", errors="replace") as fh:
+            tail = fh.read()[-2000:].strip()
+        if tail:
+            detail = f"\n--- host output ---\n{tail}"
+    raise RuntimeError(f"real host did not serve: {last}{detail}")
 
 
 def reap(proc: subprocess.Popen) -> None:
@@ -155,14 +163,23 @@ def run_real_data_checks(csv_path: str, schema: dict) -> None:
     env = dict(os.environ)
     env["FAKE_MT5_CSV"] = os.path.abspath(csv_path)
     env["FAKE_MT5_SYMBOL"] = env.get("FAKE_MT5_SYMBOL", "XAUUSD")
+    # Capture the host's output instead of discarding it. When the host fails to
+    # bind (a cold or loaded CI runner, a missing shim), the old code reported
+    # only "connection refused" and hid why; wait_for now prints the tail.
+    log_fd, log_path = tempfile.mkstemp(prefix="t13-host-", suffix=".log")
+    os.close(log_fd)
+    log = open(log_path, "wb")
     proc = subprocess.Popen(
         [HOST_BIN, "--api-port", str(port), "--dev-system-python"],
-        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=env, stdout=log, stderr=subprocess.STDOUT,
         start_new_session=True,
     )
     base = f"http://127.0.0.1:{port}"
     try:
-        wait_for(base + "/api/v1/system/state")
+        # 15s, not 5s: the host loads the full committed corpus and the MT5 shim
+        # before it binds, which is a second locally but slower on CI.
+        wait_for(base + "/api/v1/system/state", attempts=150, delay=0.1,
+                 log_path=log_path)
         # Let several ingestion cycles land real closed bars (H4/D1 need history).
         for _ in range(40):
             _, tf = fetch(base + "/api/v1/timeframes")
@@ -233,6 +250,8 @@ def run_real_data_checks(csv_path: str, schema: dict) -> None:
         for path in staged:
             with contextlib.suppress(OSError):
                 os.remove(path)
+        with contextlib.suppress(OSError):
+            os.remove(log_path)
 
 
 def main() -> int:
