@@ -221,8 +221,10 @@ class HistogramCalibrator:
             if left is None and right is None:
                 rates[i] = 0.5
             elif left is None:
+                assert right is not None
                 rates[i] = rates[right]
             elif right is None:
+                assert left is not None
                 rates[i] = rates[left]
             else:
                 rates[i] = rates[left] if (i - left) <= (right - i) else rates[right]

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
 
 # A NEUTRAL call counts as right when the price barely moved over the horizon.
 NEUTRAL_BAND_PCT = float(os.environ.get("ASTRA_ADVISOR_NEUTRAL_BAND", "0.2"))
@@ -152,6 +153,13 @@ def lessons_block(summary: dict, lang: str = "ar") -> str:
 _STANCE_AR = {"LONG": "شراء", "SHORT": "بيع", "NEUTRAL": "حياد"}
 
 
+def _ar(table: dict[str, str], key: object) -> Any:
+    """Arabic label for `key` from `table`, else `key` itself (or None)."""
+    if isinstance(key, str):
+        return table.get(key, key)
+    return key
+
+
 def outcome_key(outcome: dict) -> str:
     return "%s:%s" % (outcome.get("generated_at_utc"), outcome.get("symbol"))
 
@@ -183,7 +191,7 @@ def format_miss(outcome: dict) -> str:
     return "\n".join([
         "⚠️ خطأ جديد على المستشار الذكي",
         "قلت %s عند %s → صار السعر %s (تحرّك %.2f%%)"
-        % (_STANCE_AR.get(outcome.get("stance"), outcome.get("stance")),
+        % (_ar(_STANCE_AR, outcome.get("stance")),
            outcome.get("price"), outcome.get("price_after"),
            outcome.get("move_pct") or 0.0),
         "الدرس: لا تكرّر نفس الحكم بلا سبب جديد.",
@@ -195,7 +203,7 @@ def format_hit(outcome: dict) -> str:
     return "\n".join([
         "✅ إصابة على المستشار الذكي",
         "قلت %s عند %s → صار السعر %s (تحرّك %.2f%%)"
-        % (_STANCE_AR.get(outcome.get("stance"), outcome.get("stance")),
+        % (_ar(_STANCE_AR, outcome.get("stance")),
            outcome.get("price"), outcome.get("price_after"),
            outcome.get("move_pct") or 0.0),
     ])
@@ -232,7 +240,7 @@ def format_review(summary: dict) -> str:
         lines.append("آخر الأخطاء (ودروسها):")
         for o in wrong:
             lines.append("• قلت %s عند %s → السعر %s (%.2f%%)"
-                         % (_STANCE_AR.get(o.get("stance"), o.get("stance")),
+                         % (_ar(_STANCE_AR, o.get("stance")),
                             o.get("price"), o.get("price_after"),
                             o.get("move_pct") or 0.0))
         lines.append("الدرس مُحقَن في التحليل الجاي: لا يكرّر الحكم بلا سبب جديد.")

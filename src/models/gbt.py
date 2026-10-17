@@ -53,10 +53,11 @@ class Tree:
 
     def predict(self, row: Sequence[float]) -> float:
         i = 0
-        while self.nodes[i].feature is not None:
+        while True:
             node = self.nodes[i]
+            if node.feature is None:
+                return node.value
             i = node.left if row[node.feature] <= node.threshold else node.right
-        return self.nodes[i].value
 
 
 def _candidate_thresholds(column: Sequence[float]) -> List[float]:
@@ -156,6 +157,7 @@ def _build_tree(
         return Tree.leaf(leaf)
 
     feature, split_pos, threshold = best
+    assert best_order is not None
     left_idx = [best_order[p] for p in range(split_pos)]
     right_idx = [best_order[p] for p in range(split_pos, len(best_order))]
     left_tree = _build_tree(

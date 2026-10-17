@@ -84,6 +84,43 @@ jobs:
           python3 bridge/telegram_bot/test_astra_bot.py
           python3 bridge/telegram_bot/test_volatility.py
 
+  quality:
+    # Lint, types and coverage over the Python side. These are cheap and
+    # catch whole classes of defect (dead ignores, unhandled Optional,
+    # untested branches) that the functional jobs above would let through.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the quality tools
+        run: python3 -m pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Type-check the shipped source
+        # `research/` is exploratory analysis, not shipped code, so it stays
+        # out of the gate; everything the service runs is in scope.
+        run: mypy bot tracker akoan advisor bridge mobile src
+
+      - name: Run every suite under coverage
+        run: |
+          for d in bot tracker research akoan advisor mobile tests; do
+            python3 -m coverage run -a \
+              --source=bot,tracker,research,akoan,advisor,mobile,src \
+              -m unittest discover -s "$d" -p "test_*.py"
+          done
+          python3 -m coverage run -a \
+            --source=bot,tracker,research,akoan,advisor,mobile,src \
+            -m unittest discover -s bridge/telegram_bot -p "test_*.py"
+
+      - name: Coverage floor
+        run: python3 -m coverage report --fail-under=75
+
   container:
     # What ships is the image, not the source tree — and every other job runs
     # against the source tree. A route can therefore reference a module the

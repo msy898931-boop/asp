@@ -37,7 +37,7 @@ _TIMEFRAME_SECONDS = {
 _STALE_INTERVAL_MULTIPLIER = 3
 
 try:  # The package is Windows-only; absence must be reportable, not fatal.
-    import MetaTrader5 as _mt5  # type: ignore
+    import MetaTrader5 as _mt5
     _MT5_IMPORT_ERROR = ""
 except Exception as exc:  # noqa: BLE001 - pragma: no cover - depends on host platform
     _mt5 = None

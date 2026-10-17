@@ -18,7 +18,7 @@ No third-party dependencies. Fully deterministic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 from src.models.calibration import CalibrationReport, calibration_report
 from src.models.dataset import (
@@ -59,7 +59,7 @@ class BaselineReport:
     columns: Tuple[str, ...]
     development: PartitionMetrics
     validation: PartitionMetrics
-    oos: PartitionMetrics = None  # type: ignore[assignment]
+    oos: Optional[PartitionMetrics] = None
 
     def summary(self) -> str:
         lines = [self.development.summary(), self.validation.summary()]
@@ -89,7 +89,7 @@ def _evaluate(
 def run_baseline(
     development: Sequence[LabeledExample],
     validation: Sequence[LabeledExample],
-    oos: Sequence[LabeledExample] | None = None,  # type: ignore[assignment]
+    oos: Sequence[LabeledExample] | None = None,
     l2: float = 1e-6,
     max_iter: int = 100,
 ) -> BaselineReport:

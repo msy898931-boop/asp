@@ -74,3 +74,9 @@ research/macro/
 
 # Local stack runtime (pid/log files) from scripts/start_stack.sh
 run/
+
+# Coverage and type-check caches from the local quality gate
+.coverage
+.coverage.*
+.mypy_cache/
+.ruff_cache/

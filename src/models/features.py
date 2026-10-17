@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Mapping, Sequence
+from typing import Dict, Mapping, Optional, Sequence
 
 from src.models.splits import SplitError
 
@@ -164,7 +164,7 @@ class FeatureSet:
 
     asOfBarOpenSec: int
     perTimeframe: Sequence[FeatureVector] = field(default_factory=tuple)
-    cross: CrossFeatureVector = None  # type: ignore[assignment]
+    cross: Optional[CrossFeatureVector] = None
     quality: str = "UNKNOWN"
     valid: bool = False
 

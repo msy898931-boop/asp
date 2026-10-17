@@ -112,8 +112,8 @@ def _reason(row: dict) -> str:
     reports what the rules saw.
     """
     parts = []
-    bias = BIAS_AR.get(row.get("bias"))
-    regime = REGIME_AR.get(row.get("regime"))
+    bias = bot._ar(BIAS_AR, row.get("bias"))
+    regime = bot._ar(REGIME_AR, row.get("regime"))
     rsi = row.get("rsi")
     if bias:
         parts.append("ميل %s" % bias)
@@ -125,7 +125,7 @@ def _reason(row: dict) -> str:
 
 
 def _row_line(row: dict) -> str:
-    head = OUTCOME_AR.get(row.get("outcome"), row.get("outcome"))
+    head = bot._ar(OUTCOME_AR, row.get("outcome"))
     r = row.get("r_net")
     if r is None:
         tail = ""

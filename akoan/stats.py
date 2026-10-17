@@ -206,7 +206,7 @@ class Bucket:
         }
         if self.win_rate is not None:
             out["win_rate"] = round(self.win_rate, 4)
-        if self.ci_low is not None:
+        if self.ci_low is not None and self.ci_high is not None:
             out["ci_95"] = [round(self.ci_low, 4), round(self.ci_high, 4)]
         if self.base_rate is not None:
             out["base_rate"] = round(self.base_rate, 4)

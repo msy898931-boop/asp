@@ -74,7 +74,7 @@ class CalibratedReport:
 def run_calibrated(
     development: Sequence[LabeledExample],
     validation: Sequence[LabeledExample],
-    oos: Sequence[LabeledExample] | None = None,  # type: ignore[assignment]
+    oos: Sequence[LabeledExample] | None = None,
     method: str = "platt",
     model_factory=None,
 ) -> CalibratedReport:

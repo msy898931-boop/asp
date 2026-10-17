@@ -45,7 +45,7 @@ def _value_label(value: str) -> str:
 
 def format_report(result: dict, coverage: dict | None = None) -> str:
     """The Arabic Telegram message for one akoan run."""
-    v = result.get("verdict")
+    v = str(result.get("verdict") or "")
     head = {
         "EDGE_CANDIDATE": "🔎 akoan — مرشّح لحافة",
         "NO_EDGE_MEASURED": "🔎 akoan — ما انقاس تأثير للخبر",

@@ -25,7 +25,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 DIR_ABOVE = "above"
 DIR_BELOW = "below"
@@ -47,11 +47,11 @@ class Level:
                 "fired": self.fired}
 
     @classmethod
-    def from_json(cls, raw: Dict[str, object]) -> "Level":
+    def from_json(cls, raw: Dict[str, Any]) -> "Level":
         return cls(price=float(raw["price"]),
                    direction=str(raw.get("direction", DIR_CROSS)),
                    created_at=float(raw.get("created_at", time.time())),
-                   last_side=raw.get("last_side"),  # type: ignore[arg-type]
+                   last_side=raw.get("last_side"),
                    fired=bool(raw.get("fired", False)))
 
 

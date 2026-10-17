@@ -84,8 +84,8 @@ def arabic_event_name(title: str) -> str:
     return title
 
 
-def _parse_iso(value: str) -> float | None:
-    text = (value or "").strip()
+def _parse_iso(value: object) -> float | None:
+    text = str(value or "").strip()
     if not text:
         return None
     if text.endswith("Z"):

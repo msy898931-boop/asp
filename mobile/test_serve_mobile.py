@@ -112,7 +112,7 @@ class LoadTest(unittest.TestCase):
 
 class ComputeTest(unittest.TestCase):
     def setUp(self):
-        sm._vol_cache["at"], sm._vol_cache["body"] = 0.0, None
+        sm._vol_cache.at, sm._vol_cache.body = 0.0, None
 
     def test_unreachable_bridge_yields_a_null_body(self):
         body = sm._compute_volatility("http://127.0.0.1:9")  # nothing listens
@@ -220,7 +220,7 @@ class PreviewTest(unittest.TestCase):
 
 class RouteTest(unittest.TestCase):
     def setUp(self):
-        sm._vol_cache["at"], sm._vol_cache["body"] = 0.0, None
+        sm._vol_cache.at, sm._vol_cache.body = 0.0, None
 
     def test_vol_json_route_returns_the_reading(self):
         bridge = _serve(_StubBridge)
@@ -463,7 +463,7 @@ class AkoanPanelTest(unittest.TestCase):
 
 class AkoanRouteTest(unittest.TestCase):
     def setUp(self):
-        sm._akoan_cache["at"], sm._akoan_cache["body"] = 0.0, None
+        sm._akoan_cache.at, sm._akoan_cache.body = 0.0, None
 
     def test_compact_shape_is_phone_sized(self):
         result = {
@@ -543,7 +543,7 @@ class AkoanWarmupTest(unittest.TestCase):
     """
 
     def setUp(self):
-        sm._akoan_cache["at"], sm._akoan_cache["body"] = 0.0, None
+        sm._akoan_cache.at, sm._akoan_cache.body = 0.0, None
 
     def test_warmup_populates_the_cache(self):
         calls = {"n": 0}

@@ -106,11 +106,11 @@ def gate(in_sample: dict, out_of_sample: dict,
                                     ("out-of-sample", out_of_sample))
             if half["n"] < min_n]
     if thin:
-        reasons = ["%s: %d scored trades, need %d"
-                   % (name, (in_sample if name == "in-sample"
-                             else out_of_sample)["n"], min_n)
-                   for name in thin]
-        return {"verdict": "INSUFFICIENT", "reasons": reasons,
+        thin_reasons = ["%s: %d scored trades, need %d"
+                        % (name, (in_sample if name == "in-sample"
+                                  else out_of_sample)["n"], min_n)
+                        for name in thin]
+        return {"verdict": "INSUFFICIENT", "reasons": thin_reasons,
                 "in_sample": in_sample, "out_of_sample": out_of_sample}
 
     reasons: list[str] = []
@@ -139,7 +139,8 @@ def split_rows(rows: list[dict], split_year: int) -> tuple[list[dict], list[dict
     same boundary and the in/out halves are never accidentally swapped.
     """
     import datetime as dt
-    is_rows, oos_rows = [], []
+    is_rows: list[dict] = []
+    oos_rows: list[dict] = []
     for r in rows:
         year = dt.datetime.fromtimestamp(r["time"], dt.timezone.utc).year
         (is_rows if year < split_year else oos_rows).append(r)

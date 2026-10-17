@@ -144,7 +144,30 @@ def _stamp_shell(body: bytes) -> bytes:
 
 _VOL_TIMEFRAMES = ("M5", "M15", "H1", "H4", "D1")
 _VOL_CACHE_TTL = 20.0
-_vol_cache = {"at": 0.0, "body": None}
+
+
+class _TimedCache:
+    """A single cached body with the timestamp it was produced at.
+
+    A typed slot rather than a bare dict: the three routes below each hold a
+    `(at, body)` pair, and a dict of mixed float/bytes/None makes the
+    arithmetic and the None check impossible to reason about statically.
+    """
+
+    __slots__ = ("at", "body")
+
+    def __init__(self) -> None:
+        self.at: float = 0.0
+        self.body: bytes | None = None
+
+    def fresh(self, now: float, ttl: float) -> bytes | None:
+        """The cached body if it is younger than `ttl`, else None."""
+        if self.body is not None and now - self.at < ttl:
+            return self.body
+        return None
+
+
+_vol_cache = _TimedCache()
 _vol_lock = threading.Lock()
 
 
@@ -220,12 +243,13 @@ def volatility_body(bridge_base: str, now: float | None = None) -> bytes:
     """Cached JSON body for /vol.json."""
     now = time.time() if now is None else now
     with _vol_lock:
-        if _vol_cache["body"] is not None and now - _vol_cache["at"] < _VOL_CACHE_TTL:
-            return _vol_cache["body"]
+        cached = _vol_cache.fresh(now, _VOL_CACHE_TTL)
+        if cached is not None:
+            return cached
     body = json.dumps(_compute_volatility(bridge_base),
                       ensure_ascii=False).encode("utf-8")
     with _vol_lock:
-        _vol_cache["at"], _vol_cache["body"] = now, body
+        _vol_cache.at, _vol_cache.body = now, body
     return body
 
 
@@ -278,7 +302,7 @@ def bot_heartbeat_body(now: float | None = None) -> bytes:
 # cached for minutes and computed behind a lock: one run serves every phone.
 
 _AKOAN_CACHE_TTL = 600.0
-_akoan_cache = {"at": 0.0, "body": None}
+_akoan_cache = _TimedCache()
 _akoan_lock = threading.Lock()
 _akoan_compute_lock = threading.Lock()
 
@@ -353,16 +377,18 @@ def akoan_body(now: float | None = None) -> bytes:
     """Cached JSON body for /akoan.json."""
     now = time.time() if now is None else now
     with _akoan_lock:
-        if _akoan_cache["body"] is not None and now - _akoan_cache["at"] < _AKOAN_CACHE_TTL:
-            return _akoan_cache["body"]
+        cached = _akoan_cache.fresh(now, _AKOAN_CACHE_TTL)
+        if cached is not None:
+            return cached
     # One compute at a time: the replay is CPU-heavy and every phone polls.
     with _akoan_compute_lock:
         with _akoan_lock:
-            if _akoan_cache["body"] is not None and now - _akoan_cache["at"] < _AKOAN_CACHE_TTL:
-                return _akoan_cache["body"]
+            cached = _akoan_cache.fresh(now, _AKOAN_CACHE_TTL)
+            if cached is not None:
+                return cached
         body = json.dumps(_compute_akoan(), ensure_ascii=False).encode("utf-8")
         with _akoan_lock:
-            _akoan_cache["at"], _akoan_cache["body"] = now, body
+            _akoan_cache.at, _akoan_cache.body = now, body
     return body
 
 
@@ -375,7 +401,7 @@ def akoan_body(now: float | None = None) -> bytes:
 # and one run serves every phone.
 
 _NEWS_CACHE_TTL = 180.0
-_news_cache = {"at": 0.0, "body": None}
+_news_cache = _TimedCache()
 _news_lock = threading.Lock()
 
 
@@ -409,11 +435,12 @@ def news_body(now: float | None = None) -> bytes:
     """Cached JSON body for /news.json."""
     now = time.time() if now is None else now
     with _news_lock:
-        if _news_cache["body"] is not None and now - _news_cache["at"] < _NEWS_CACHE_TTL:
-            return _news_cache["body"]
+        cached = _news_cache.fresh(now, _NEWS_CACHE_TTL)
+        if cached is not None:
+            return cached
     body = json.dumps(_compute_news(), ensure_ascii=False).encode("utf-8")
     with _news_lock:
-        _news_cache["at"], _news_cache["body"] = now, body
+        _news_cache.at, _news_cache.body = now, body
     return body
 
 

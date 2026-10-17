@@ -66,7 +66,7 @@ DIM_AR = {
 }
 
 
-def _bucket_rows(rows: list[dict], key: str, value: str) -> list[dict]:
+def _bucket_rows(rows: list[dict], key: str, value: object) -> list[dict]:
     return [r for r in rows if r.get(key) == value]
 
 
@@ -77,7 +77,10 @@ def build_dimensions(rows: list[dict], min_n: int = MIN_N) -> list[st.Dimension]
     dims: list[st.Dimension] = []
 
     for key in DIMENSIONS:
-        values = sorted({r.get(key) for r in scored if r.get(key) is not None})
+        # Every dimension value is a label written by `dimension_keys`, so the
+        # set is str-typed even though the rows come in as plain dicts.
+        values = sorted({str(r.get(key)) for r in scored
+                         if r.get(key) is not None})
         dim = st.Dimension(name=key)
         for value in values:
             bucket = _bucket_rows(scored, key, value)

@@ -1,0 +1,6 @@
+# Development-only tooling for the quality gate. The shipped service runs on
+# the standard library alone, so nothing here is needed at runtime.
+
+ruff==0.17.1
+mypy==2.4.0
+coverage==7.16.2

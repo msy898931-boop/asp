@@ -366,7 +366,7 @@ def format_news(d: Dict[str, Any]) -> str:
     """
     win = d.get("window") or {}
     lines = ["📰 الأخبار والذهب — الآن",
-             _NEWS_WINDOW_AR.get(win.get("state"), "—")]
+             _NEWS_WINDOW_AR.get(str(win.get("state") or ""), "—")]
     if win.get("reason"):
         lines.append(win["reason"])
 

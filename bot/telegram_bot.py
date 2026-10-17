@@ -33,6 +33,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Any
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -65,6 +66,18 @@ REGIME_AR = {"TRENDING_UP": "صعود", "TRENDING_DOWN": "هبوط",
 
 BIAS_AR = {"BULLISH": "صاعد", "BEARISH": "هابط", "RANGE": "عرضي",
            "INCOMPLETE": "غير مكتمل"}
+
+
+def _ar(table: dict[str, str], key: object) -> Any:
+    """Arabic label for `key` from `table`, else `key` itself (or None).
+
+    The signal/status dicts are untrusted JSON, so the key is only looked up
+    when it really is a string; anything else (None, a number) is passed
+    through unchanged, which is what the callers already relied on.
+    """
+    if isinstance(key, str):
+        return table.get(key, key)
+    return key
 
 # A live trade counts as "near" a level when the price is within this fraction
 # of the stop-to-target span. 0.2 means the last 20% before a level.
@@ -125,8 +138,8 @@ def format_new(signal: dict, plan: dict | None = None) -> str:
         "الهدف: %s" % target,
         "المخاطرة/العائد: 1.67",
         "السبب: النظام %s · الميل %s · RSI %s"
-        % (REGIME_AR.get(signal.get("regime"), signal.get("regime")),
-           BIAS_AR.get(signal.get("bias"), signal.get("bias")),
+        % (_ar(REGIME_AR, signal.get("regime")),
+           _ar(BIAS_AR, signal.get("bias")),
            signal.get("rsi")),
     ]
     if plan:
@@ -153,7 +166,7 @@ def _money(value) -> str:
 
 
 def format_result(signal: dict, account_usd: float = 0.0) -> str:
-    head = OUTCOME_AR.get(signal.get("outcome"), signal.get("outcome"))
+    head = _ar(OUTCOME_AR, signal.get("outcome"))
     r = signal.get("r_net")
     r_txt = "—" if r is None else "%+.2fR" % r
     lines = ["%s\n%s  %s → %s\nصافي %s"
@@ -178,14 +191,14 @@ def _result_usd(signal: dict, account_usd: float) -> float | None:
 
 
 def format_no_trade(status: dict) -> str:
-    reason = REASON_AR.get(status.get("reason"), status.get("reason"))
+    reason = _ar(REASON_AR, status.get("reason"))
     lines = ["⏸️ لا صفقة على هذه الشمعة (M15)",
              "السبب: %s" % reason]
     read = status.get("read")
     if read:
         lines.append("قراءة السوق: %s · الميل %s · RSI %s · ATR %s"
-                     % (REGIME_AR.get(read.get("regime"), read.get("regime")),
-                        BIAS_AR.get(read.get("bias"), read.get("bias")),
+                     % (_ar(REGIME_AR, read.get("regime")),
+                        _ar(BIAS_AR, read.get("bias")),
                         read.get("rsi"), read.get("atr")))
         lines.append("السعر: %s" % read.get("close"))
     held = status.get("open")
@@ -218,10 +231,13 @@ def _approach(signal: dict, bar: dict) -> dict | None:
     Uses the bar's high/low, the honest "did the price get here" test, and
     reports the nearer side so a single message names the real risk.
     """
-    entry, stop, target = (signal.get("entry"), signal.get("stop"),
-                           signal.get("target"))
-    high, low = bar.get("high"), bar.get("low")
-    if None in (entry, stop, target) or high is None or low is None:
+    entry = signal.get("entry")
+    stop = signal.get("stop")
+    target = signal.get("target")
+    high = bar.get("high")
+    low = bar.get("low")
+    if (entry is None or stop is None or target is None
+            or high is None or low is None):
         return None
     span = abs(target - stop)
     if span <= 0:

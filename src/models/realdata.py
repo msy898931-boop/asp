@@ -45,7 +45,7 @@ import os
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from src.models.baseline import PartitionMetrics
 from src.models.calibrated import CalibratedReport, run_calibrated
@@ -350,8 +350,8 @@ def walk_forward_calibration(
     pooled_probs: List[float] = []
     pooled_outcomes: List[int] = []
     for fold in folds:
-        train = [s.payload for s in fold.train]
-        test = [s.payload for s in fold.test]
+        train = [cast(LabeledExample, s.payload) for s in fold.train]
+        test = [cast(LabeledExample, s.payload) for s in fold.test]
         probs, outcomes = _fit_calibrate_eval(train, test, method, model_factory)
         rep = calibration_report(probs, outcomes)
         fold_results.append(
@@ -731,9 +731,9 @@ def run_real_calibration(
             "claim walk-forward or out-of-sample."
         )
 
-    development = [s.payload for s in split.development]
-    validation = [s.payload for s in split.validation]
-    oos = [s.payload for s in split.oos]
+    development = [cast(LabeledExample, s.payload) for s in split.development]
+    validation = [cast(LabeledExample, s.payload) for s in split.validation]
+    oos = [cast(LabeledExample, s.payload) for s in split.oos]
     sizes = {
         "development": len(development),
         "validation": len(validation),

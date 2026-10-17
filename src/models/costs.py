@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
 from src.models.splits import SplitError
 
@@ -76,7 +76,7 @@ class CostTier:
         return self.round_trip / risk_distance
 
 
-def cost_tiers(assumptions: CostAssumptions = None) -> Tuple[CostTier, ...]:
+def cost_tiers(assumptions: Optional[CostAssumptions] = None) -> Tuple[CostTier, ...]:
     """The canonical three tiers under the given assumptions (RULE B)."""
     a = assumptions or CostAssumptions()
     a.validate()
@@ -87,7 +87,7 @@ def cost_tiers(assumptions: CostAssumptions = None) -> Tuple[CostTier, ...]:
     )
 
 
-def tier_by_name(name: str, assumptions: CostAssumptions = None) -> CostTier:
+def tier_by_name(name: str, assumptions: Optional[CostAssumptions] = None) -> CostTier:
     for tier in cost_tiers(assumptions):
         if tier.name == name:
             return tier

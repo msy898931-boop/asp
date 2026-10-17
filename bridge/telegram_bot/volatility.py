@@ -32,6 +32,8 @@ def _logret_stdev(bars: Sequence[dict]) -> float:
     rets = []
     for i in range(1, len(bars)):
         a, b = bars[i - 1].get("close"), bars[i].get("close")
+        if a is None or b is None:
+            continue
         try:
             a, b = float(a), float(b)
         except (TypeError, ValueError):
