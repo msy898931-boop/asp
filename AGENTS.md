@@ -1489,3 +1489,27 @@ rm -rf build/resources/bridge && python3 tests/integration/test_e2e_real_host_t1
 T13_REAL_DATA=1 python3 tests/integration/test_e2e_real_host_t13.py
 ```
 
+### Access-gate cookie carries Secure only behind TLS
+
+`mobile/serve_mobile.py` sets the `astra_key` cookie on `/unlock?k=`. It always
+has `HttpOnly; SameSite=Lax`, and adds `Secure` only when `X-Forwarded-Proto`
+says the request arrived over HTTPS (Render/Fly terminate TLS, so the loopback
+socket is plain HTTP and that header is the only honest signal). A blanket
+`Secure` would be dropped by the browser on a local HTTP run and lock the
+operator out; omitting it entirely would let the gate key ride a plain-HTTP
+request in production. Both branches are covered by tests.
+
+### Never put the GitHub token in `.git/config`
+
+`origin`'s URL must stay credential-free
+(`https://github.com/msy898931-boop/asp.git`). Auth comes from a local
+credential helper that reads `$GITHUB_TOKEN`:
+
+```
+git config --local credential.helper \
+  '!f() { echo username=x-access-token; echo "password=${GITHUB_TOKEN}"; }; f'
+```
+
+An `x-access-token@` literal in the remote URL is a secret at rest in a plain
+file; keep it out. (`upstream` stays `pushurl = no_push` — never push there.)
+
