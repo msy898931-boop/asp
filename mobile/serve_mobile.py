@@ -87,6 +87,19 @@ def _auth_required() -> bool:
     return bool(ACCESS_TOKEN)
 
 
+def _forwarded_proto_https(handler) -> bool:
+    """True when the request reached us over HTTPS.
+
+    The service runs behind a TLS-terminating proxy (Render, Fly), so the
+    socket itself is plain HTTP and the only honest signal is the proxy's
+    ``X-Forwarded-Proto`` header. Used to decide whether the unlock cookie may
+    carry ``Secure``: sending it over plain HTTP (a local dev run) would make
+    the browser drop the cookie and lock the operator out.
+    """
+    proto = handler.headers.get("X-Forwarded-Proto", "")
+    return proto.split(",")[0].strip().lower() == "https"
+
+
 # Gate hardening. A single static key with unlimited guesses is a guessing
 # oracle: an attacker can try keys as fast as the network allows. These bound
 # how many *failed* tries one client address may make before it is refused for
@@ -763,9 +776,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_response(302)
         self.send_header("Location", "/")
+        secure = "; Secure" if _forwarded_proto_https(self) else ""
         self.send_header("Set-Cookie",
                          f"{_COOKIE_NAME}={ACCESS_TOKEN}; Path=/; Max-Age=31536000; "
-                         "HttpOnly; SameSite=Lax")
+                         f"HttpOnly; SameSite=Lax{secure}")
         self.end_headers()
 
     # -- static shell -------------------------------------------------------

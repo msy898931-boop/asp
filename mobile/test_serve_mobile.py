@@ -703,6 +703,44 @@ class AccessControlTest(unittest.TestCase):
         finally:
             _stop(app)
 
+    def test_unlock_cookie_is_secure_behind_https_proxy(self):
+        # Render/Fly terminate TLS and forward X-Forwarded-Proto: https. On such
+        # a request the cookie must carry Secure so it is never sent in clear.
+        sm.ACCESS_TOKEN = "s3cret"
+        opener = urllib.request.build_opener(_NoRedirect)
+        app = self._serve_app()
+        try:
+            url = "http://127.0.0.1:%d/unlock?k=s3cret" % app.server_address[1]
+            req = urllib.request.Request(url,
+                                         headers={"X-Forwarded-Proto": "https"})
+            try:
+                opener.open(req, timeout=10)
+                self.fail("expected a 302 redirect")
+            except urllib.error.HTTPError as exc:
+                cookie = exc.headers.get("Set-Cookie", "")
+                self.assertIn("astra_key=s3cret", cookie)
+                self.assertIn("Secure", cookie)
+        finally:
+            _stop(app)
+
+    def test_unlock_cookie_omits_secure_on_plain_http(self):
+        # A local run has no proxy and no TLS: a Secure cookie would be dropped
+        # by the browser and lock the operator out, so it must be absent.
+        sm.ACCESS_TOKEN = "s3cret"
+        opener = urllib.request.build_opener(_NoRedirect)
+        app = self._serve_app()
+        try:
+            url = "http://127.0.0.1:%d/unlock?k=s3cret" % app.server_address[1]
+            try:
+                opener.open(url, timeout=10)
+                self.fail("expected a 302 redirect")
+            except urllib.error.HTTPError as exc:
+                cookie = exc.headers.get("Set-Cookie", "")
+                self.assertIn("astra_key=s3cret", cookie)
+                self.assertNotIn("Secure", cookie)
+        finally:
+            _stop(app)
+
     def test_unlock_rejects_a_wrong_key(self):
         sm.ACCESS_TOKEN = "s3cret"
         status, _ = self._status("/unlock?k=nope")
