@@ -391,10 +391,12 @@ class BuildTests(unittest.TestCase):
         self._orig_news = advisor.recent_news
         self._orig_events = advisor.upcoming_events
         self._orig_review = advisor.run_review
+        self._orig_bars = advisor.fetch_bars_by_tf
         self._orig_key = os.environ.get("GROQ_API_KEY")
         advisor.append_log = lambda record: None
         advisor.recent_news = lambda: []
         advisor.upcoming_events = lambda: []
+        advisor.fetch_bars_by_tf = lambda: {}
         advisor.run_review = lambda price: {
             "scored": 0, "correct": 0, "hit_rate": None,
             "by_stance": {}, "recent_wrong": []}
@@ -409,6 +411,7 @@ class BuildTests(unittest.TestCase):
         advisor.recent_news = self._orig_news
         advisor.upcoming_events = self._orig_events
         advisor.run_review = self._orig_review
+        advisor.fetch_bars_by_tf = self._orig_bars
         if self._orig_key is None:
             os.environ.pop("GROQ_API_KEY", None)
         else:
@@ -453,6 +456,39 @@ class BuildTests(unittest.TestCase):
             {"symbol": "XAUUSD"}, "مراجعة ذاتية: خطأ سابق")
         self.assertNotIn("مراجعة ذاتية", plain)
         self.assertIn("مراجعة ذاتية", with_lessons)
+
+    def test_prompt_keeps_the_card_levels_out(self):
+        # The model must never be handed the exact entry/stop/target: it would
+        # be tempted to restate them. Only the read (directions/verdict) goes in.
+        snapshot = {"symbol": "XAUUSD", "mtf": {
+            "available": True, "verdict": "LONG",
+            "agreement": {"long": 4, "short": 1, "neutral": 0, "of": 5},
+            "timeframes": {"M15": {"direction": "LONG", "rsi": 57.0}},
+            "card": {"entry": 2651.4, "stop": 2643.1, "target": 2667.9, "rr": 2.0},
+        }}
+        prompt = advisor.build_prompt(snapshot)
+        self.assertIn("LONG", prompt)
+        self.assertNotIn("2651.4", prompt)
+        self.assertNotIn("2643.1", prompt)
+
+    def test_trade_card_is_exposed_but_unvalidated(self):
+        advisor.fetch_bars_by_tf = lambda: {}
+        result = advisor.Advisor()._build()
+        self.assertIn("trade_card", result)
+        self.assertFalse(result["trade_card"]["validated"])
+
+    def test_trade_card_is_built_from_bars(self):
+        n = 120
+        rising = [{"open": 1800.0 + i * 0.5, "high": 1800.0 + i * 0.5 + 0.3,
+                   "low": 1800.0 + i * 0.5 - 0.3, "close": 1800.0 + (i + 1) * 0.5}
+                  for i in range(n)]
+        advisor.fetch_bars_by_tf = lambda: dict.fromkeys(advisor.MTF_TIMEFRAMES, rising)
+        result = advisor.Advisor()._build()
+        card = result["trade_card"]
+        self.assertTrue(card["available"])
+        self.assertEqual(card["verdict"], "LONG")
+        self.assertLess(card["card"]["stop"], card["card"]["entry"])
+        self.assertLess(card["card"]["entry"], card["card"]["target"])
 
 
 class ProviderTests(unittest.TestCase):

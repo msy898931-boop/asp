@@ -38,6 +38,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import mtf_read
 import self_review
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +47,10 @@ ROOT = os.path.dirname(HERE)
 API_BASE = os.environ.get("ASTRA_ADVISOR_API", "http://127.0.0.1:8790")
 BRIDGE_BASE = os.environ.get("ASTRA_ADVISOR_BRIDGE", "http://127.0.0.1:8791")
 SYMBOL = os.environ.get("ASTRA_ADVISOR_SYMBOL", "XAUUSD")
+# Multi-timeframe read: the same five frames the trade card votes over, with
+# enough bars for the slow EMA (21) plus RSI (14) plus swing history.
+MTF_TIMEFRAMES = mtf_read.TIMEFRAMES
+MTF_BARS = int(os.environ.get("ASTRA_ADVISOR_MTF_BARS", "220"))
 # Provider selection. Groq is the default because its free tier is global;
 # Gemini's is region-restricted. Both are plain REST calls.
 PROVIDER = os.environ.get("ASTRA_ADVISOR_PROVIDER", "groq").strip().lower()
@@ -155,6 +160,12 @@ _SYSTEM_PROMPT = (
     "- When a high-impact event is listed in the snapshot, treat it as the day's "
     "pivot: name it, say which outcome helps gold and which hurts it, and shape "
     "the plan around it.\n"
+    "- The snapshot carries an `mtf` block: a rule engine's multi-timeframe read "
+    "(M5, M15, M30, H1, H4) with a verdict and per-timeframe directions. If its "
+    "verdict is not NEUTRAL, align your stance with it and explain the "
+    "agreement; if it is NEUTRAL, do not force a trade. Do not restate entry, "
+    "stop or target numbers — those are computed server-side and shown "
+    "verbatim; leave them as \"--\".\n"
     "- This is commentary, not advice. Do not promise returns.\n"
     "Reply with JSON only, keys: stance (one of LONG, SHORT, NEUTRAL), "
     "confidence (0..1, your own, not the engine's), thesis (one or two Arabic "
@@ -297,6 +308,27 @@ def upcoming_events() -> list[dict]:
     return _calendar_cache["items"]
 
 
+def fetch_bars_by_tf() -> dict:
+    """Closed bars for the five read timeframes, or the subset that answers.
+
+    Mirrors ``mobile/serve_mobile.py``: the bridge wraps bars in an envelope
+    (``{"payload": {"bars": [...]}}``) and also accepts a bare body, so both
+    shapes are tolerated.
+    """
+    out: dict = {}
+    for tf in MTF_TIMEFRAMES:
+        url = "%s/v1/candles?tf=%s&limit=%d" % (BRIDGE_BASE, tf, MTF_BARS)
+        payload = _get_json(url)
+        if not isinstance(payload, dict):
+            continue
+        if isinstance(payload.get("payload"), dict):
+            payload = payload["payload"]
+        bars = payload.get("bars") or payload.get("candles") or []
+        if bars:
+            out[tf] = bars
+    return out
+
+
 def build_snapshot() -> dict:
     """Collect the facts the advisor reasons over. No opinion is formed here."""
     snapshot: dict = {
@@ -337,6 +369,13 @@ def build_snapshot() -> dict:
     events = upcoming_events()
     snapshot["events"] = events
     snapshot["events_available"] = bool(events)
+
+    # The multi-timeframe read: exact numbers computed here, never by the model.
+    # Only the compact read goes into the prompt; the full card (with levels)
+    # stays server-side so a hallucinated price cannot reach the reader.
+    mtf = mtf_read.build(fetch_bars_by_tf())
+    snapshot["mtf_available"] = bool(mtf.get("available"))
+    snapshot["mtf"] = mtf
     return snapshot
 
 
@@ -344,7 +383,29 @@ def build_prompt(snapshot: dict, lessons: str = "") -> str:
     prompt = _SYSTEM_PROMPT
     if lessons:
         prompt += "\n\n" + lessons
-    return prompt + "\n\nSnapshot:\n" + json.dumps(snapshot, indent=2, sort_keys=True)
+    return prompt + "\n\nSnapshot:\n" + json.dumps(_prompt_view(snapshot),
+                                                   indent=2, sort_keys=True)
+
+
+def _prompt_view(snapshot: dict) -> dict:
+    """The snapshot as the model sees it: the MTF read, but not the card levels.
+
+    The entry/stop/target are computed server-side and shown to the reader
+    verbatim; withholding them from the prompt removes any temptation for the
+    model to restate a number it did not calculate.
+    """
+    view = dict(snapshot)
+    mtf = view.get("mtf")
+    if isinstance(mtf, dict):
+        view["mtf"] = {
+            "available": mtf.get("available"),
+            "verdict": mtf.get("verdict"),
+            "agreement": mtf.get("agreement"),
+            "timeframes": mtf.get("timeframes"),
+            "reason": mtf.get("reason"),
+            "note": mtf.get("note"),
+        }
+    return view
 
 
 def parse_advisory(text: str) -> dict | None:
@@ -531,6 +592,9 @@ class Advisor:
             "configured": bool(api_key),
             "model": active_model() if api_key else None,
             "snapshot": snapshot,
+            # The trade card: the only place entry/stop/target come from. Rule-
+            # based and unvalidated, computed from closed bars by mtf_read.
+            "trade_card": snapshot.get("mtf"),
             "opinion": None,
         }
         if not api_key:

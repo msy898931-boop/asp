@@ -208,6 +208,13 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   answers with the snapshot and `configured:false`. Disable with
   `ASTRA_DISABLE_ADVISOR=1`. A failure there must never affect the rest of the
   stack.
+- The advisor also publishes a **trade card** (`trade_card` in its reply): a
+  deterministic multi-timeframe read of M5/M15/M30/H1/H4 built by
+  `advisor/mtf_read.py`. It is the *only* source of entry/stop/target — the
+  model is never handed those levels, so it cannot restate a number it did not
+  compute. A direction needs >= 3 of 5 frames and H4 must not oppose; otherwise
+  the verdict is NEUTRAL and no numbers are emitted. It is rule-based and
+  `validated: false`, not a measured edge.
 
 ## The frozen v1 contract has four copies ŌĆö keep them in step
 

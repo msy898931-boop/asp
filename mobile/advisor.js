@@ -58,6 +58,55 @@ async function loadAdvisor(force) {
       ev.hidden = true;
     }
 
+    // The trade card: exact levels computed server-side, shown verbatim.
+    const cardEl = $("ai-card");
+    cardEl.innerHTML = "";
+    const card = a.trade_card || {};
+    if (card.card) {
+      cardEl.hidden = false;
+      const c = card.card;
+      const title = document.createElement("h3");
+      title.className = "ai-sub";
+      title.textContent = T("ai_card");
+      cardEl.appendChild(title);
+      const dir = document.createElement("div");
+      dir.className = "ai-card-dir";
+      dir.textContent = `${T(AI_STANCE_KEY[c.direction] || "ai_stance_neutral")}`
+        + ` · ${card.agreement}`;
+      cardEl.appendChild(dir);
+      const grid = document.createElement("div");
+      grid.className = "ai-card-grid";
+      const rows = [
+        ["ai_card_entry", c.entry], ["ai_card_stop", c.stop],
+        ["ai_card_target", c.target], ["ai_card_rr", c.rr],
+      ];
+      for (const [k, v] of rows) {
+        if (v == null) continue;
+        const div = document.createElement("div");
+        const dt = document.createElement("dt");
+        dt.textContent = T(k);
+        const dd = document.createElement("dd");
+        dd.textContent = num(v);
+        div.appendChild(dt);
+        div.appendChild(dd);
+        grid.appendChild(div);
+      }
+      cardEl.appendChild(grid);
+      const tf = card.timeframes || {};
+      const bits = Object.keys(tf).map((k) => {
+        const arrow = { LONG: "▲", SHORT: "▼", NEUTRAL: "–" }[tf[k].direction] || "–";
+        return `${k} ${arrow} ${tf[k].rsi}`;
+      });
+      if (bits.length) {
+        const line = document.createElement("div");
+        line.className = "ai-card-tf";
+        line.textContent = bits.join("  ");
+        cardEl.appendChild(line);
+      }
+    } else {
+      cardEl.hidden = true;
+    }
+
     const planEl = $("ai-plan");
     planEl.innerHTML = "";
     if (op && op.plan) {
@@ -128,7 +177,8 @@ async function loadAdvisor(force) {
     $("ai-thesis").textContent = "";
     $("ai-risks").textContent = "";
     for (const id of ["ai-headlines", "ai-events", "ai-plan", "ai-event",
-                      "ai-review", "ai-headlines-title", "ai-events-title"]) {
+                      "ai-card", "ai-review", "ai-headlines-title",
+                      "ai-events-title"]) {
       const el = $(id);
       el.hidden = true;
       if (el.tagName === "UL" || el.tagName === "DIV") el.innerHTML = "";
