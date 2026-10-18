@@ -464,6 +464,13 @@ leaks no timing signal. The gate is dormant until the variable is set, mirroring
 `ASTRA_UPGRADE_URL`: development, CI and the current deployment behave exactly
 as before. `mobile/test_serve_mobile.py::AccessControlTest` locks all of this.
 
+The live Render deployment currently runs the gate **on**: the phone app answers
+`401` until unlocked and `/api/v1/health` stays `200`. The same key is set as the
+`ASTRA_ACCESS_TOKEN` repo secret, so the keepalive canary, watchdog and daily
+report authenticate; if that secret is ever blanked they degrade to "cannot
+judge" rather than reporting a false failure. `render.yaml` declares the env var
+so the Blueprint and the running service do not drift.
+
 The service worker caches the shell only. Everything that carries a current
 number is network-only: `/api/*`, `/bridge/*`, `/tracker/*`, `/advisor/*`, and
 the panel readings `/vol.json` and `/akoan.json`. The volatility panel stamps

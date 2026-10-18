@@ -34,6 +34,10 @@ services:
         sync: false          # optional contact claim, e.g. mailto:you@example.com
       - key: ASTRA_UPGRADE_URL
         sync: false          # Stripe Payment Link; empty = gate off (all free)
+      - key: ASTRA_ACCESS_TOKEN
+        sync: false          # the phone app's access key. Empty = app is open; set here
+                             # (and the same value as the repo secret of that name, which
+                             # the keepalive/watchdog/daily workflows send as a cookie).
       - key: ASTRA_FREE_LEVELS
         value: "2"
       - key: ASTRA_PRO_LEVELS
