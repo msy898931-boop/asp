@@ -722,6 +722,162 @@ class NewsWatchTests(unittest.TestCase):
             bot.news_window = saved
 
 
+def _card(verdict="LONG", entry=2651.4, stop=2643.1, target=2667.9, rr=2.0,
+          available=True, direction_tf="LONG", rsi=57.0):
+    """A trade card shaped exactly as the advisor's reply carries it."""
+    return {
+        "available": available,
+        "verdict": verdict,
+        "agreement": {"long": 4, "short": 1, "neutral": 0, "of": 5},
+        "timeframes": {tf: {"direction": direction_tf, "rsi": rsi}
+                       for tf in ("M5", "M15", "M30", "H1", "H4")},
+        "reason": "no majority across timeframes",
+        "card": None if not available or verdict == "NEUTRAL" else {
+            "direction": verdict, "entry": entry, "stop": stop,
+            "target": target, "rr": rr, "agreement": "4/5",
+        },
+    }
+
+
+class FakeCardApi(FakeApi):
+    """A fake backend whose advisor returns a canned trade card."""
+
+    def __init__(self, card, available=True):
+        super().__init__(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY,
+                         available=available)
+        self._card = card
+
+    def trade_card(self):
+        self._maybe_raise()
+        return self._card
+
+
+class TradeCardFormatTests(unittest.TestCase):
+    def test_card_carries_the_exact_levels_and_direction(self):
+        text = bot.format_trade_card(_card())
+        self.assertIn("شراء", text)
+        self.assertIn("الدخول: 2651.4", text)
+        self.assertIn("الوقف: 2643.1", text)
+        self.assertIn("الهدف: 2667.9", text)
+        self.assertIn("R:R = 2.0", text)
+
+    def test_card_states_it_is_not_advice_and_does_not_execute(self):
+        text = bot.format_trade_card(_card())
+        self.assertIn("ليست نصيحة", text)
+        self.assertIn("لا تنفيذ", text)
+
+    def test_a_poor_reward_risk_is_surfaced_not_hidden(self):
+        text = bot.format_trade_card(_card(rr=0.8))
+        self.assertIn("أقل من 1", text)
+
+    def test_a_good_reward_risk_carries_no_warning(self):
+        self.assertNotIn("أقل من 1", bot.format_trade_card(_card(rr=2.0)))
+
+    def test_the_per_timeframe_read_is_shown(self):
+        text = bot.format_trade_card(_card())
+        self.assertIn("M15", text)
+        self.assertIn("▲", text)
+
+
+class TradeCardWatchTests(unittest.TestCase):
+    def test_first_poll_primes_and_stays_silent(self):
+        watch = bot.TradeCardWatch()
+        self.assertEqual(watch.poll(_card()), [])
+
+    def test_a_new_card_alerts_once(self):
+        watch = bot.TradeCardWatch()
+        watch.poll(_card())                       # prime on the current card
+        out = watch.poll(_card(entry=2660.0, stop=2650.0, target=2680.0))
+        self.assertEqual(len(out), 1)
+        self.assertIn("2660.0", out[0])
+
+    def test_the_same_card_never_re_alerts(self):
+        watch = bot.TradeCardWatch()
+        watch.poll(_card())
+        self.assertEqual(watch.poll(_card()), [])
+        self.assertEqual(watch.poll(_card()), [])
+
+    def test_a_neutral_read_never_alerts(self):
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(verdict="NEUTRAL", available=False))
+        self.assertEqual(watch.poll(_card(verdict="NEUTRAL", available=False)), [])
+
+    def test_flipping_direction_alerts_even_at_the_same_entry(self):
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(verdict="LONG"))
+        out = watch.poll(_card(verdict="SHORT"))
+        self.assertEqual(len(out), 1)
+        self.assertIn("بيع", out[0])
+
+    def test_a_missing_card_is_never_announced(self):
+        watch = bot.TradeCardWatch()
+        watch.poll(_card())
+        self.assertEqual(watch.poll(None), [])
+
+
+class TradeCardCheckTests(unittest.TestCase):
+    def _check(self, card, news_context=None):
+        api = FakeCardApi(card)
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+        subs.add("42")
+        client = FakeClient()
+        watch = bot.TradeCardWatch()
+        watch.poll(_card())  # prime on an older card, so `card` is genuinely new
+        bot._check_trade_card(api, watch, subs, client, news_context)
+        return client.sent
+
+    def test_a_new_card_is_broadcast_to_subscribers(self):
+        sent = self._check(_card(entry=2660.0, stop=2650.0, target=2680.0))
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0][0], "42")
+        self.assertIn("2660.0", sent[0][1])
+
+    def test_an_unreachable_advisor_stays_silent(self):
+        api = FakeCardApi(_card(), available=False)
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+        subs.add("42")
+        client = FakeClient()
+        bot._check_trade_card(api, bot.TradeCardWatch(), subs, client)
+        self.assertEqual(client.sent, [])
+
+    def test_news_context_is_appended_to_a_fresh_card(self):
+        sent = self._check(_card(entry=2660.0), news_context="⏸ نافذة خبر: CPI")
+        self.assertIn("نافذة خبر", sent[0][1])
+
+
+class CardCommandTests(unittest.TestCase):
+    def _router(self, card, available=True):
+        api = FakeCardApi(card, available)
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+        return bot.CommandRouter(api, subs, None), api
+
+    def test_card_command_renders_the_levels(self):
+        router, _ = self._router(_card())
+        reply = router.handle("1", "/card")
+        self.assertIn("2651.4", reply)
+        self.assertIn("R:R", reply)
+
+    def test_card_button_runs_the_command(self):
+        router, _ = self._router(_card())
+        self.assertIn("2651.4", router.handle("1", "🎯 بطاقة الصفقة"))
+
+    def test_card_command_reports_no_trade_honestly(self):
+        router, _ = self._router(_card(verdict="NEUTRAL"))
+        reply = router.handle("1", "/card")
+        self.assertIn("لا صفقة", reply)
+        self.assertNotIn("الدخول", reply)
+
+    def test_card_command_degrades_when_the_advisor_is_down(self):
+        router, _ = self._router(_card(), available=False)
+        self.assertIn("تعذّر", router.handle("1", "/card"))
+
+    def test_help_lists_the_card_command(self):
+        self.assertIn("/card", bot.CommandRouter.HELP)
+
+    def test_the_menu_lists_the_card_command(self):
+        self.assertIn("/card", dict(bot.BOT_COMMANDS))
+
+
 class CommandMenuPayloadTest(unittest.TestCase):
     """Telegram rejects a command name that carries the leading slash with
     BOT_COMMAND_INVALID and drops the entire list, so the menu stays empty in

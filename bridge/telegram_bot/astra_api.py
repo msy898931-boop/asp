@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 
 DEFAULT_API_BASE = "http://127.0.0.1:8790/api/v1"
 BRIDGE_PORT = 8791   # the host's Python bridge port (see StartupCoordinator)
+ADVISOR_PORT = 8792  # the isolated AI advisor's loopback port
 _READ_TIMEOUT_SECONDS = 5.0
 
 
@@ -26,18 +27,24 @@ class AstraApi:
 
     def __init__(self, base_url: str = DEFAULT_API_BASE,
                  timeout: float = _READ_TIMEOUT_SECONDS,
-                 bridge_base: Optional[str] = None) -> None:
+                 bridge_base: Optional[str] = None,
+                 advisor_base: Optional[str] = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        # The bridge answers on the host's loopback bridge port (8791 by
-        # default), outside the /api/v1 prefix. Keep the API host but swap in
-        # the bridge port unless an explicit base is given.
-        if bridge_base is None:
+        # The bridge and the advisor answer on their own loopback ports, outside
+        # the /api/v1 prefix. Keep the API host but swap in the right port unless
+        # an explicit base is given.
+        if bridge_base is None or advisor_base is None:
             from urllib.parse import urlsplit, urlunsplit
             parts = urlsplit(self.base_url)
-            bridge_base = urlunsplit((parts.scheme, f"{parts.hostname}:{BRIDGE_PORT}",
-                                      "/v1", "", ""))
+            if bridge_base is None:
+                bridge_base = urlunsplit(
+                    (parts.scheme, f"{parts.hostname}:{BRIDGE_PORT}", "/v1", "", ""))
+            if advisor_base is None:
+                advisor_base = urlunsplit(
+                    (parts.scheme, f"{parts.hostname}:{ADVISOR_PORT}", "/v1", "", ""))
         self.bridge_base = bridge_base.rstrip("/")
+        self.advisor_base = advisor_base.rstrip("/")
 
     # -- transport ----------------------------------------------------------
 
@@ -110,6 +117,19 @@ class AstraApi:
             return float(last.get("close"))
         except (TypeError, ValueError, AttributeError):
             return None
+
+    # -- advisor (the multi-timeframe trade card) --------------------------
+
+    def trade_card(self) -> Dict[str, Any]:
+        """The advisor's multi-timeframe read, with its exact levels.
+
+        Read-only and best-effort: an unreachable advisor raises ``ApiError`` so
+        the caller can stay silent rather than invent a card.
+        """
+        env = self._get_abs(f"{self.advisor_base}/advisor")
+        advisor = env.get("advisor") if isinstance(env, dict) else None
+        card = advisor.get("trade_card") if isinstance(advisor, dict) else None
+        return card if isinstance(card, dict) else {}
 
     # -- composite health snapshot -----------------------------------------
 

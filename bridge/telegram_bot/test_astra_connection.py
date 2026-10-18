@@ -106,6 +106,33 @@ class _BridgeHandler(BaseHTTPRequestHandler):
 
 
 @_quiet
+class _AdvisorHandler(BaseHTTPRequestHandler):
+    """The advisor's /v1/advisor envelope, which nests the trade card."""
+
+    def do_GET(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.endswith("/advisor"):
+            body = {"advisor": {
+                "symbol": "XAUUSD", "configured": True,
+                "trade_card": {
+                    "available": True, "verdict": "LONG",
+                    "agreement": {"long": 4, "short": 1, "neutral": 0, "of": 5},
+                    "timeframes": {"M15": {"direction": "LONG", "rsi": 57.0}},
+                    "card": {"direction": "LONG", "entry": 2651.4, "stop": 2643.1,
+                             "target": 2667.9, "rr": 2.0, "agreement": "4/5"},
+                },
+            }}
+        else:
+            body = {"error": "unknown route"}
+        raw = json.dumps(body).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+
+@_quiet
 class _FakeTelegramHandler(BaseHTTPRequestHandler):
     """A recording stand-in for api.telegram.org.
 
@@ -153,9 +180,12 @@ class ConnectionTest(unittest.TestCase):
         self.addCleanup(self.backend.close)
         self.bridge = _Server(_BridgeHandler)
         self.addCleanup(self.bridge.close)
+        self.advisor = _Server(_AdvisorHandler)
+        self.addCleanup(self.advisor.close)
         self.api = AstraApi(
             base_url=self.backend.url("/api/v1"),
             bridge_base=self.bridge.url("/v1"),
+            advisor_base=self.advisor.url("/v1"),
         )
         self.state = tempfile.mkdtemp(prefix="astra-conn-")
         self.addCleanup(shutil.rmtree, self.state, True)
@@ -191,6 +221,28 @@ class ConnectionTest(unittest.TestCase):
         api = AstraApi(base_url=self.backend.url("/api/v1"),
                        bridge_base=f"http://127.0.0.1:{_free_port()}/v1")
         self.assertIsNone(api.last_price())
+
+    # -- the advisor trade card over the real transport --------------------
+
+    def test_trade_card_reads_the_advisor_envelope(self):
+        # The card nests under advisor.trade_card; a client that looked for it
+        # at the top level, or under "data", would silently find nothing.
+        card = self.api.trade_card()
+        self.assertEqual(card["verdict"], "LONG")
+        self.assertEqual(card["card"]["entry"], 2651.4)
+
+    def test_a_missing_advisor_is_an_error_not_an_invented_card(self):
+        from astra_api import ApiError
+        api = AstraApi(base_url=self.backend.url("/api/v1"),
+                       bridge_base=self.bridge.url("/v1"),
+                       advisor_base=f"http://127.0.0.1:{_free_port()}/v1")
+        with self.assertRaises(ApiError):
+            api.trade_card()
+
+    def test_card_command_renders_the_live_advisor(self):
+        reply = self._router().handle("123", "/card")
+        self.assertIn("شراء", reply)
+        self.assertIn("2651.4", reply)
 
     # -- the commands, end to end ------------------------------------------
 

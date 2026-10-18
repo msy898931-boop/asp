@@ -93,11 +93,20 @@ Absence of a token is not an error.
 
 Commands: `/start` `/price` `/level` `/levels` `/clearlevels` `/status` `/plan`
 `/myid` `/subscribe` `/unsubscribe` `/help` ŌĆö exactly the menu the bot registers
-with `setMyCommands`, described in Arabic. `/menu`, `/vol`, `/grant` and the
+with `setMyCommands`, described in Arabic. `/menu`, `/vol`, `/card`, `/grant` and the
 diagnostic `/health` `/analysis` `/signal` `/bridge` also work but stay off the
 menu.
 Push alerts fire on health/bridge/new-signal transitions (first reading is
 primed silently) and when a user's price level is crossed.
+
+The advisor's **trade card** is also pushed: `TradeCardWatch` polls
+`AstraApi.trade_card()` each cycle and alerts only when the card's identity
+(direction + entry/stop/target) differs from the last one announced, so a setup
+already open at boot is primed silently and a still-open setup never re-fires.
+A NEUTRAL read carries no numbers and is never announced; an unreachable advisor
+is silent. The alert reuses `format_trade_card`, the same renderer as `/card`, so
+the pushed text and the on-demand text are identical. Disable with
+`--no-card-alerts` or `ASTRA_CARD_ALERTS=0`.
 
 `BOT_COMMANDS` stores the names **with** the leading slash (that is how the user
 types them), but `setMyCommands` must be given the bare names: Telegram rejects

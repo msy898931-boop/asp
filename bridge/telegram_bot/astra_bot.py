@@ -71,6 +71,12 @@ try:
     import news_engine
 except ImportError:  # pragma: no cover - deployment-shape dependent
     news_engine = None
+# The trade-card renderer lives with the advisor too. Imported best-effort: the
+# bot still runs (minus card alerts) when the advisor package is absent.
+try:
+    import mtf_read
+except ImportError:  # pragma: no cover - deployment-shape dependent
+    mtf_read = None
 
 # Web Push mirrors the phone app: the mobile package sits beside (repo) or one
 # level up from (container) the bot. Loaded best-effort, so the bot runs
@@ -102,14 +108,16 @@ _stop = threading.Event()
 # router understands the label as well as the token, so a tap works like typing.
 REPLY_KEYBOARD: List[List[str]] = [
     ["💰 سعر الذهب", "📊 حالة السوق"],
-    ["📰 الأخبار والذهب", "🔔 مستوى جديد"],
-    ["📋 مستوياتي", "🗑 مسح المستويات"],
-    ["⭐ خطتي", "❓ مساعدة"],
+    ["🎯 بطاقة الصفقة", "📰 الأخبار والذهب"],
+    ["🔔 مستوى جديد", "📋 مستوياتي"],
+    ["🗑 مسح المستويات", "⭐ خطتي"],
+    ["❓ مساعدة"],
 ]
 
 BUTTON_COMMANDS: Dict[str, str] = {
     "💰 سعر الذهب": "/price",
     "📊 حالة السوق": "/status",
+    "🎯 بطاقة الصفقة": "/card",
     "📰 الأخبار والذهب": "/news",
     "🔔 مستوى جديد": "/level",
     "📋 مستوياتي": "/levels",
@@ -128,6 +136,7 @@ BOT_COMMANDS: List[tuple] = [
     ("/levels", "مستوياتي وحالتها"),
     ("/clearlevels", "حذف كل مستوياتي"),
     ("/status", "حالة النظام والوضع"),
+    ("/card", "بطاقة صفقة متعدّدة الفريمات"),
     ("/plan", "خطتي وحدودي"),
     ("/myid", "معرّف محادثتي"),
     ("/subscribe", "تشغيل التنبيهات"),
@@ -522,6 +531,7 @@ class CommandRouter:
         "⭐ /plan - خطتك وحدودها\n"
         "📊 /status - حالة النظام والوضع\n"
         "🌊 /vol - توقّع تقلّب السوق (لا يتنبّأ بالاتجاه)\n"
+        "🎯 /card - بطاقة صفقة متعدّدة الفريمات (أرقام محسوبة)\n"
         "🩺 /health - تفاصيل الصحة\n"
         "📈 /analysis - آخر تحليل\n"
         "📶 /bridge - حالة جسر MT5\n"
@@ -598,6 +608,21 @@ class CommandRouter:
             lines.append(news)
         return "\n".join(lines)
 
+    def _card_command(self) -> str:
+        """The current multi-timeframe trade card, on demand.
+
+        The body is the advisor's own ``mtf_read.format_card`` — the same
+        renderer the push alert reuses — so the on-demand reply and the pushed
+        text cannot drift apart.
+        """
+        if mtf_read is None:
+            return "🎯 بطاقة الصفقة غير متاحة على هذا الخادم (المستشار غير منصّب)."
+        try:
+            card = self.api.trade_card()
+        except ApiError:
+            return "🎯 تعذّر قراءة بطاقة الصفقة (المستشار غير متاح الآن)."
+        return "🎯 بطاقة الصفقة\n" + mtf_read.format_card(card)
+
     def _news_command(self) -> str:
         """The live news read: window, schedule, tape and headlines."""
         d = news_digest()
@@ -670,6 +695,8 @@ class CommandRouter:
                 return format_status(self.api.snapshot())
             if cmd == "/vol":
                 return self._vol_command()
+            if cmd == "/card":
+                return self._card_command()
             if cmd == "/news":
                 return self._news_command()
             if cmd == "/health":
@@ -882,10 +909,68 @@ class NewsWatch:
         return out
 
 
+class TradeCardWatch:
+    """Edge-triggered alerts when the advisor publishes a *new* trade card.
+
+    The advisor recomputes its multi-timeframe read on its own TTL, so polling
+    it every cycle would re-announce the same setup. A card is identified by its
+    direction and the exact levels it was built from; only a card whose identity
+    differs from the last one announced fires, so a still-open setup is quiet
+    and a fresh one (a new entry/stop/target) is news. A card is only announced
+    when a direction holds — a NEUTRAL read has no numbers and never alerts.
+
+    Read-only, like everything else here: it announces a level, it never acts on
+    one, and it carries no execution authority.
+    """
+
+    def __init__(self) -> None:
+        self._primed = False
+        self._last: Optional[tuple] = None
+
+    @staticmethod
+    def _key(card: Dict[str, Any]) -> Optional[tuple]:
+        if not card.get("card"):
+            return None
+        return (card.get("verdict"), card["card"].get("entry"),
+                card["card"].get("stop"), card["card"].get("target"))
+
+    def poll(self, card: Optional[Dict[str, Any]] = None) -> List[str]:
+        if card is None:
+            return []
+        key = self._key(card)
+        if not self._primed:
+            # Learn the current card silently: a setup already open when the
+            # bot starts must not fire the moment it comes online.
+            self._last = key
+            self._primed = True
+            return []
+        if key is None or key == self._last:
+            return []
+        self._last = key
+        return [format_trade_card(card)]
+
+
+def format_trade_card(card: Dict[str, Any]) -> str:
+    """Arabic push alert for a genuinely new card.
+
+    Delegates the body to the advisor's own ``mtf_read.format_card`` so the
+    pushed text and the ``/card`` reply can never drift apart, and adds a
+    header plus an explicit no-execution line. A reward:risk below 1 is
+    surfaced rather than hidden, so a poor setup is never dressed up as good.
+    """
+    lines = ["🎯 بطاقة صفقة جديدة", mtf_read.format_card(card)]
+    rr = (card.get("card") or {}).get("rr")
+    if isinstance(rr, (int, float)) and rr < 1:
+        lines.append("⚠️ العائد/المخاطرة أقل من 1 — المخاطرة أكبر من العائد.")
+    lines.append("لا تنفيذ تلقائي — إشعار فقط.")
+    return "\n".join(lines)
+
+
 def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                     interval: int, levels: Optional[LevelStore] = None,
                     ent: Optional[Entitlements] = None,
-                    vol_model: Optional[VolatilityModel] = None) -> None:
+                    vol_model: Optional[VolatilityModel] = None,
+                    card_watch: Optional["TradeCardWatch"] = None) -> None:
     engine = AlertEngine(api)
     engine.prime()
     watch = NewsWatch()
@@ -915,6 +1000,11 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                                                  vol_was_high, news_reason)
             except Exception as exc:  # noqa: BLE001
                 print(f"[warn] volatility: {exc}", file=sys.stderr)
+        if card_watch is not None:
+            try:
+                _check_trade_card(api, card_watch, subs, client, news_context)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[warn] trade card: {exc}", file=sys.stderr)
 
 
 def _check_volatility(api: AstraApi, model: VolatilityModel,
@@ -941,6 +1031,26 @@ def _check_volatility(api: AstraApi, model: VolatilityModel,
             text = text + "\n" + news_reason
         _broadcast(client, subs, text)
     return is_high
+
+
+def _check_trade_card(api: AstraApi, watch: "TradeCardWatch",
+                      subs: Subscriptions, client: TelegramClient,
+                      news_context: Optional[str] = None) -> None:
+    """Fetch the advisor's card and broadcast it when it is genuinely new.
+
+    A NEUTRAL read carries no levels and is never announced; an unreachable
+    advisor is silent (the watch keeps its last identity, so the same setup is
+    not re-sent when it comes back). ``news_context`` explains *why* a fresh
+    setup may be unsafe right now.
+    """
+    try:
+        card = api.trade_card()
+    except ApiError:
+        return
+    for alert in watch.poll(card):
+        if news_context:
+            alert = alert + "\n" + news_context
+        _broadcast(client, subs, alert)
 
 
 def _check_levels(api: AstraApi, levels: LevelStore,
@@ -982,6 +1092,9 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
                    help="backend poll interval in seconds")
     p.add_argument("--state", default=str(Path.home() / ".astra" / "telegram_subscribers.json"),
                    help="subscriber store path")
+    p.add_argument("--no-card-alerts", action="store_true",
+                   default=os.environ.get("ASTRA_CARD_ALERTS", "1") == "0",
+                   help="disable push alerts for new advisor trade cards")
     return p.parse_args(argv)
 
 
@@ -1018,6 +1131,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         subs.add(args.chat)
     router = CommandRouter(api, subs, args.chat or None, levels=levels, ent=ent,
                            vol_model=vol_model)
+    card_watch = None if args.no_card_alerts else TradeCardWatch()
 
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         _signal.signal(sig, lambda *_: _stop.set())
@@ -1051,7 +1165,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     monitor = threading.Thread(target=monitor_backend,
                                args=(api, subs, client, args.interval, levels, ent,
-                                     vol_model),
+                                     vol_model, card_watch),
                                daemon=True)
     monitor.start()
     try:
