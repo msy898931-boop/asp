@@ -1520,5 +1520,7 @@ present in the APK's `classes.dex` and that no `127.0.0.1`/`localhost` was baked
 in. A signed APK that installs and opens an empty error screen (the loopback
 mistake this project has already hit) must fail the build, not ship. This is a
 build-time guard; it is not a substitute for installing on a real device, which
-still has to be done by hand (the runner has no KVM/emulator).
+still has to be done by hand (the runner has no KVM/emulator). Confirmed working
+on a real Android device: the shell installs, opens, and loads the phone app
+from the baked server URL.
 
