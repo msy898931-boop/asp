@@ -1513,3 +1513,12 @@ git config --local credential.helper \
 An `x-access-token@` literal in the remote URL is a secret at rest in a plain
 file; keep it out. (`upstream` stays `pushurl = no_push` — never push there.)
 
+### The APK build fails closed on a bad baked URL
+
+`android/build.sh` verifies, after signing, that the requested `SERVER_URL` is
+present in the APK's `classes.dex` and that no `127.0.0.1`/`localhost` was baked
+in. A signed APK that installs and opens an empty error screen (the loopback
+mistake this project has already hit) must fail the build, not ship. This is a
+build-time guard; it is not a substitute for installing on a real device, which
+still has to be done by hand (the runner has no KVM/emulator).
+
