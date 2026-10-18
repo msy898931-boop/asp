@@ -143,6 +143,26 @@ fi
   --ks-key-alias astra --out "$OUT/astra.apk" "$BUILD/aligned.apk"
 "$BUILD_TOOLS/apksigner" verify --print-certs "$OUT/astra.apk" | head -3
 
+# A signed APK is not necessarily a usable one. The failure this guards against
+# is the one the DEFAULT_URL comment describes: an APK that installs, opens, and
+# shows an empty error screen because it was built with a loopback or blank
+# address. Fail the build here, before the artifact is uploaded or published.
+echo "==> verify the baked URL is present and reachable"
+python3 - "$OUT/astra.apk" "$SERVER_URL" <<'PY'
+import re, sys, zipfile
+apk, want = sys.argv[1], sys.argv[2]
+dex = zipfile.ZipFile(apk).read("classes.dex")
+found = [u.decode() for u in re.findall(rb"https?://[ -~]{4,120}", dex)]
+if not want:
+    sys.exit("FAIL: no server URL was baked in")
+if want not in found:
+    sys.exit(f"FAIL: baked URL {want!r} not found in the APK: {found}")
+loop = [u for u in found if "127.0.0.1" in u or "localhost" in u]
+if loop:
+    sys.exit(f"FAIL: a loopback address was baked in: {loop}")
+print(f"OK: {want} baked in, no loopback address present")
+PY
+
 echo
 echo "APK ready: $OUT/astra.apk"
 echo "Server URL baked in: $SERVER_URL"
