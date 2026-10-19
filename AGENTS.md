@@ -53,7 +53,7 @@ for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
   python3 -m unittest discover -s "$d" -p "test_*.py"
 done
 python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
-# 961 tests total (152/44/50/59/92/162/94 + 308)
+# 1066 tests total (155/44/50/59/126/191/133 + 308)
 ```
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style
@@ -233,7 +233,13 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   model is never handed those levels, so it cannot restate a number it did not
   compute. A direction needs >= 3 of 5 frames and H4 must not oppose; otherwise
   the verdict is NEUTRAL and no numbers are emitted. It is rule-based and
-  `validated: false`, not a measured edge. The **plan** the model returns is
+  `validated: false`, not a measured edge. A read that produced no card still
+  carries a `reason`, and `format_card` spells out the one case that can look
+  like a blind spot: when the lower frames agreed on a direction but **H4
+  opposed** it, the reader is told *what* was seen and why it stood aside
+  (`_no_trade_line`), so a suppressed sell never reads as "the system only
+  ever sees buys". The phone's card panel surfaces the same reason instead of
+  hiding the panel. The **plan** the model returns is
   prose only (bias/trigger/note) — the prompt forbids prices — and
   `_merge_card_levels` stamps the card's entry/stop/target onto it before the
   reply goes out, so the plan's levels always equal the card's. (With no model

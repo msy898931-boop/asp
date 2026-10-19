@@ -188,6 +188,27 @@ class FormatTest(unittest.TestCase):
         text = mtf_read.format_card(result)
         self.assertIn("لا صفقة", text)
 
+    def test_veto_text_names_the_suppressed_sell(self):
+        # Lower timeframes all fall, H4 rises: a genuine sell is suppressed by
+        # the structural frame. The reader must see *that*, not a bare "no
+        # trade", or it looks like the system never sees a sell at all.
+        bars = {tf: _series(120, step=-0.5) for tf in TIMEFRAMES}
+        bars["H4"] = _series(120, step=0.5)
+        result = build(bars)
+        self.assertIsNone(result["card"])
+        text = mtf_read.format_card(result)
+        self.assertIn("بيع", text)
+        self.assertIn("H4", text)
+        self.assertIn("صاعد", text)
+
+    def test_veto_text_names_the_suppressed_buy(self):
+        bars = {tf: _series(120, step=0.5) for tf in TIMEFRAMES}
+        bars["H4"] = _series(120, step=-0.5)
+        result = build(bars)
+        text = mtf_read.format_card(result)
+        self.assertIn("شراء", text)
+        self.assertIn("هابط", text)
+
     def test_unavailable_text_when_no_data(self):
         text = mtf_read.format_card({"available": False})
         self.assertIn("لا تتوفّر", text)

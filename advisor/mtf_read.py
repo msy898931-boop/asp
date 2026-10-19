@@ -338,13 +338,38 @@ def direction_label(direction: str) -> str:
     return _AR.get(direction, direction)
 
 
+def _no_trade_line(result: Dict) -> str:
+    """Why a read produced no card, in the reader's language.
+
+    The two reasons that matter are named precisely, because both can look
+    like "the system sees nothing" when they are really "the system saw
+    something and stood aside":
+      * ``H4 structure opposes ...`` — the lower timeframes agreed on a
+        direction but the structural frame was against it. That is the one
+        case where a real setup is suppressed, so the opposing read is shown.
+      * ``no majority ...`` — the frames genuinely disagreed.
+    """
+    reason = result.get("reason") or "لا اتجاه راجح"
+    reads = result.get("timeframes") or {}
+    if reason.startswith("H4 structure opposes"):
+        lower = [tf for tf in ("M5", "M15", "M30", "H1") if tf in reads]
+        longs = sum(1 for tf in lower if reads[tf]["direction"] == "LONG")
+        shorts = sum(1 for tf in lower if reads[tf]["direction"] == "SHORT")
+        direction = "بيع" if shorts > longs else "شراء"
+        opposite = "صاعد" if direction == "بيع" else "هابط"
+        return ("لا صفقة الآن: الفريمات الصغيرة تميل إلى %s (%s/%s)، "
+                "لكن الإطار البنيوي H4 %s ويعارض الاتجاه — فوقفة احتياطًا."
+                % (direction, max(longs, shorts), len(lower), opposite))
+    return "لا صفقة: %s." % reason
+
+
 def format_card(result: Dict) -> str:
     """A compact Arabic rendering of the read, numbers verbatim."""
     if not result.get("available"):
         return "لا تتوفّر بيانات كافية للقراءة متعدّدة الأُطر."
     card = result.get("card")
     if not card:
-        return "لا صفقة: %s." % result.get("reason", "لا اتجاه راجح")
+        return _no_trade_line(result)
     lines = [
         "XAUUSD — %s (%s فريمات متوافقة)" % (direction_label(card["direction"]),
                                               card["agreement"]),

@@ -1388,6 +1388,24 @@ class AdvisorCardRenderTest(unittest.TestCase):
         for key in ("c.entry", "c.stop", "c.target", "c.rr"):
             self.assertIn(key, self.src)
 
+    def test_a_suppressed_read_is_shown_not_hidden(self):
+        # A read with no card still carries a reason; when the structural frame
+        # vetoed a real setup, hiding the panel made it look like the system
+        # only ever saw buys. The renderer must surface that reason.
+        self.assertIn("card.available", self.src)
+        self.assertIn("card.reason", self.src)
+        self.assertIn("ai_card_hold", self.src)
+        self.assertIn("ai_card_none", self.src)
+        self.assertIn("ai_dir_short", self.src)
+
+    def test_the_hold_strings_exist_in_both_languages(self):
+        with open(os.path.join(sm.HERE, "i18n.js"), encoding="utf-8") as fh:
+            i18n = fh.read()
+        for key in ("ai_card_hold", "ai_card_none", "ai_dir_long",
+                    "ai_dir_short", "ai_dir_up", "ai_dir_down"):
+            self.assertGreaterEqual(i18n.count(key + ":"), 2,
+                                    "%s must be in en and ar" % key)
+
 
 if __name__ == "__main__":
     unittest.main()

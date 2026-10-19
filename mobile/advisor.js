@@ -106,6 +106,35 @@ async function loadAdvisor(force) {
         line.textContent = bits.join("  ");
         cardEl.appendChild(line);
       }
+    } else if (card.available && card.reason) {
+      // A read with no card is not necessarily an empty read. The common case
+      // is the structural frame (H4) opposing a genuine lower-timeframe setup;
+      // hiding the panel there made a suppressed sell look like "the system
+      // only ever says buy". Show the reason instead, in the reader's language.
+      cardEl.hidden = false;
+      const title = document.createElement("h3");
+      title.className = "ai-sub";
+      title.textContent = T("ai_card");
+      cardEl.appendChild(title);
+      const note = document.createElement("div");
+      note.className = "ai-card-dir neutral";
+      const tf = card.timeframes || {};
+      const isVeto = String(card.reason).indexOf("H4 structure opposes") === 0;
+      if (isVeto) {
+        const dirs = ["M5", "M15", "M30", "H1"]
+          .filter((k) => tf[k]).map((k) => tf[k].direction);
+        const longs = dirs.filter((d) => d === "LONG").length;
+        const shorts = dirs.filter((d) => d === "SHORT").length;
+        const isShort = shorts > longs;
+        note.textContent = fmt(T("ai_card_hold"), {
+          dir: T(isShort ? "ai_dir_short" : "ai_dir_long"),
+          n: Math.max(longs, shorts),
+          opp: T(isShort ? "ai_dir_up" : "ai_dir_down"),
+        });
+      } else {
+        note.textContent = T("ai_card_none");
+      }
+      cardEl.appendChild(note);
     } else {
       cardEl.hidden = true;
     }

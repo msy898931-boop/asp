@@ -68,7 +68,7 @@ class BotTests(unittest.TestCase):
         b.handle_signals({"signals": [signal(1, "LONG")]})   # prime
         b.handle_signals({"signals": [signal(1, "LONG"), signal(2, "SHORT")]})
         self.assertEqual(len(tg.sent), 1)
-        self.assertIn("SHORT", tg.sent[0][1])
+        self.assertIn("بيع", tg.sent[0][1])
         b.handle_signals({"signals": [signal(1, "LONG"), signal(2, "SHORT")]})
         self.assertEqual(len(tg.sent), 1, "no duplicate for the same signal")
 
@@ -108,8 +108,27 @@ class BotTests(unittest.TestCase):
 class FormatTests(unittest.TestCase):
     def test_new_signal_has_levels_and_rr(self):
         text = bot.format_new(signal(1, "LONG"))
-        for piece in ("LONG", "4000.0", "3990.0", "4020.0", "1.67"):
+        for piece in ("شراء", "4000.0", "3990.0", "4020.0", "1.67"):
             self.assertIn(piece, text)
+
+    def test_new_signal_labels_direction_in_arabic(self):
+        # A raw "SHORT" in the alert read as a system that only ever buys; the
+        # direction is a user-facing field and is labelled like the rest.
+        self.assertIn("شراء", bot.format_new(signal(1, "LONG")))
+        self.assertIn("بيع", bot.format_new(signal(1, "SHORT")))
+        self.assertNotIn("SHORT", bot.format_new(signal(1, "SHORT")))
+
+    def test_result_labels_direction_in_arabic(self):
+        text = bot.format_result(signal(1, "SHORT", "STOP"))
+        self.assertIn("بيع", text)
+        self.assertNotIn("SHORT", text)
+
+    def test_approach_labels_direction_in_arabic(self):
+        live = {"direction": "SHORT", "entry": 4150.0, "stop": 4160.0,
+                "target": 4130.0}
+        text = bot.format_approach(live, {"high": 4155.0, "low": 4131.0})
+        self.assertIn("بيع", text)
+        self.assertNotIn("SHORT", text)
 
     def test_result_shows_net_r(self):
         self.assertIn("+1.60R", bot.format_result(signal(1, "LONG", "TARGET")))

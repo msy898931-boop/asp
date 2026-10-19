@@ -67,6 +67,10 @@ REGIME_AR = {"TRENDING_UP": "صعود", "TRENDING_DOWN": "هبوط",
 BIAS_AR = {"BULLISH": "صاعد", "BEARISH": "هابط", "RANGE": "عرضي",
            "INCOMPLETE": "غير مكتمل"}
 
+# A signal's direction reaches the alert verbatim ("LONG"/"SHORT"); the reader
+# is Arabic, so it is labelled like every other field rather than left in code.
+DIRECTION_AR = {"LONG": "شراء", "SHORT": "بيع", "NEUTRAL": "حياد"}
+
 
 def _ar(table: dict[str, str], key: object) -> Any:
     """Arabic label for `key` from `table`, else `key` itself (or None).
@@ -132,7 +136,7 @@ def format_new(signal: dict, plan: dict | None = None) -> str:
                            signal.get("target"))
     stop_dist = abs((entry or 0) - (stop or 0))
     lines = [
-        "🔔 صفقة جديدة — %s" % signal.get("direction"),
+        "🔔 صفقة جديدة — %s" % _ar(DIRECTION_AR, signal.get("direction")),
         "الدخول: %s" % entry,
         "الوقف: %s  (مسافة %s$/أونصة)" % (stop, round(stop_dist, 2)),
         "الهدف: %s" % target,
@@ -170,8 +174,8 @@ def format_result(signal: dict, account_usd: float = 0.0) -> str:
     r = signal.get("r_net")
     r_txt = "—" if r is None else "%+.2fR" % r
     lines = ["%s\n%s  %s → %s\nصافي %s"
-             % (head, signal.get("direction"), signal.get("entry"),
-                signal.get("exit_price"), r_txt)]
+             % (head, _ar(DIRECTION_AR, signal.get("direction")),
+                signal.get("entry"), signal.get("exit_price"), r_txt)]
     usd = _result_usd(signal, account_usd)
     if usd is not None:
         lines.append("💵 على حساب %s$ (أصغر حجم 1 أونصة): %s%s"
@@ -276,8 +280,8 @@ def format_approach(signal: dict, bar: dict) -> str | None:
     level = signal.get("target") if side == "target" else signal.get("stop")
     return "\n".join([
         head,
-        "%s من %s · %s→%s" % (signal.get("direction"), signal.get("entry"),
-                              signal.get("entry"),
+        "%s من %s · %s→%s" % (_ar(DIRECTION_AR, signal.get("direction")),
+                              signal.get("entry"), signal.get("entry"),
                               signal.get("target")),
         "المستوى: %s · المسافة المتبقية %s$ (~%s%% من مدى الصفقة)"
         % (level, near["distance"], near["pct"]),
