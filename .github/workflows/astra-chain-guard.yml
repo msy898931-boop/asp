@@ -1,15 +1,18 @@
-# Safety net for the warm chain.
+# Safety net for the warm chains.
 #
 # `astra-keepalive.yml` keeps the Render service awake by re-arming itself every
 # ~5h17m. That works, but a chain that only re-arms itself is a single point of
 # failure: a dropped dispatch, a cancelled run, or an Actions incident leaves
 # the chain dead and the service asleep until someone notices.
 #
+# `astra-scan-chain.yml` is the same shape for the scanner, and carries the same
+# risk: if its re-arm is missed, alerts fall back to the degraded cron.
+#
 # This guard runs on a cron (best-effort, but it only needs to run *eventually*)
-# and re-dispatches the keepalive when, and only when, no keepalive run is in
-# progress. It never overlaps the chain, so there is no double-poller race. It
-# uses the same GITHUB_TOKEN + `actions: write` mechanism the chain's own re-arm
-# uses, verified to return 204 in this repo.
+# and re-dispatches a chain when, and only when, no run of it is in progress. It
+# never overlaps a chain, so there is no double-poller race. It uses the same
+# GITHUB_TOKEN + `actions: write` mechanism the chains' own re-arms use, verified
+# to return 204 in this repo.
 
 name: astra-chain-guard
 
@@ -26,32 +29,35 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Re-dispatch the keepalive if the chain is down
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Re-dispatch any chain that is down
         run: |
           set -u
           api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
           auth="Authorization: Bearer ${GH_TOKEN}"
-          runs_url="$api/actions/workflows/astra-keepalive.yml/runs?per_page=20"
-          # Any run that is not finished (queued, in_progress, waiting, pending)
-          # means the chain is alive; the guard stays out of the way. The status
-          # is read with grep so the step needs no inline interpreter.
-          active=$(curl -sS -H "$auth" -H "Accept: application/vnd.github+json" \
-            "$runs_url" \
-            | grep -o '"status": *"[a-z_]*"' \
-            | grep -vc '"completed"')
-          echo "active keepalive runs: $active"
-          if [ "$active" -gt 0 ]; then
-            echo "chain is alive; nothing to do"
-            exit 0
-          fi
-          echo "chain is down; re-dispatching"
-          code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
-            -H "$auth" -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$api/actions/workflows/astra-keepalive.yml/dispatches" \
-            -d '{"ref":"main"}')
-          echo "dispatch HTTP $code (204 = queued)"
-          [ "$code" = "204" ]
+          for workflow in astra-keepalive astra-scan-chain; do
+            runs_url="$api/actions/workflows/${workflow}.yml/runs?per_page=20"
+            # Any run that is not finished (queued, in_progress, waiting,
+            # pending) means the chain is alive; the guard stays out of the way.
+            # The status is read with grep so the step needs no inline
+            # interpreter.
+            active=$(curl -sS -H "$auth" -H "Accept: application/vnd.github+json" \
+              "$runs_url" \
+              | grep -o '"status": *"[a-z_]*"' \
+              | grep -vc '"completed"')
+            echo "${workflow}: active runs: $active"
+            if [ "$active" -gt 0 ]; then
+              echo "${workflow}: chain is alive; nothing to do"
+              continue
+            fi
+            echo "${workflow}: chain is down; re-dispatching"
+            code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
+              -H "$auth" -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$api/actions/workflows/${workflow}.yml/dispatches" \
+              -d '{"ref":"main"}')
+            echo "${workflow}: dispatch HTTP $code (204 = queued)"
+            [ "$code" = "204" ] || exit 1
+          done

@@ -1,0 +1,78 @@
+# A reliable five-minute cadence for the scanner.
+#
+# `astra-bot.yml` used to be driven by a GitHub cron. On this repo that cron
+# degraded from ~40 runs/day to 7-8: the 5-minute schedule landed 20-40 minutes
+# apart, so a trade idea could arrive a couple of bars late. The scanner is
+# self-healing (it reports every bar since the last alerted one), so a late slot
+# only adds latency — but latency is the whole point of an alert.
+#
+# GitHub's cron is best-effort; a job that runs for hours is not. So this chain
+# does not depend on cron for its cadence. It dispatches `astra-bot.yml` every
+# five minutes, then re-arms itself with a workflow_dispatch just before the job
+# limit. Each run re-arms the next, so the scanner keeps a real five-minute
+# cadence indefinitely. `astra-chain-guard.yml` is the safety net: it re-dispatches
+# this chain if no run is in progress.
+#
+# `astra-bot.yml` keeps its own cron as a belt-and-braces fallback. Its
+# concurrency group serialises the two triggers and its state cache is shared, so
+# a redundant run finds the bar already reported and stays silent — no double
+# alert, only a few spare minutes.
+#
+# Cost: free. Actions minutes are unmetered on a public repo.
+
+name: astra-scan-chain
+
+on:
+  # Dispatch only, like `astra-keepalive.yml`. The chain re-arms itself and the
+  # guard restarts it if a re-arm is ever missed; a cron here would start a
+  # redundant second chain.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write        # required for the workflow_dispatch re-arm below
+
+concurrency:
+  group: astra-scan-chain
+  cancel-in-progress: false
+
+jobs:
+  chain:
+    runs-on: ubuntu-latest
+    # ~5h17m of dispatches plus the re-arm, under the hard 6-hour job limit.
+    timeout-minutes: 345
+    steps:
+      - name: Dispatch a scan every five minutes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -u
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth="Authorization: Bearer ${GH_TOKEN}"
+          deadline=$(( $(date +%s) + 19000 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
+              -H "$auth" -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$api/actions/workflows/astra-bot.yml/dispatches" \
+              -d '{"ref":"main"}')
+            echo "$(date -u +%H:%M:%S) scan dispatch HTTP $code"
+            sleep 300
+          done
+
+      - name: Re-arm the chain
+        # Always, so the chain survives a failed dispatch. If this re-arm fails,
+        # the guard restarts the chain within the hour.
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -u
+          code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/astra-scan-chain.yml/dispatches" \
+            -d '{"ref":"main"}')
+          echo "re-arm dispatch HTTP $code (204 = queued)"
+          [ "$code" = "204" ] || echo "re-arm failed; the guard will restart the chain" >&2

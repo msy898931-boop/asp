@@ -53,7 +53,7 @@ for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
   python3 -m unittest discover -s "$d" -p "test_*.py"
 done
 python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
-# 1066 tests total (155/44/50/59/126/191/133 + 308)
+# 1071 tests total (155/44/50/59/126/191/138 + 308)
 ```
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style
@@ -101,17 +101,21 @@ primed silently) and when a user's price level is crossed.
 
 The advisor's **trade card** is also pushed: `TradeCardWatch` polls
 `AstraApi.trade_card()` each cycle and alerts only when the card's identity
-(direction + entry/stop/target) differs from the last one announced, so a setup
+(direction + stop/target) differs from the last one announced, so a setup
 already open at boot is primed silently and a still-open setup never re-fires.
 The card is read from the advisor's **model-free** `/v1/card` route, so polling
 it never spends the model's token quota and it keeps answering when the opinion
 is paused. Identity alone is not enough: the entry is the freshest M5 close, so
-the levels drift every few minutes and the identity changes with them, which
-would push the same setup several times a minute. A cooldown therefore caps the
-rate at one alert per `CARD_ALERT_COOLDOWN` (900s by default,
-`ASTRA_CARD_ALERT_COOLDOWN` or `--card-alert-cooldown` to change it): the first
-genuine change after the window fires and the rest are dropped, never queued, so
-a burst is not replayed. A change of **direction** bypasses the window — a
+it drifts by cents every few minutes while the stop and target carry the setup.
+The key therefore holds direction + stop + target (not the entry), and a
+same-direction change is only news when the structure moved by at least
+`CARD_ALERT_MATERIAL` of one risk (stop-to-entry, 0.5 by default,
+`ASTRA_CARD_ALERT_MATERIAL` or `--card-alert-material` to change it). On the live
+tape that fires ~62 alerts/day — the same volume the old 900s window produced,
+but every alert is a moved structure instead of an arbitrary clock tick.
+`CARD_ALERT_COOLDOWN` (0 by default, `ASTRA_CARD_ALERT_COOLDOWN` or
+`--card-alert-cooldown`) remains an optional floor for an operator who wants a
+hard ceiling regardless. A change of **direction** bypasses both rules — a
 reversal is pushed at once, because it is the one change a trader must not miss.
 A NEUTRAL read carries no numbers and is never announced; an unreachable advisor
 is silent. The alert reuses `format_trade_card`, the same renderer as `/card`,
@@ -334,9 +338,18 @@ Two checks watch the live service, both free (GitHub Actions):
   `available:false` ŌĆö the exact bug that once shipped the News tab blank.
   The long run exists because the cron trigger is too slow to beat the
   15-minute sleep window (see "Never let the server sleep" below).
-- `astra-chain-guard` (hourly) is the safety net for the warm chain: if no
-  `astra-keepalive` run is in progress it re-dispatches one. It never
-  overlaps the chain, so there is no double-poller race.
+- `astra-chain-guard` (hourly) is the safety net for the warm chains: if no
+  `astra-keepalive` or `astra-scan-chain` run is in progress it re-dispatches
+  one. It never overlaps a chain, so there is no double-poller race.
+- `astra-scan-chain` gives the scanner a real five-minute cadence. The
+  `astra-bot.yml` cron degraded from ~40 runs/day to 7-8 (5-minute slots landing
+  20-40 minutes apart), so an idea could arrive a couple of bars late. This chain
+  dispatches `astra-bot.yml` every five minutes for ~5h17m, then re-arms itself —
+  the same self-re-arming shape as `astra-keepalive`, because a job that runs for
+  hours is reliable where GitHub's best-effort cron is not. `astra-bot.yml` keeps
+  its cron as a fallback; its concurrency group serialises the two triggers and
+  its state cache is shared, so a redundant run finds the bar already reported
+  and stays silent.
 - `astra-watchdog` (hourly) reads the same body via `check_engine()` and alerts
   on Telegram when the engine serves empty. A 404 or dead connection is treated
   as "unavailable", never as trouble, so an older deploy does not cry wolf.

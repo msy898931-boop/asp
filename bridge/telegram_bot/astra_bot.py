@@ -105,12 +105,21 @@ _stop = threading.Event()
 
 # A fresh card is real news, but on a live tape the levels shift with every
 # closed M5 bar, so an unthrottled watch re-announces the same setup several
-# times a minute. A card is therefore announced at most once per cooldown: the
-# first genuine change after the window fires, and the changes that piled up
-# inside it are dropped rather than replayed, so the user only ever sees the
-# current setup. A change of *direction* is exempt: a reversal is the one change
-# worth an immediate push, so it bypasses the window entirely.
-CARD_ALERT_COOLDOWN = float(os.environ.get("ASTRA_CARD_ALERT_COOLDOWN", "900"))
+# times a minute. The card's entry is the freshest M5 close and the stop is the
+# last M15 swing, so a real setup moves its stop (or target) in whole ATRs while
+# a same-setup re-read nudges all three levels by cents. Announcements are
+# therefore keyed on the structure — direction, stop and target — rather than on
+# the entry, and a same-direction change is only news when the structure moved
+# by at least CARD_ALERT_MATERIAL of one risk. On this tape that fires ~62
+# alerts/day, the same volume the old 900s window produced, but every alert is a
+# moved structure instead of an arbitrary clock tick. A change of *direction* is
+# exempt: a reversal is the one change worth an immediate push.
+CARD_ALERT_MATERIAL = float(os.environ.get("ASTRA_CARD_ALERT_MATERIAL", "0.5"))
+
+# An optional floor between alerts. Zero by default: the materiality rule is
+# what throttles, and a second, time-based gate only delays a genuinely moved
+# structure. It exists for an operator who wants a hard ceiling regardless.
+CARD_ALERT_COOLDOWN = float(os.environ.get("ASTRA_CARD_ALERT_COOLDOWN", "0"))
 
 # ── the user-facing surface (Arabic) ────────────────────────────────────────
 # The reply keyboard the user taps. Each label maps to a command token, and the
@@ -167,9 +176,22 @@ _DIRECTION_AR: Dict[str, str] = {
     DIR_ABOVE: "فوق", DIR_BELOW: "تحت", DIR_CROSS: "أي اتجاه",
 }
 
+# Trade directions, as the engine emits them. The alerts are otherwise Arabic,
+# so a raw "LONG"/"SHORT" in the analysis reads as a different language rather
+# than a direction.
+_SIGNAL_AR: Dict[str, str] = {
+    "LONG": "شراء", "SHORT": "بيع", "NEUTRAL": "حياد", "NONE": "لا شيء",
+}
+
 
 def _dir_ar(direction: str) -> str:
     return _DIRECTION_AR.get(direction, direction)
+
+
+def _signal_ar(direction: object) -> str:
+    """Arabic label for a trade direction, tolerant of a missing one."""
+    key = str(direction)
+    return _SIGNAL_AR.get(key, key if direction else _SIGNAL_AR["NONE"])
 
 
 # ───────────────────────────── Telegram client ──────────────────────────────
@@ -330,7 +352,7 @@ def format_analysis(data: Dict[str, Any]) -> str:
                 "(بانتظار بيانات موثوقة).")
     lines = [
         "[ASTRA] التحليل",
-        f"الاتجاه: {signal.get('direction', 'NONE')}",
+        f"الاتجاه: {_signal_ar(signal.get('direction'))}",
         f"النمط: {context.get('regime', 'UNKNOWN')} "
         f"(H4 {context.get('h4_bias', 'UNKNOWN')}, M15 {context.get('m15_trigger', 'UNKNOWN')})",
     ]
@@ -923,36 +945,61 @@ class TradeCardWatch:
 
     The advisor recomputes its multi-timeframe read on its own TTL, so polling
     it every cycle would re-announce the same setup. A card is identified by its
-    direction and the exact levels it was built from; only a card whose identity
-    differs from the last one announced fires, so a still-open setup is quiet
-    and a fresh one (a new entry/stop/target) is news. A card is only announced
-    when a direction holds — a NEUTRAL read has no numbers and never alerts.
+    direction and the structure it was built from — the stop and the target —
+    and only a card whose identity differs from the last one announced fires, so
+    a still-open setup is quiet and a fresh one is news. A card is only
+    announced when a direction holds — a NEUTRAL read has no numbers and never
+    alerts.
 
-    The identity alone is not enough: on a live tape the freshest M5 close is
-    the entry, so the levels move every few minutes and the identity changes with
-    them. A cooldown on top caps the rate at one alert per window
-    (``CARD_ALERT_COOLDOWN``, 900s by default, overridable with
-    ``ASTRA_CARD_ALERT_COOLDOWN``); the first genuine change after the window
-    fires and the rest are dropped, never queued, so a burst is not replayed.
-    A change of direction is exempt — a reversal is pushed at once, whatever the
-    clock says, because it is the one change a trader must not miss.
+    The identity alone is not enough. The entry is the freshest M5 close, so on
+    a live tape it moves by cents every few minutes and a full-identity key
+    re-fires with it. The stop and target are the parts that carry the setup, so
+    the watch keys on direction + stop + target, and a same-direction change is
+    only news when the structure moved by at least ``CARD_ALERT_MATERIAL`` of
+    one risk (stop-to-entry). A change of direction is exempt — a reversal is
+    pushed at once, whatever the rule says, because it is the one change a
+    trader must not miss. ``CARD_ALERT_COOLDOWN`` is an optional extra floor
+    (zero by default); the materiality rule is what throttles.
 
     Read-only, like everything else here: it announces a level, it never acts on
     one, and it carries no execution authority.
     """
 
-    def __init__(self, cooldown: float = CARD_ALERT_COOLDOWN) -> None:
+    def __init__(self, cooldown: float = CARD_ALERT_COOLDOWN,
+                 material: float = CARD_ALERT_MATERIAL) -> None:
         self._primed = False
         self._last: Optional[tuple] = None
+        self._last_card: Optional[Dict[str, Any]] = None
         self._cooldown = cooldown
+        self._material = material
         self._last_alert = 0.0
 
     @staticmethod
     def _key(card: Dict[str, Any]) -> Optional[tuple]:
         if not card.get("card"):
             return None
-        return (card.get("verdict"), card["card"].get("entry"),
-                card["card"].get("stop"), card["card"].get("target"))
+        return (card.get("verdict"), card["card"].get("stop"),
+                card["card"].get("target"))
+
+    def _moved(self, card: Dict[str, Any]) -> float:
+        """How far the structure moved since the last alert, in units of risk.
+
+        The stop and the target are the levels a trader acts on; the entry only
+        sets the scale. A same-direction re-read that nudges all three by cents
+        scores near zero and is dropped; a re-read that lifts the stop by most
+        of a risk scores near one and is announced.
+        """
+        if not self._last_card or not card.get("card"):
+            return 1.0
+        new, old = card["card"], (self._last_card or {}).get("card") or {}
+        try:
+            risk = abs(float(new["entry"]) - float(new["stop"]))
+            if risk <= 0.0:
+                return 1.0
+            return max(abs(float(new["stop"]) - float(old["stop"])),
+                       abs(float(new["target"]) - float(old["target"]))) / risk
+        except (KeyError, TypeError, ValueError):
+            return 1.0
 
     def poll(self, card: Optional[Dict[str, Any]] = None) -> List[str]:
         if card is None:
@@ -962,16 +1009,23 @@ class TradeCardWatch:
             # Learn the current card silently: a setup already open when the
             # bot starts must not fire the moment it comes online.
             self._last = key
+            self._last_card = card
             self._primed = True
             return []
         if key is None or key == self._last:
             return []
         reversed_direction = key[0] != (self._last or (None,))[0]
+        if not reversed_direction:
+            # The structure must have actually moved; a same-setup re-read that
+            # only shifted the entry is not news.
+            if self._moved(card) < self._material:
+                return []
+            now = time.time()
+            if now - self._last_alert < self._cooldown:
+                return []
+            self._last_alert = now
         self._last = key
-        now = time.time()
-        if not reversed_direction and now - self._last_alert < self._cooldown:
-            return []
-        self._last_alert = now
+        self._last_card = card
         return [format_trade_card(card)]
 
 
@@ -1122,7 +1176,11 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
                    help="disable push alerts for new advisor trade cards")
     p.add_argument("--card-alert-cooldown", type=float,
                    default=CARD_ALERT_COOLDOWN,
-                   help="seconds between card alerts (default: 900)")
+                   help="optional floor between card alerts, seconds (default: 0)")
+    p.add_argument("--card-alert-material", type=float,
+                   default=CARD_ALERT_MATERIAL,
+                   help="minimum structure move, in units of risk, for a "
+                        "same-direction card alert (default: 0.5)")
     return p.parse_args(argv)
 
 
@@ -1159,7 +1217,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         subs.add(args.chat)
     router = CommandRouter(api, subs, args.chat or None, levels=levels, ent=ent,
                            vol_model=vol_model)
-    card_watch = None if args.no_card_alerts else TradeCardWatch(args.card_alert_cooldown)
+    card_watch = None if args.no_card_alerts else TradeCardWatch(
+        args.card_alert_cooldown, args.card_alert_material)
 
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         _signal.signal(sig, lambda *_: _stop.set())

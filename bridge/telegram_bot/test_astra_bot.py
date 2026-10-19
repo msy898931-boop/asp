@@ -100,9 +100,17 @@ class FormattingTests(unittest.TestCase):
 
     def test_analysis_full_state(self):
         out = bot.format_analysis(ANALYSIS_FULL)
-        self.assertIn("LONG", out)
+        self.assertIn("شراء", out)
         self.assertIn("TREND", out)
         self.assertIn("0.61", out)
+
+    def test_analysis_labels_the_direction_in_arabic(self):
+        # A raw "SHORT" beside an Arabic label is the same mismatch the trade
+        # alerts had; the direction is labelled like the rest of the line.
+        out = bot.format_analysis({"timestamp": "t", "context": {},
+                                   "signal": {"direction": "SHORT"}})
+        self.assertIn("الاتجاه: بيع", out)
+        self.assertNotIn("SHORT", out)
 
     def test_signal_unavailable(self):
         out = bot.format_signal({"available": False, "reason": "nothing"})
@@ -815,23 +823,52 @@ class TradeCardWatchTests(unittest.TestCase):
         watch.poll(_card())
         self.assertEqual(watch.poll(None), [])
 
-    def test_a_burst_of_new_cards_is_throttled_to_one_alert(self):
-        # The live tape shifts the levels every few minutes; without a cooldown
-        # the same setup would be pushed several times a minute.
-        watch = bot.TradeCardWatch(cooldown=600)
-        watch.poll(_card())
-        first = watch.poll(_card(entry=2660.0, stop=2650.0, target=2680.0))
-        self.assertEqual(len(first), 1)
-        for i in range(2, 10):
+    def test_a_burst_of_re_reads_stays_silent(self):
+        # Every closed M5 bar nudges the entry, and the stop drifts with it by
+        # cents. That is one setup being re-read, not a burst of new ones, so
+        # none of it is announced.
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(entry=2651.4, stop=2643.1, target=2667.9))
+        for i in range(1, 10):
             self.assertEqual(
-                watch.poll(_card(entry=2660.0 + i, stop=2650.0 + i,
-                                 target=2680.0 + i)), [])
+                watch.poll(_card(entry=2651.4 + i * 0.1,
+                                 stop=2643.1 + i * 0.1,
+                                 target=2667.9 + i * 0.1)), [])
+
+    def test_a_cent_move_is_not_news(self):
+        # The entry is the freshest M5 close: it drifts by cents, and the stop
+        # moves with it. That is the same setup, not a new one.
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(entry=2651.4, stop=2643.1, target=2667.9))
+        self.assertEqual(
+            watch.poll(_card(entry=2651.9, stop=2643.6, target=2668.4)), [])
+
+    def test_a_real_structure_move_is_news(self):
+        # The stop lifts by most of the risk: the setup genuinely changed, so it
+        # is announced even though the direction did not.
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(entry=2651.4, stop=2643.1, target=2667.9))  # risk 8.3
+        out = watch.poll(_card(entry=2655.0, stop=2650.0, target=2675.0))
+        self.assertEqual(len(out), 1)
+
+    def test_a_move_just_under_the_threshold_stays_quiet(self):
+        watch = bot.TradeCardWatch(material=0.5)
+        watch.poll(_card(entry=2651.4, stop=2643.1, target=2667.9))  # risk 8.3
+        # The stop lifts 3.3 against an 8.3 risk: 0.40R, under the threshold.
+        self.assertEqual(
+            watch.poll(_card(entry=2654.7, stop=2646.4, target=2671.2)), [])
+
+    def test_the_materiality_threshold_is_configurable(self):
+        watch = bot.TradeCardWatch(material=0.0)
+        watch.poll(_card(entry=2651.4, stop=2643.1, target=2667.9))
+        out = watch.poll(_card(entry=2651.9, stop=2643.6, target=2668.4))
+        self.assertEqual(len(out), 1)
 
     def test_a_change_after_the_cooldown_alerts_again(self):
         watch = bot.TradeCardWatch(cooldown=600)
         watch._last_alert = time.time() - 601  # the window has elapsed
         watch.poll(_card())
-        out = watch.poll(_card(entry=2660.0, stop=2650.0, target=2680.0))
+        out = watch.poll(_card(entry=2651.4, stop=2650.0, target=2675.0))
         self.assertEqual(len(out), 1)
 
     def test_the_clock_is_only_advanced_by_a_real_alert(self):
@@ -874,7 +911,9 @@ class TradeCardCheckTests(unittest.TestCase):
         subs.add("42")
         client = FakeClient()
         watch = bot.TradeCardWatch()
-        watch.poll(_card())  # prime on an older card, so `card` is genuinely new
+        # Prime on the opposite direction, so `card` is genuinely new and the
+        # test exercises the broadcast path rather than the materiality rule.
+        watch.poll(_card(verdict="SHORT"))
         bot._check_trade_card(api, watch, subs, client, news_context)
         return client.sent
 
