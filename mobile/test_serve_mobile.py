@@ -1366,5 +1366,28 @@ class ClientScriptContractTest(unittest.TestCase):
         self.assertRegex(sw, r'const SHELL = "astra-shell-v\d+"')
 
 
+class AdvisorCardRenderTest(unittest.TestCase):
+    """The trade-card panel reads the *inner* card, not the envelope.
+
+    The advisor's reply is an envelope whose `trade_card` wraps the levels in a
+    `card` object. Rendering `agreement` off the envelope stringified the whole
+    object as "[object Object]" on the phone — a bug no Python test could see,
+    because the renderer is JavaScript. This pins the two keys the renderer
+    depends on so a refactor cannot silently reintroduce it.
+    """
+
+    def setUp(self):
+        with open(os.path.join(sm.HERE, "advisor.js"), encoding="utf-8") as fh:
+            self.src = fh.read()
+
+    def test_agreement_is_read_from_the_inner_card(self):
+        self.assertIn("c.agreement", self.src)
+        self.assertNotIn("card.agreement", self.src)
+
+    def test_the_renderer_still_builds_the_level_rows(self):
+        for key in ("c.entry", "c.stop", "c.target", "c.rr"):
+            self.assertIn(key, self.src)
+
+
 if __name__ == "__main__":
     unittest.main()

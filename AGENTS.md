@@ -233,7 +233,14 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   model is never handed those levels, so it cannot restate a number it did not
   compute. A direction needs >= 3 of 5 frames and H4 must not oppose; otherwise
   the verdict is NEUTRAL and no numbers are emitted. It is rule-based and
-  `validated: false`, not a measured edge.
+  `validated: false`, not a measured edge. The **plan** the model returns is
+  prose only (bias/trigger/note) — the prompt forbids prices — and
+  `_merge_card_levels` stamps the card's entry/stop/target onto it before the
+  reply goes out, so the plan's levels always equal the card's. (With no model
+  there is no opinion and the plan panel is hidden; the card still shows.) The
+  mobile panel reads `trade_card.card.*` (the inner object), never
+  `trade_card.agreement` — the latter is an object and renders as
+  `[object Object]`.
 - **Quota.** The Groq free tier allows ~200k tokens/day and one advisory costs
   ~1.4k (a ~1k-token prompt plus the reply), so the opinion can only refresh
   ~140 times a day. `CACHE_TTL` (default 600s) is set to fit inside that budget;

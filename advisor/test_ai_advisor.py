@@ -75,6 +75,42 @@ class ParseAdvisoryTests(unittest.TestCase):
         self.assertEqual(got["confidence"], 0.0)
 
 
+_MERGE_CARD = {"verdict": "LONG",
+               "card": {"direction": "LONG", "entry": 2651.4, "stop": 2643.1,
+                        "target": 2667.9,
+                        "basis": "stop beyond the last M15 swing"}}
+
+
+class MergeCardLevelsTests(unittest.TestCase):
+    CARD = _MERGE_CARD
+
+    def test_card_levels_fill_the_plan(self):
+        op = {"plan": {"bias": "صعودي", "trigger": "اختراق", "note": "ملاحظة"}}
+        out = advisor._merge_card_levels(op, self.CARD)
+        self.assertEqual(out["plan"]["entry"], "2651.4")
+        self.assertEqual(out["plan"]["stop"], "2643.1")
+        self.assertEqual(out["plan"]["target"], "2667.9")
+
+    def test_bias_and_note_fall_back_to_the_card(self):
+        out = advisor._merge_card_levels({"plan": {"bias": "", "trigger": "t"}},
+                                         self.CARD)
+        self.assertEqual(out["plan"]["bias"], "شراء")
+        self.assertIn("swing", out["plan"]["note"])
+
+    def test_a_plan_is_created_when_the_model_omits_it(self):
+        # The model is asked not to quote prices; if it drops the plan entirely
+        # the levels must still come from the card.
+        out = advisor._merge_card_levels({"plan": None}, self.CARD)
+        self.assertEqual(out["plan"]["entry"], "2651.4")
+        self.assertEqual(out["plan"]["bias"], "شراء")
+
+    def test_no_card_leaves_the_plan_untouched(self):
+        op = {"plan": {"bias": "حياد", "trigger": "t", "note": "n"}}
+        out = advisor._merge_card_levels(op, {"card": None})
+        self.assertNotIn("entry", out["plan"])
+        self.assertEqual(out["plan"], {"bias": "حياد", "trigger": "t", "note": "n"})
+
+
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
         self._orig = advisor._get_json

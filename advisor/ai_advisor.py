@@ -173,17 +173,16 @@ _SYSTEM_PROMPT = (
     "- The snapshot carries an `mtf` block: a rule engine's multi-timeframe read "
     "(M5, M15, M30, H1, H4) with a verdict and per-timeframe directions. If its "
     "verdict is not NEUTRAL, align your stance with it and explain the "
-    "agreement; if it is NEUTRAL, do not force a trade. Do not restate entry, "
-    "stop or target numbers — those are computed server-side and shown "
-    "verbatim; leave them as \"--\".\n"
+    "agreement; if it is NEUTRAL, do not force a trade.\n"
     "- This is commentary, not advice. Do not promise returns.\n"
     "Reply with JSON only, keys: stance (one of LONG, SHORT, NEUTRAL), "
     "confidence (0..1, your own, not the engine's), thesis (one or two Arabic "
     "sentences), risks (one Arabic sentence), news_used (true or false), "
     "event (the Arabic name of the key event you built the read around, or "
-    "empty string), plan (one object with Arabic text: bias, trigger, "
-    "entry, stop, target, note — a professional pre-trade plan keyed to the "
-    "event; use \"--\" for any number you cannot ground in the snapshot)."
+    "empty string), plan (one object with Arabic text: bias, trigger, note — a "
+    "professional pre-trade plan keyed to the event). Leave every price out of "
+    "the plan: the exact entry, stop and target are computed server-side from "
+    "closed bars and shown next to it, so do not restate them."
 )
 
 
@@ -449,7 +448,7 @@ def parse_advisory(text: str) -> dict | None:
         plan = None
     else:
         plan = {k: str(plan.get(k, "")).strip()
-                for k in ("bias", "trigger", "entry", "stop", "target", "note")}
+                for k in ("bias", "trigger", "note")}
     return {
         "stance": stance,
         "confidence": max(0.0, min(1.0, confidence)),
@@ -459,6 +458,32 @@ def parse_advisory(text: str) -> dict | None:
         "event": str(parsed.get("event", "")).strip(),
         "plan": plan,
     }
+
+
+def _merge_card_levels(opinion: dict, mtf: dict | None) -> dict:
+    """Ground the plan in the rule-based card, model or no model.
+
+    The plan's entry/stop/target come from the card computed from closed bars,
+    never from the model: it is told not to quote prices, so those levels would
+    otherwise be "--" while the card beside them shows real numbers. Bias,
+    trigger and note are the model's prose when there is a model, and the card's
+    own direction/basis when there is not. When there is no card at all (a
+    NEUTRAL read), the plan is left alone — there is nothing to ground it in.
+    """
+    card = (mtf or {}).get("card") or {}
+    if not card:
+        return opinion
+    plan = opinion.get("plan")
+    if not isinstance(plan, dict):
+        plan = {}
+    if not plan.get("bias"):
+        plan["bias"] = mtf_read.direction_label(card.get("direction") or "")
+    if not plan.get("note"):
+        plan["note"] = card.get("basis", "")
+    for key in ("entry", "stop", "target"):
+        plan[key] = str(card[key]) if card.get(key) is not None else "--"
+    opinion["plan"] = plan
+    return opinion
 
 
 def call_groq(prompt: str, api_key: str) -> str | None:
@@ -681,6 +706,7 @@ class Advisor:
             return advisory
 
         advisory["opinion"] = opinion
+        _merge_card_levels(opinion, advisory["trade_card"])
         advisory["note"] = ("AI opinion, produced outside the validated system. "
                             "Not calibrated, not scored. Not financial advice.")
         append_log({

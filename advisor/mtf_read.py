@@ -333,6 +333,11 @@ def build(bars_by_tf: Dict[str, Sequence[dict]]) -> Dict:
 _AR = {"LONG": "شراء", "SHORT": "بيع", "NEUTRAL": "حياد"}
 
 
+def direction_label(direction: str) -> str:
+    """The Arabic label for a direction, falling back to the raw value."""
+    return _AR.get(direction, direction)
+
+
 def format_card(result: Dict) -> str:
     """A compact Arabic rendering of the read, numbers verbatim."""
     if not result.get("available"):
@@ -341,7 +346,7 @@ def format_card(result: Dict) -> str:
     if not card:
         return "لا صفقة: %s." % result.get("reason", "لا اتجاه راجح")
     lines = [
-        "XAUUSD — %s (%s فريمات متوافقة)" % (_AR.get(card["direction"], card["direction"]),
+        "XAUUSD — %s (%s فريمات متوافقة)" % (direction_label(card["direction"]),
                                               card["agreement"]),
         "الدخول: %s" % card["entry"],
         "الوقف: %s" % card["stop"],

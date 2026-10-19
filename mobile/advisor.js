@@ -71,8 +71,11 @@ async function loadAdvisor(force) {
       cardEl.appendChild(title);
       const dir = document.createElement("div");
       dir.className = "ai-card-dir";
+      // `agreement` lives on the inner card ("4/5"); reading it off the
+      // envelope would stringify the whole object as [object Object].
+      const agree = c.agreement ? ` · ${c.agreement}` : "";
       dir.textContent = `${T(AI_STANCE_KEY[c.direction] || "ai_stance_neutral")}`
-        + ` · ${card.agreement}`;
+        + agree;
       cardEl.appendChild(dir);
       const grid = document.createElement("div");
       grid.className = "ai-card-grid";
