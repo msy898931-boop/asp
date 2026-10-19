@@ -550,6 +550,53 @@ def news_body(now: float | None = None) -> bytes:
     return body
 
 
+_FORECAST_CACHE_TTL = 180.0
+_forecast_cache = _TimedCache()
+_forecast_lock = threading.Lock()
+
+
+def _load_news_forecast():
+    """The pre-news forecast module, imported from its real location, or None."""
+    for cand in (os.environ.get("ASTRA_NEWS_DIR", ""), os.path.join(ROOT, "advisor")):
+        if cand and os.path.isfile(os.path.join(cand, "news_forecast.py")):
+            if cand not in sys.path:
+                sys.path.insert(0, cand)
+            break
+    try:
+        import news_forecast
+        return news_forecast
+    except ImportError:
+        return None
+
+
+def _compute_forecast() -> dict:
+    mod = _load_news_forecast()
+    if mod is None:
+        return {"engine": "news-forecast", "available": False,
+                "reason": "news forecast unavailable"}
+    try:
+        d = mod.forecast()
+        d["available"] = True
+        d["text"] = mod.format_forecast(d)
+        return d
+    except Exception as exc:  # noqa: BLE001 - a feed failure must not 500
+        return {"engine": "news-forecast", "available": False,
+                "reason": "news forecast error", "detail": str(exc)}
+
+
+def forecast_body(now: float | None = None) -> bytes:
+    """Cached JSON body for /forecast.json."""
+    now = time.time() if now is None else now
+    with _forecast_lock:
+        cached = _forecast_cache.fresh(now, _FORECAST_CACHE_TTL)
+        if cached is not None:
+            return cached
+    body = json.dumps(_compute_forecast(), ensure_ascii=False).encode("utf-8")
+    with _forecast_lock:
+        _forecast_cache.at, _forecast_cache.body = now, body
+    return body
+
+
 def warm_akoan_cache() -> None:
     """Populate the akoan cache once, in the background, at startup.
 
@@ -614,6 +661,8 @@ class Handler(BaseHTTPRequestHandler):
             self._akoan()
         elif path == "/news.json":
             self._news()
+        elif path == "/forecast.json":
+            self._forecast()
         elif path.startswith("/api/v1/"):
             self._proxy(self.api_base + path[len("/api/v1"):], self.path)
         elif path.startswith("/bridge/"):
@@ -918,6 +967,11 @@ class Handler(BaseHTTPRequestHandler):
     def _news(self) -> None:
         """The live news digest, computed by the same engine the CLI runs."""
         body = news_body()
+        self._send(200, body, "application/json; charset=utf-8")
+
+    def _forecast(self) -> None:
+        """The pre-news prep plan, computed by the same engine the bot runs."""
+        body = forecast_body()
         self._send(200, body, "application/json; charset=utf-8")
 
     # -- APK download -------------------------------------------------------

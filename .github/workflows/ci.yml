@@ -118,6 +118,26 @@ jobs:
           python3 akoan/study.py --json > /tmp/akoan_study.json
           python3 -c "import json,sys; r=json.load(open('/tmp/akoan_study.json')); assert r['scored']>0, r; assert r['verdict'] in ('NO_EDGE_MEASURED','EDGE_CANDIDATE','INSUFFICIENT_DATA'), r; print('akoan study:', r['verdict'], r['scored'], 'scored')"
 
+      - name: The news-move table must still reproduce
+        # news_forecast.py ships a measured move table. If the corpus or the
+        # event ledger changes under it, the shipped numbers go stale silently;
+        # this fails the build instead. It also re-asserts the honesty claim:
+        # the surprise read must NOT predict direction (no 95% agreement).
+        run: |
+          python3 scripts/measure_news_move.py --json > /tmp/news_move.json
+          python3 -c "
+          import json
+          d=json.load(open('/tmp/news_move.json'))
+          t=d['table']; c=d['direction_check']
+          assert t['60']['n'] >= 50, t
+          assert 2.0 <= t['60']['median'] <= 12.0, t
+          assert t['15']['median'] < t['30']['median'] < t['60']['median'], t
+          for h in ('15','30','60'):
+              hit=c[h].get('hit_rate')
+              assert hit is not None and 35 <= hit <= 65, (h, c[h])
+          print('news-move table reproduces:', {h: t[h]['median'] for h in t})
+          "
+
       - name: Test the paid-tool layer (tiers + price levels)
         run: |
           python3 bridge/telegram_bot/test_entitlements.py

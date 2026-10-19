@@ -71,6 +71,10 @@ try:
     import news_engine
 except ImportError:  # pragma: no cover - deployment-shape dependent
     news_engine = None
+try:
+    import news_forecast
+except ImportError:  # pragma: no cover - deployment-shape dependent
+    news_forecast = None
 # The trade-card renderer lives with the advisor too. Imported best-effort: the
 # bot still runs (minus card alerts) when the advisor package is absent.
 try:
@@ -121,15 +125,22 @@ CARD_ALERT_MATERIAL = float(os.environ.get("ASTRA_CARD_ALERT_MATERIAL", "0.5"))
 # structure. It exists for an operator who wants a hard ceiling regardless.
 CARD_ALERT_COOLDOWN = float(os.environ.get("ASTRA_CARD_ALERT_COOLDOWN", "0"))
 
+# How far ahead the pre-news prep plan is pushed. A high-impact US release moves
+# gold a median of ~$5.2 in the hour after it prints, but the direction is not
+# predictable (measured 40-58% agreement — a coin), so the push is a
+# direction-free bracket, not a call. One push per event, an hour out, so a
+# trader has time to place the plan and is not spammed as the release nears.
+FORECAST_PREP_MIN = float(os.environ.get("ASTRA_FORECAST_PREP_MIN", "60"))
+
 # ── the user-facing surface (Arabic) ────────────────────────────────────────
 # The reply keyboard the user taps. Each label maps to a command token, and the
 # router understands the label as well as the token, so a tap works like typing.
 REPLY_KEYBOARD: List[List[str]] = [
     ["💰 سعر الذهب", "📊 حالة السوق"],
     ["🎯 بطاقة الصفقة", "📰 الأخبار والذهب"],
-    ["🔔 مستوى جديد", "📋 مستوياتي"],
-    ["🗑 مسح المستويات", "⭐ خطتي"],
-    ["❓ مساعدة"],
+    ["🧭 توقّع الخبر", "🔔 مستوى جديد"],
+    ["📋 مستوياتي", "🗑 مسح المستويات"],
+    ["⭐ خطتي", "❓ مساعدة"],
 ]
 
 BUTTON_COMMANDS: Dict[str, str] = {
@@ -137,6 +148,7 @@ BUTTON_COMMANDS: Dict[str, str] = {
     "📊 حالة السوق": "/status",
     "🎯 بطاقة الصفقة": "/card",
     "📰 الأخبار والذهب": "/news",
+    "🧭 توقّع الخبر": "/forecast",
     "🔔 مستوى جديد": "/level",
     "📋 مستوياتي": "/levels",
     "🗑 مسح المستويات": "/clearlevels",
@@ -150,6 +162,7 @@ BOT_COMMANDS: List[tuple] = [
     ("/start", "بدء الاستخدام والقائمة"),
     ("/price", "سعر الذهب الحي"),
     ("/news", "الأخبار وتأثيرها على الذهب الآن"),
+    ("/forecast", "خطة التحضير قبل الخبر المهم"),
     ("/level", "إضافة مستوى سعري للتنبيه"),
     ("/levels", "مستوياتي وحالتها"),
     ("/clearlevels", "حذف كل مستوياتي"),
@@ -554,6 +567,7 @@ class CommandRouter:
         "[ASTRA] الأوامر\n"
         "💰 /price - سعر الذهب الحالي\n"
         "📰 /news - الأخبار العالمية وأثرها على الذهب الآن\n"
+        "🧭 /forecast - خطة تحضير قبل الخبر المهم (بلا اتجاه)\n"
         "🔔 /level <سعر> [فوق|تحت|أي] - تنبيه عند اختراق مستوى\n"
         "📋 /levels - مستوياتك\n"
         "🗑 /clearlevels - حذف كل مستوياتك\n"
@@ -661,6 +675,19 @@ class CommandRouter:
             return "📰 الأخبار غير متاحة على هذا الخادم (المستشار غير منصّب)."
         return format_news(d)
 
+    def _forecast_command(self) -> str:
+        """The pre-news prep plan for the next high-impact release."""
+        if news_forecast is None:
+            return "🧭 توقّع الخبر غير متاح على هذا الخادم (المستشار غير منصّب)."
+        try:
+            price = self.api.last_price()
+        except ApiError:
+            price = None
+        d = news_forecast_now(price=price)
+        if d is None:
+            return "🧭 تعذّر قراءة تقويم الأخبار الآن."
+        return news_forecast.format_forecast(d)
+
     def _list_levels(self, chat_id: str) -> str:
         if self.levels is None:
             return "المستويات السعرية غير متاحة."
@@ -730,6 +757,8 @@ class CommandRouter:
                 return self._card_command()
             if cmd == "/news":
                 return self._news_command()
+            if cmd == "/forecast":
+                return self._forecast_command()
             if cmd == "/health":
                 return ("[ASTRA] الصحة\n" +
                         json.dumps(self.api.health(), indent=2, ensure_ascii=False))
@@ -864,6 +893,23 @@ def news_blackout_now(now: Optional[float] = None) -> Optional[str]:
     return news_snapshot(now)[0]
 
 
+def news_forecast_now(now: Optional[float] = None,
+                      price: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    """The pre-news forecast (prep plan for the next release), or None.
+
+    Shares `news_forecast.forecast` with the advisor package, so the bot and any
+    other surface cannot disagree. Best-effort: a missing module yields None.
+    """
+    if news_forecast is None:
+        return None
+    now = time.time() if now is None else now
+    try:
+        return news_forecast.forecast(now, events=_fetch_news_events(now),
+                                      price=price)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 class NewsWatch:
     """Edge-triggered alerts around a high-impact release.
 
@@ -938,6 +984,64 @@ class NewsWatch:
                         event.get("title_ar") or event.get("title"),
                         calendar_feed.format_release(event, read)))
         return out
+
+
+class ForecastWatch:
+    """One prep push per high-impact release, ahead of the print.
+
+    The news-quiet watch warns when the window *opens*; this one is earlier and
+    different in kind: it hands over a plan while there is still time to place
+    it. Keyed by event identity, so a release is announced once and only once;
+    primed on first poll so starting the bot an hour before a release does not
+    replay a push the operator may already have. A release already inside its
+    blackout window is left to ``NewsWatch`` — this watch is only about the run
+    *up* to the print, and the two never both fire for the same event.
+
+    Direction-free by construction: the pushed plan brackets the price and lets
+    the release choose the side, because the measurement says the side cannot be
+    chosen for it.
+    """
+
+    def __init__(self, prep_min: float = FORECAST_PREP_MIN) -> None:
+        self._primed = False
+        self._pushed: Set[Any] = set()
+        self._prep_min = prep_min
+
+    @staticmethod
+    def _key(event: Dict[str, Any]) -> Any:
+        return (event.get("at_utc"), event.get("title"), event.get("country"))
+
+    def poll(self, events: Optional[List[Dict[str, Any]]] = None,
+             now: Optional[float] = None,
+             price: Optional[float] = None) -> List[str]:
+        if news_forecast is None or news_window is None:
+            return []
+        now = time.time() if now is None else now
+        if events is None:
+            events = _fetch_news_events(now)
+
+        upcoming = news_forecast.next_event(events, now, self._prep_min)
+        if not self._primed:
+            # Anything already inside the prep horizon at boot is treated as
+            # seen: a restart must not dump a plan the trader did not ask for.
+            if upcoming is not None:
+                self._pushed.add(self._key(upcoming))
+            self._primed = True
+            return []
+
+        if upcoming is None:
+            return []
+        key = self._key(upcoming)
+        if key in self._pushed:
+            return []
+        # A release whose blackout is already open belongs to NewsWatch.
+        active = news_window.blackout_event(events, now)
+        if active is not None and self._key(active) == key:
+            self._pushed.add(key)
+            return []
+        self._pushed.add(key)
+        d = news_forecast.forecast(now, events=events, price=price)
+        return ["🧭 تحضير قبل الخبر\n" + news_forecast.format_forecast(d)]
 
 
 class TradeCardWatch:
@@ -1049,7 +1153,8 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                     interval: int, levels: Optional[LevelStore] = None,
                     ent: Optional[Entitlements] = None,
                     vol_model: Optional[VolatilityModel] = None,
-                    card_watch: Optional["TradeCardWatch"] = None) -> None:
+                    card_watch: Optional["TradeCardWatch"] = None,
+                    forecast_watch: Optional["ForecastWatch"] = None) -> None:
     engine = AlertEngine(api)
     engine.prime()
     watch = NewsWatch()
@@ -1068,6 +1173,14 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                 _broadcast(client, subs, alert)
         except Exception as exc:  # noqa: BLE001
             print(f"[warn] news watch: {exc}", file=sys.stderr)
+        if forecast_watch is not None:
+            try:
+                events = _fetch_news_events(time.time())
+                price = api.last_price()
+                for alert in forecast_watch.poll(events, price=price):
+                    _broadcast(client, subs, alert)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[warn] forecast watch: {exc}", file=sys.stderr)
         if levels is not None:
             try:
                 _check_levels(api, levels, ent, client, news_context)
@@ -1181,6 +1294,9 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
                    default=CARD_ALERT_MATERIAL,
                    help="minimum structure move, in units of risk, for a "
                         "same-direction card alert (default: 0.5)")
+    p.add_argument("--no-forecast-alerts", action="store_true",
+                   default=os.environ.get("ASTRA_FORECAST_ALERTS", "1") == "0",
+                   help="disable the pre-news prep push")
     return p.parse_args(argv)
 
 
@@ -1219,6 +1335,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                            vol_model=vol_model)
     card_watch = None if args.no_card_alerts else TradeCardWatch(
         args.card_alert_cooldown, args.card_alert_material)
+    forecast_watch = None if args.no_forecast_alerts else ForecastWatch()
 
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         _signal.signal(sig, lambda *_: _stop.set())
@@ -1252,7 +1369,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     monitor = threading.Thread(target=monitor_backend,
                                args=(api, subs, client, args.interval, levels, ent,
-                                     vol_model, card_watch),
+                                     vol_model, card_watch, forecast_watch),
                                daemon=True)
     monitor.start()
     try:

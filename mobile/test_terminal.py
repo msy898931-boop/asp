@@ -297,6 +297,65 @@ class NewsPanelTest(unittest.TestCase):
         self.assertNotIn(".nw-window", shared)
 
 
+class PrepPlanPanelTest(unittest.TestCase):
+    """The pre-news prep block: a bracket, never a direction.
+
+    This is where a forecast is easiest to overstate, so these pin the honesty:
+    the block reads the shared /forecast.json route, hides when there is no
+    plan, and shows the measured band and both break levels without ever
+    naming a side.
+    """
+
+    def test_the_prep_block_exists_and_is_hidden_by_default(self):
+        html = _read(TERMINAL)
+        self.assertIn('id="nw-prep"', html)
+        self.assertRegex(html, r'id="nw-prep"[^>]*hidden')
+        for el in ("nw-prep-title", "nw-prep-band", "nw-prep-steps", "nw-prep-src"):
+            with self.subTest(el=el):
+                self.assertIn('id="%s"' % el, html)
+
+    def test_the_panel_reads_the_forecast_route(self):
+        js = _read(TERMINAL_JS)
+        # Same origin, never an external host.
+        self.assertIn('getJson("forecast.json"', js)
+        self.assertNotRegex(js, r'https?://[^"\']*forecast\.json')
+
+    def test_the_block_hides_when_there_is_no_plan(self):
+        js = _read(TERMINAL_JS)
+        fn = re.search(r"function renderPrep[\s\S]*?\n\}", js).group(0)
+        self.assertIn("box.hidden = true", fn)
+        self.assertIn("!plan", fn)
+
+    def test_the_block_never_names_a_direction(self):
+        js = _read(TERMINAL_JS)
+        fn = re.search(r"function renderPrep[\s\S]*?\n\}", js).group(0)
+        for banned in ("LONG", "SHORT", "سيصعد", "سينزل", "gold_dir"):
+            with self.subTest(banned=banned):
+                self.assertNotIn(banned, fn)
+
+    def test_the_block_shows_the_band_and_both_breaks(self):
+        js = _read(TERMINAL_JS)
+        fn = re.search(r"function renderPrep[\s\S]*?\n\}", js).group(0)
+        for key in ("expected_move", "median", "p90", "break_up", "break_down"):
+            with self.subTest(key=key):
+                self.assertIn(key, fn)
+
+    def test_prep_styles_are_scoped_to_the_terminal(self):
+        css = _read(TERMINAL_CSS)
+        for cls in (".nw-prep", ".nw-prep-band", ".nw-prep-note"):
+            with self.subTest(cls=cls):
+                self.assertIn(cls, css)
+        shared = _read(os.path.join(HERE, "styles.css"))
+        self.assertNotIn(".nw-prep", shared)
+
+    def test_the_prep_note_states_direction_is_unpredicted(self):
+        js = _read(TERMINAL_JS)
+        self.assertIn("nw_prep_note:", js)
+        # The Arabic block (STRINGS.ar) must carry the honesty word.
+        ar = js.split("ar: {", 1)[1].split("en: {", 1)[0]
+        self.assertIn('nw_prep_note: "الاتجاه غير متوقّع', ar)
+
+
 class GateTest(unittest.TestCase):
     """The terminal is part of the app, so it lives behind the same gate."""
 

@@ -417,6 +417,44 @@ html[data-theme="light"] .console-out {
 .nw-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .nw-empty { background: var(--ink); padding: 16px 14px; color: var(--muted); font-size: 12.5px; }
 
+/* The pre-news prep plan: a bracket to place before the release lands. The
+   accent is the gold edge, never green/red, because the plan names no side. */
+.nw-prep {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--gold);
+  border-radius: 14px;
+  background: var(--ink);
+  margin-bottom: 4px;
+}
+.nw-prep-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nw-prep-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--gold);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+.nw-prep-title { color: var(--paper); font-size: 14.5px; font-weight: 600; line-height: 1.4; }
+.nw-prep-head .metric-src { margin-inline-start: auto; }
+.nw-prep-band { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--edge); border: 1px solid var(--edge); border-radius: 10px; overflow: hidden; }
+.nw-prep-cell { background: var(--ink); padding: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.nw-prep-cell-label { color: var(--muted); font-size: 10.5px; letter-spacing: .02em; }
+.nw-prep-cell-value { color: var(--paper); font-family: var(--mono); font-size: 13px; }
+.nw-prep-steps { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 7px; }
+.nw-prep-steps li { color: var(--paper); font-size: 13px; line-height: 1.55; }
+.nw-prep-note { color: var(--gold); font-size: 12.5px; line-height: 1.5; }
+
+@media (max-width: 560px) {
+  /* Two rows of two, so the band stays legible on a phone. */
+  .nw-prep-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tf-cell, .shortcut { transition: none; }
   .panel { animation: none; }

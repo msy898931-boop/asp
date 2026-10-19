@@ -6,7 +6,7 @@
    reading* itself (localStorage), so offline it opens to that reading rather
    than an empty panel. */
 
-const SHELL = "astra-shell-v38";
+const SHELL = "astra-shell-v39";
 const ASSETS = [
   "./",
   "./index.html",
@@ -54,10 +54,12 @@ self.addEventListener("fetch", (event) => {
                url.pathname.includes("/tracker/") ||
                url.pathname.includes("/advisor/");
   // The panel readings are the same kind of thing as a live endpoint: a number
-  // that must be the current one. /vol.json and /akoan.json are not shell
-  // assets — caching one serves a stale reading under a fresh timestamp.
+  // that must be the current one. /vol.json, /akoan.json and /forecast.json are
+  // not shell assets — caching one serves a stale reading under a fresh
+  // timestamp (and a stale prep plan is worse than none).
   const reading = url.pathname.endsWith("/vol.json") ||
-                  url.pathname.endsWith("/akoan.json");
+                  url.pathname.endsWith("/akoan.json") ||
+                  url.pathname.endsWith("/forecast.json");
   if (live || reading || event.request.method !== "GET") return; // network only
 
   // The push capability reading must be fresh, never cached: a stale one would

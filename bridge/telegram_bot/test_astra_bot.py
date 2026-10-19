@@ -665,6 +665,88 @@ class NewsCommandTests(unittest.TestCase):
         self.assertIn("/news", router.handle("9", "/help"))
 
 
+class ForecastCommandTests(unittest.TestCase):
+    """The /forecast reply: the prep plan, and its refusal to call a side."""
+
+    NOW = 5_000_000.0
+
+    def _digest(self):
+        return {
+            "engine": "news-forecast", "symbol": "XAUUSD", "state": "prep",
+            "event": {"title": "CPI", "title_ar": "التضخم", "country": "US",
+                      "at_utc": int(self.NOW + 40 * 60), "in_minutes": 40,
+                      "forecast": 3.1, "previous": 3.0, "importance": 1},
+            "plan": {
+                "event_family": "inflation", "event_family_ar": "تضخم",
+                "in_minutes": 40, "direction": "unknown",
+                "direction_note": "الاتجاه غير قابل للتنبؤ ميكانيكياً.",
+                "expected_move": {"horizon_min": 60, "median": 3.8, "p90": 10.6,
+                                  "family": "inflation", "family_known": True,
+                                  "n": 83},
+                "levels": {"price": 4000.0, "break_up": 4000.95,
+                           "break_down": 3999.05, "stop_distance": 3.8,
+                           "target_distance": 7.6, "rr": 2.0},
+                "steps": ["قبل الصدور: حدّد نطاقاً.", "ارسم أمرَي إيقاف."],
+                "invalidation": "إذا مرّ 60 دقيقة دون كسر، ألغِ الخطة.",
+            },
+            "blackout": False,
+            "notes": ["الحجم متوقّع؛ الاتجاه لا."],
+        }
+
+    def test_digest_renders_the_plan_and_the_band(self):
+        out = bot.news_forecast.format_forecast(self._digest())
+        self.assertIn("التضخم", out)
+        self.assertIn("المدى المتوقّع", out)
+        self.assertIn("كسر صعودي", out)
+        self.assertIn("كسر هبوطي", out)
+
+    def test_digest_never_claims_a_direction(self):
+        out = bot.news_forecast.format_forecast(self._digest())
+        self.assertIn("الاتجاه غير متوقّع", out)
+        self.assertNotIn("سيصعد", out)
+        self.assertNotIn("سينزل", out)
+
+    def test_clear_state_says_there_is_no_plan(self):
+        d = self._digest()
+        d["state"] = "clear"
+        d["event"] = None
+        d["plan"] = None
+        out = bot.news_forecast.format_forecast(d)
+        self.assertIn("ما في إصدار", out)
+
+    def test_the_command_reads_the_forecast(self):
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        router, _ = RouterTests()._router(api)
+        saved = bot.news_forecast_now
+        bot.news_forecast_now = lambda *a, **k: self._digest()
+        try:
+            out = router.handle("9", "/forecast")
+        finally:
+            bot.news_forecast_now = saved
+        self.assertIn("خطة", out)
+
+    def test_the_command_is_graceful_without_the_advisor(self):
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        router, _ = RouterTests()._router(api)
+        saved = bot.news_forecast
+        bot.news_forecast = None
+        try:
+            out = router.handle("9", "/forecast")
+        finally:
+            bot.news_forecast = saved
+        self.assertIn("غير متاح", out)
+
+    def test_the_keyboard_offers_the_forecast(self):
+        self.assertIn("🧭 توقّع الخبر", bot.BUTTON_COMMANDS)
+        self.assertEqual(bot.BUTTON_COMMANDS["🧭 توقّع الخبر"], "/forecast")
+        self.assertIn("/forecast", dict(bot.BOT_COMMANDS))
+
+    def test_help_lists_the_forecast_command(self):
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        router, _ = RouterTests()._router(api)
+        self.assertIn("/forecast", router.handle("9", "/help"))
+
+
 @unittest.skipUnless(bot.news_window is not None and bot.calendar_feed is not None,
                      "advisor calendar modules not importable")
 class NewsWatchTests(unittest.TestCase):
@@ -729,6 +811,73 @@ class NewsWatchTests(unittest.TestCase):
             self.assertEqual(watch.poll([self._ev(self.T0)], self.T0), [])
         finally:
             bot.news_window = saved
+
+
+@unittest.skipUnless(bot.news_forecast is not None and bot.news_window is not None,
+                     "advisor forecast modules not importable")
+class ForecastWatchTests(unittest.TestCase):
+    """The pre-news prep push: one plan per release, an hour out, never twice."""
+
+    T0 = 6_000_000.0
+
+    def _ev(self, at, title="US CPI", country="US", imp=1, actual=None,
+            forecast=None, previous=None):
+        return {"at_utc": at, "title": title, "title_ar": title,
+                "country": country, "importance": imp, "actual": actual,
+                "forecast": forecast, "previous": previous}
+
+    def test_a_far_release_pushes_nothing(self):
+        watch = bot.ForecastWatch()
+        far = [self._ev(self.T0 + 4 * 3600)]
+        self.assertEqual(watch.poll(far, self.T0, 4000.0), [])   # prime
+        self.assertEqual(watch.poll(far, self.T0, 4000.0), [])
+
+    def test_a_release_inside_the_horizon_pushes_a_plan_once(self):
+        watch = bot.ForecastWatch()
+        watch.poll([], self.T0, 4000.0)                          # prime quiet
+        soon = [self._ev(self.T0 + 40 * 60)]                     # 40 min ahead
+        first = watch.poll(soon, self.T0, 4000.0)
+        self.assertEqual(len(first), 1)
+        self.assertIn("تحضير قبل الخبر", first[0])
+        self.assertEqual(watch.poll(soon, self.T0, 4000.0), [])  # not twice
+
+    def test_prime_suppresses_a_release_already_in_range(self):
+        watch = bot.ForecastWatch()
+        soon = [self._ev(self.T0 + 40 * 60)]
+        self.assertEqual(watch.poll(soon, self.T0, 4000.0), [])  # prime
+        self.assertEqual(watch.poll(soon, self.T0, 4000.0), [])  # no replay
+
+    def test_the_blackout_watch_keeps_a_print_it_owns(self):
+        watch = bot.ForecastWatch()
+        watch.poll([], self.T0, 4000.0)                          # prime quiet
+        # 5 min ahead: inside the prep horizon and inside the blackout window.
+        now_ev = [self._ev(self.T0 + 5 * 60)]
+        self.assertEqual(watch.poll(now_ev, self.T0, 4000.0), [])
+
+    def test_low_impact_is_never_pushed(self):
+        watch = bot.ForecastWatch()
+        watch.poll([], self.T0, 4000.0)
+        low = [self._ev(self.T0 + 40 * 60, imp=0)]
+        self.assertEqual(watch.poll(low, self.T0, 4000.0), [])
+
+    def test_missing_advisor_disables_the_watch_cleanly(self):
+        watch = bot.ForecastWatch()
+        saved = bot.news_forecast
+        bot.news_forecast = None
+        try:
+            self.assertEqual(watch.poll([self._ev(self.T0 + 600)], self.T0,
+                                        4000.0), [])
+        finally:
+            bot.news_forecast = saved
+
+    def test_the_push_carries_no_direction_claim(self):
+        watch = bot.ForecastWatch()
+        watch.poll([], self.T0, 4000.0)
+        out = watch.poll([self._ev(self.T0 + 40 * 60)], self.T0, 4000.0)
+        self.assertEqual(len(out), 1)
+        self.assertIn("الاتجاه غير متوقّع", out[0])
+        self.assertNotIn("سيصعد", out[0])
+        self.assertNotIn("سينزل", out[0])
 
 
 def _card(verdict="LONG", entry=2651.4, stop=2643.1, target=2667.9, rr=2.0,

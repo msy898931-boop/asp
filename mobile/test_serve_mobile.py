@@ -550,6 +550,97 @@ class AkoanRouteTest(unittest.TestCase):
         self.assertEqual(calls["n"], 2)
 
 
+class ForecastRouteTest(unittest.TestCase):
+    """/forecast.json serves the same prep plan the bot prints, or a null body.
+
+    The panel and the bot must agree on the same event, so this route must read
+    the shared advisor module rather than recompute anything, and it must never
+    500 when the module is missing or the feed throws.
+    """
+
+    def setUp(self):
+        sm._forecast_cache.at, sm._forecast_cache.body = 0.0, None
+
+    def test_unavailable_engine_yields_a_null_body(self):
+        original = sm._load_news_forecast
+        sm._load_news_forecast = lambda: None
+        try:
+            body = sm._compute_forecast()
+        finally:
+            sm._load_news_forecast = original
+        self.assertEqual(body["engine"], "news-forecast")
+        self.assertFalse(body["available"])
+        self.assertIn("reason", body)
+
+    def test_a_failing_engine_does_not_raise(self):
+        class Boom:
+            @staticmethod
+            def forecast():
+                raise RuntimeError("feed down")
+
+        original = sm._load_news_forecast
+        sm._load_news_forecast = lambda: Boom
+        try:
+            body = sm._compute_forecast()
+        finally:
+            sm._load_news_forecast = original
+        self.assertFalse(body["available"])
+        self.assertIn("detail", body)
+
+    def test_the_body_carries_the_rendered_plan(self):
+        class Stub:
+            @staticmethod
+            def forecast():
+                return {"engine": "news-forecast", "state": "clear",
+                        "event": None, "plan": None, "notes": []}
+
+            @staticmethod
+            def format_forecast(d):
+                return "خطة تحضير"
+
+        original = sm._load_news_forecast
+        sm._load_news_forecast = lambda: Stub
+        try:
+            body = sm._compute_forecast()
+        finally:
+            sm._load_news_forecast = original
+        self.assertTrue(body["available"])
+        self.assertEqual(body["text"], "خطة تحضير")
+
+    def test_body_is_cached_within_the_ttl(self):
+        calls = {"n": 0}
+
+        def counting():
+            calls["n"] += 1
+            return {"available": False, "reason": "stub"}
+
+        original = sm._compute_forecast
+        sm._compute_forecast = counting
+        try:
+            first = sm.forecast_body(now=1000.0)
+            second = sm.forecast_body(now=1000.0 + sm._FORECAST_CACHE_TTL - 1)
+        finally:
+            sm._compute_forecast = original
+        self.assertEqual(calls["n"], 1)
+        self.assertEqual(first, second)
+
+    def test_cache_expires_after_the_ttl(self):
+        calls = {"n": 0}
+
+        def counting():
+            calls["n"] += 1
+            return {"available": False, "reason": "stub"}
+
+        original = sm._compute_forecast
+        sm._compute_forecast = counting
+        try:
+            sm.forecast_body(now=2000.0)
+            sm.forecast_body(now=2000.0 + sm._FORECAST_CACHE_TTL + 1)
+        finally:
+            sm._compute_forecast = original
+        self.assertEqual(calls["n"], 2)
+
+
 class AkoanWarmupTest(unittest.TestCase):
     """The first phone to open the News tab must not wait ~100 s on a blank.
 
@@ -1065,13 +1156,14 @@ class ServiceWorkerGateTest(unittest.TestCase):
         self.assertIn('url.pathname.endsWith(".apk")', sw)
 
     def test_panel_readings_are_never_cached(self):
-        # /vol.json and /akoan.json carry a current number, exactly like the
-        # live endpoints above them. Caching one would serve a stale reading —
-        # and because the volatility panel stamps the *render* time, not the
-        # data time, the stale number would look freshly computed.
+        # /vol.json, /akoan.json and /forecast.json carry a current number,
+        # exactly like the live endpoints above them. Caching one would serve a
+        # stale reading — and because the volatility panel stamps the *render*
+        # time, not the data time, the stale number would look freshly computed.
         sw = self._read("sw.js")
         self.assertIn('url.pathname.endsWith("/vol.json")', sw)
         self.assertIn('url.pathname.endsWith("/akoan.json")', sw)
+        self.assertIn('url.pathname.endsWith("/forecast.json")', sw)
         # The guard has to sit with the live guard, inside the fetch handler and
         # before its cache write (the install-time caches.open is elsewhere).
         fetch_handler = sw[sw.index('addEventListener("fetch"'):]

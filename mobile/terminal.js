@@ -108,6 +108,12 @@ const STRINGS = {
     nw_impact_none: "مطابق للتقدير — بلا مفاجأة",
     nw_impact_unknown: "بلا تقدير ولا سابق — ما في قراءة",
     nw_act: "الفعلي", nw_fc: "التقدير", nw_prev: "السابق",
+    nw_prep_badge: "تحضير",
+    nw_prep_band: "المدى المتوقّع",
+    nw_prep_p90: "الحالات العنيفة",
+    nw_prep_up: "كسر صعودي",
+    nw_prep_down: "كسر هبوطي",
+    nw_prep_note: "الاتجاه غير متوقّع — نتحضّر للحجم لا للجهة.",
     nw_vs_forecast: "مقابل التقدير", nw_vs_previous: "مقابل السابق",
     mk_sub: "الاتجاه وخطة الصفقة من محرّك القرار نفسه",
     mk_plan: "خطة الصفقة",
@@ -230,6 +236,12 @@ const STRINGS = {
     nw_impact_none: "inline with forecast — no surprise",
     nw_impact_unknown: "no forecast or previous — no read",
     nw_act: "Actual", nw_fc: "Forecast", nw_prev: "Previous",
+    nw_prep_badge: "Prep",
+    nw_prep_band: "Expected move",
+    nw_prep_p90: "Violent tenth",
+    nw_prep_up: "Break up",
+    nw_prep_down: "Break down",
+    nw_prep_note: "Direction is not predicted — we prepare for the size, not the side.",
     nw_vs_forecast: "vs forecast", nw_vs_previous: "vs previous",
     mk_sub: "Direction and the trade plan, straight from the decision engine",
     mk_plan: "Trade plan",
@@ -883,6 +895,66 @@ function renderNews() {
       hll.appendChild(nwRow(title, src || h.published || ""));
     });
   }
+
+  renderPrep();
+}
+
+/* The pre-news prep plan. Hidden unless a high-impact release is inside the
+   prep horizon, because an empty bracket is noise. It never names a side. */
+function renderPrep() {
+  const box = $("nw-prep");
+  const f = state.forecast || {};
+  const plan = f.plan || null;
+  const ev = f.event || null;
+
+  if (!plan || !ev || f.available === false) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+
+  $("nw-prep-src").textContent = f.available === false
+    ? (f.reason || "forecast.json") : "forecast.json";
+  $("nw-prep-title").textContent = [
+    (ev.title_ar || ev.title),
+    ev.country ? "(" + ev.country + ")" : "",
+    plan.in_minutes != null
+      ? T("nw_in_minutes").replace("{n}", plan.in_minutes) : "",
+  ].filter(Boolean).join(" · ");
+
+  // The measured band and the two break levels, side by side.
+  const lv = plan.levels || {};
+  const mv = plan.expected_move || {};
+  const band = $("nw-prep-band");
+  band.textContent = "";
+  const cells = [
+    [T("nw_prep_band"), mv.median != null ? "~$" + mv.median : "—"],
+    [T("nw_prep_p90"), mv.p90 != null ? "~$" + mv.p90 : "—"],
+    [T("nw_prep_up"), lv.break_up != null ? lv.break_up : "—"],
+    [T("nw_prep_down"), lv.break_down != null ? lv.break_down : "—"],
+  ];
+  cells.forEach(([label, value]) => {
+    const c = document.createElement("div");
+    c.className = "nw-prep-cell";
+    const l = document.createElement("span");
+    l.className = "nw-prep-cell-label";
+    l.textContent = label;
+    const v = document.createElement("span");
+    v.className = "nw-prep-cell-value";
+    v.textContent = value;
+    c.appendChild(l);
+    c.appendChild(v);
+    band.appendChild(c);
+  });
+
+  const ol = $("nw-prep-steps");
+  ol.textContent = "";
+  const steps = Array.isArray(plan.steps) ? plan.steps : [];
+  steps.forEach((s) => {
+    const li = document.createElement("li");
+    li.textContent = s;
+    ol.appendChild(li);
+  });
 }
 
 /* ── panel: timeframes ──────────────────────────────────────────────── */
@@ -1191,6 +1263,10 @@ async function refresh() {
   // not the backend, so a dead backend must not blank it. Fetched once, before
   // the early return below, and best-effort throughout.
   try { state.news = await getJson("news.json", 25000); } catch (e) { state.news = null; }
+  // The prep plan reads the calendar too, and like the news digest it must
+  // survive a dead backend. Fetched here so both faces agree on one event.
+  try { state.forecast = await getJson("forecast.json", 25000); }
+  catch (e) { state.forecast = null; }
 
   if (!anyOk) {
     // Name the real failure. A 401 is a locked backend, not a dead one, and

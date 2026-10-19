@@ -895,6 +895,43 @@ every consumer.
 calendar, so unlike the volatility model its effect cannot be backtested. The
 `/vol` reading and its alerts say so.
 
+### The pre-news prep plan (the other half of "be ready")
+
+The window says *when not to trade*. `advisor/news_forecast.py` says what to do
+with the release that is coming: it hands over a direction-free bracket while
+there is still time to place it. `/forecast` on the bot prints it, and
+`ForecastWatch` pushes it once per high-impact release, an hour out (primed
+silently, keyed by event identity, and it stands aside when `NewsWatch` already
+owns the release because its blackout is open).
+
+It is built on a **measurement, not a story**. `scripts/measure_news_move.py`
+replays the high-impact US releases inside the committed M1 corpus and reports
+two things, and only two:
+
+- **Size is forecastable.** Gold moves a median of ~$2.7 / $3.5 / $5.2 at 15 /
+  30 / 60 min after a high-impact US print, with the violent tenth reaching
+  ~$6.8 / $9.3 / $14.6. The module ships that table (n=83) with the sample size
+  attached; `expected_move` scales it by release family (jobs/rates run hotter
+  than housing/sentiment).
+- **Direction is not.** The mechanical read (actual vs forecast, dollars
+  stronger => gold weaker) agreed with gold's sign 40-58% of the time across
+  horizons — a coin, and at 5 min worse than one (p=1.000 at 15/30 min, p=0.272
+  at 60). The 60-minute pre-release drift is flat (mean -$0.40, std $1.06), so
+  nothing leaks ahead either.
+
+So the plan never names a side. It brackets the pre-release price (a buy-stop
+above, a sell-stop below, stop = the measured median, target = 2×, R:R = 2),
+tells the trader to ignore the first 5-15 min of the reaction, to join whichever
+side breaks first, and to *cancel* the plan if nothing breaks inside the
+horizon. It carries the "direction is not predictable" line verbatim, and
+`test_news_forecast` asserts the push never says “will rise” or “will fall”.
+
+This is deliberately **read-only and advisory** — like the rest of the news
+surface, it announces a plan, it never places one, and it carries no execution
+authority. The `akoan` engine already tested the directional claim and found no
+edge; this module does not re-litigate that, it builds the part the data *does*
+support (size and timing) and states the part it does not.
+
 **Plan B - the historical calendar, now built.** The caveat above was true of
 the Forex Factory mirror (one week, no `actual`). The advisor's TradingView
 calendar also serves the *past* with `actual` populated, so
