@@ -108,8 +108,9 @@ _stop = threading.Event()
 # times a minute. A card is therefore announced at most once per cooldown: the
 # first genuine change after the window fires, and the changes that piled up
 # inside it are dropped rather than replayed, so the user only ever sees the
-# current setup.
-CARD_ALERT_COOLDOWN = float(os.environ.get("ASTRA_CARD_ALERT_COOLDOWN", "600"))
+# current setup. A change of *direction* is exempt: a reversal is the one change
+# worth an immediate push, so it bypasses the window entirely.
+CARD_ALERT_COOLDOWN = float(os.environ.get("ASTRA_CARD_ALERT_COOLDOWN", "900"))
 
 # ── the user-facing surface (Arabic) ────────────────────────────────────────
 # The reply keyboard the user taps. Each label maps to a command token, and the
@@ -930,9 +931,11 @@ class TradeCardWatch:
     The identity alone is not enough: on a live tape the freshest M5 close is
     the entry, so the levels move every few minutes and the identity changes with
     them. A cooldown on top caps the rate at one alert per window
-    (``CARD_ALERT_COOLDOWN``, 600s by default, overridable with
+    (``CARD_ALERT_COOLDOWN``, 900s by default, overridable with
     ``ASTRA_CARD_ALERT_COOLDOWN``); the first genuine change after the window
     fires and the rest are dropped, never queued, so a burst is not replayed.
+    A change of direction is exempt — a reversal is pushed at once, whatever the
+    clock says, because it is the one change a trader must not miss.
 
     Read-only, like everything else here: it announces a level, it never acts on
     one, and it carries no execution authority.
@@ -963,9 +966,10 @@ class TradeCardWatch:
             return []
         if key is None or key == self._last:
             return []
+        reversed_direction = key[0] != (self._last or (None,))[0]
         self._last = key
         now = time.time()
-        if now - self._last_alert < self._cooldown:
+        if not reversed_direction and now - self._last_alert < self._cooldown:
             return []
         self._last_alert = now
         return [format_trade_card(card)]
@@ -1118,7 +1122,7 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
                    help="disable push alerts for new advisor trade cards")
     p.add_argument("--card-alert-cooldown", type=float,
                    default=CARD_ALERT_COOLDOWN,
-                   help="seconds between card alerts (default: 600)")
+                   help="seconds between card alerts (default: 900)")
     return p.parse_args(argv)
 
 

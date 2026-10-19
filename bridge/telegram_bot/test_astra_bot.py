@@ -849,6 +849,23 @@ class TradeCardWatchTests(unittest.TestCase):
         out = watch.poll(_card(entry=2660.0, stop=2650.0, target=2680.0))
         self.assertEqual(len(out), 1)
 
+    def test_a_reversal_bypasses_the_cooldown(self):
+        # A direction flip is the one change worth an immediate push, so it must
+        # not be swallowed by a window opened moments earlier.
+        watch = bot.TradeCardWatch(cooldown=900)
+        watch.poll(_card(verdict="LONG"))
+        first = watch.poll(_card(verdict="LONG", entry=2660.0, stop=2650.0,
+                                 target=2680.0))
+        self.assertEqual(len(first), 1)
+        # Still inside the window: a level tweak stays silent...
+        self.assertEqual(watch.poll(_card(verdict="LONG", entry=2665.0,
+                                          stop=2655.0, target=2685.0)), [])
+        # ...but a reversal is pushed at once.
+        flip = watch.poll(_card(verdict="SHORT", entry=2660.0, stop=2670.0,
+                                target=2640.0))
+        self.assertEqual(len(flip), 1)
+        self.assertIn("بيع", flip[0])
+
 
 class TradeCardCheckTests(unittest.TestCase):
     def _check(self, card, news_context=None):
