@@ -70,7 +70,17 @@ _KEY_ENV = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}
 _USER_AGENT = os.environ.get("ASTRA_ADVISOR_USER_AGENT", "ASTRA-advisor/1.0")
 
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_ADVISOR_TIMEOUT", "20"))
-CACHE_TTL = float(os.environ.get("ASTRA_ADVISOR_TTL", "120"))
+# How long a full advisory (snapshot + model opinion) is cached. The Groq free
+# tier allows ~200k tokens/day and one advisory costs ~1.4k, so anything faster
+# than ~10 minutes cannot fit a day of continuous use; the default is chosen to
+# fit inside the free tier rather than to be as fresh as possible.
+CACHE_TTL = float(os.environ.get("ASTRA_ADVISOR_TTL", "600"))
+# The trade card is computed from bars alone — no model call — so it can refresh
+# much faster than the opinion without spending any quota.
+CARD_TTL = float(os.environ.get("ASTRA_ADVISOR_CARD_TTL", "60"))
+# When the provider answers 429 (daily quota spent), stop calling it for this
+# long instead of retrying on every request and burning the request rate too.
+RATE_LIMIT_BACKOFF = float(os.environ.get("ASTRA_ADVISOR_BACKOFF", "900"))
 LOG_PATH = os.environ.get("ASTRA_ADVISOR_LOG",
                           os.path.join(ROOT, "run", "advisor_advisories.jsonl"))
 
@@ -452,7 +462,12 @@ def parse_advisory(text: str) -> dict | None:
 
 
 def call_groq(prompt: str, api_key: str) -> str | None:
-    """OpenAI-compatible chat completion on Groq."""
+    """OpenAI-compatible chat completion on Groq.
+
+    A 429 means the daily token budget is spent, not that the key is wrong, so
+    it is recorded in ``_rate_limited_until`` (read by ``Advisor._build``) to
+    back off instead of hammering the provider on every request.
+    """
     body = json.dumps({
         "model": GROQ_MODEL,
         "messages": [{"role": "user", "content": prompt}],
@@ -472,6 +487,8 @@ def call_groq(prompt: str, api_key: str) -> str | None:
         with contextlib.suppress(OSError):
             detail = exc.read().decode("utf-8", "replace")[:200]
         sys.stderr.write("[advisor] groq HTTP %s: %s\n" % (exc.code, detail))
+        if exc.code == 429:
+            _mark_rate_limited()
         return None
     except (urllib.error.URLError, OSError, ValueError) as exc:
         sys.stderr.write("[advisor] groq request failed: %s\n" % (exc,))
@@ -498,6 +515,21 @@ def provider_key() -> str:
 
 def active_model() -> str | None:
     return {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL}.get(PROVIDER)
+
+
+# Unix time until which the provider should not be called again (set when it
+# answers 429). Module-level so every request handler shares the back-off.
+_rate_limited_until = 0.0
+
+
+def _mark_rate_limited() -> None:
+    global _rate_limited_until
+    _rate_limited_until = time.time() + RATE_LIMIT_BACKOFF
+
+
+def rate_limited() -> bool:
+    """True while the provider is being backed off after a 429."""
+    return time.time() < _rate_limited_until
 
 
 def call_gemini(prompt: str, api_key: str) -> str | None:
@@ -559,6 +591,8 @@ class Advisor:
     def __init__(self) -> None:
         self._cached: dict | None = None
         self._cached_at = 0.0
+        self._card: dict | None = None
+        self._card_at = 0.0
 
     def current(self, force: bool = False) -> dict:
         now = time.time()
@@ -566,6 +600,20 @@ class Advisor:
             return self._cached
         result = self._build()
         self._cached, self._cached_at = result, now
+        return result
+
+    def card(self) -> dict:
+        """The trade card alone — bars in, levels out, no model call.
+
+        This is what the Telegram bot and the phone read for the levels, so the
+        card stays available even when the model's daily quota is spent and the
+        opinion cannot be produced.
+        """
+        now = time.time()
+        if self._card is not None and now - self._card_at < CARD_TTL:
+            return self._card
+        result = mtf_read.build(fetch_bars_by_tf())
+        self._card, self._card_at = result, now
         return result
 
     def review(self) -> dict:
@@ -603,6 +651,16 @@ class Advisor:
                                 "provider key"))
             return advisory
 
+        if rate_limited():
+            # A recent 429: the model's daily quota is spent. Skip the call
+            # entirely (no point, and it would only spend the request rate too)
+            # and say so plainly instead of the generic "unavailable".
+            advisory["rate_limited"] = True
+            advisory["note"] = ("AI opinion paused: the provider's daily quota "
+                                "is spent. The snapshot and trade card below are "
+                                "still live.")
+            return advisory
+
         # Learn from the past before answering: score any call that is now due
         # and hand the misses to the model, so a mistake is visible next time.
         review = run_review(snapshot.get("price"))
@@ -613,7 +671,13 @@ class Advisor:
         reply = call_model(build_prompt(snapshot, lessons), api_key)
         opinion = parse_advisory(reply) if reply else None
         if opinion is None:
-            advisory["note"] = "AI advisor unavailable: no usable reply."
+            if rate_limited():
+                advisory["rate_limited"] = True
+                advisory["note"] = ("AI opinion paused: the provider's daily "
+                                    "quota is spent. The snapshot and trade card "
+                                    "below are still live.")
+            else:
+                advisory["note"] = "AI advisor unavailable: no usable reply."
             return advisory
 
         advisory["opinion"] = opinion
@@ -646,12 +710,17 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/v1/advisor", "/advisor"):
             force = "refresh=1" in query
             self._json(200, {"advisor": self.advisor.current(force=force)})
+        elif path in ("/v1/card", "/card"):
+            # Model-free: the card comes from bars alone, so it answers even
+            # when the opinion is paused on a spent quota.
+            self._json(200, {"trade_card": self.advisor.card()})
         elif path in ("/v1/review", "/review"):
             self._json(200, {"review": self.advisor.review()})
         elif path in ("/health", "/v1/health"):
             self._json(200, {"service": "ai-advisor", "status": "OK",
                              "provider": PROVIDER,
-                             "configured": bool(provider_key())})
+                             "configured": bool(provider_key()),
+                             "rate_limited": rate_limited()})
         else:
             self._json(404, {"error": "unknown route", "path": path})
 

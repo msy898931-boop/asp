@@ -123,12 +123,14 @@ class AstraApi:
     def trade_card(self) -> Dict[str, Any]:
         """The advisor's multi-timeframe read, with its exact levels.
 
-        Read-only and best-effort: an unreachable advisor raises ``ApiError`` so
-        the caller can stay silent rather than invent a card.
+        Read from the advisor's model-free ``/v1/card`` route, so polling it
+        never spends the model's token quota and the card stays available when
+        the opinion is paused. Read-only and best-effort: an unreachable advisor
+        raises ``ApiError`` so the caller can stay silent rather than invent a
+        card.
         """
-        env = self._get_abs(f"{self.advisor_base}/advisor")
-        advisor = env.get("advisor") if isinstance(env, dict) else None
-        card = advisor.get("trade_card") if isinstance(advisor, dict) else None
+        env = self._get_abs(f"{self.advisor_base}/card")
+        card = env.get("trade_card") if isinstance(env, dict) else None
         return card if isinstance(card, dict) else {}
 
     # -- composite health snapshot -----------------------------------------

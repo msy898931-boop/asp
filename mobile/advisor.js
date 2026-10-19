@@ -155,6 +155,16 @@ async function loadAdvisor(force) {
       $("ai-thesis").textContent = op.thesis || "";
       $("ai-risks").textContent = op.risks ? `${T("ai_risks")}: ${op.risks}` : "";
       setStatus(T("ai_ok"));
+    } else if (a.rate_limited) {
+      // The model's daily quota is spent: the opinion is paused, but the
+      // snapshot and the trade card above are still live, so show that plainly
+      // instead of a blank "unavailable" panel.
+      stanceEl.textContent = T("ai_paused");
+      stanceEl.classList.add("neutral");
+      $("ai-conf").textContent = "";
+      $("ai-thesis").textContent = T("ai_paused_sub");
+      $("ai-risks").textContent = "";
+      setStatus(T("ai_paused"));
     } else if (!a.configured) {
       stanceEl.textContent = T("ai_off");
       stanceEl.classList.add("neutral");

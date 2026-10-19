@@ -107,20 +107,22 @@ class _BridgeHandler(BaseHTTPRequestHandler):
 
 @_quiet
 class _AdvisorHandler(BaseHTTPRequestHandler):
-    """The advisor's /v1/advisor envelope, which nests the trade card."""
+    """The advisor's routes: the model-free card, and the full advisory."""
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path.endswith("/advisor"):
+        card = {
+            "available": True, "verdict": "LONG",
+            "agreement": {"long": 4, "short": 1, "neutral": 0, "of": 5},
+            "timeframes": {"M15": {"direction": "LONG", "rsi": 57.0}},
+            "card": {"direction": "LONG", "entry": 2651.4, "stop": 2643.1,
+                     "target": 2667.9, "rr": 2.0, "agreement": "4/5"},
+        }
+        if parsed.path.endswith("/card"):
+            body = {"trade_card": card}
+        elif parsed.path.endswith("/advisor"):
             body = {"advisor": {
-                "symbol": "XAUUSD", "configured": True,
-                "trade_card": {
-                    "available": True, "verdict": "LONG",
-                    "agreement": {"long": 4, "short": 1, "neutral": 0, "of": 5},
-                    "timeframes": {"M15": {"direction": "LONG", "rsi": 57.0}},
-                    "card": {"direction": "LONG", "entry": 2651.4, "stop": 2643.1,
-                             "target": 2667.9, "rr": 2.0, "agreement": "4/5"},
-                },
+                "symbol": "XAUUSD", "configured": True, "trade_card": card,
             }}
         else:
             body = {"error": "unknown route"}
@@ -225,8 +227,9 @@ class ConnectionTest(unittest.TestCase):
     # -- the advisor trade card over the real transport --------------------
 
     def test_trade_card_reads_the_advisor_envelope(self):
-        # The card nests under advisor.trade_card; a client that looked for it
-        # at the top level, or under "data", would silently find nothing.
+        # The card comes from the advisor's model-free /card route, which wraps
+        # it as {"trade_card": ...}; a client that read the /advisor envelope
+        # instead would still work but would spend model quota to get it.
         card = self.api.trade_card()
         self.assertEqual(card["verdict"], "LONG")
         self.assertEqual(card["card"]["entry"], 2651.4)

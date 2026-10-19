@@ -14,10 +14,12 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from http.server import ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -393,6 +395,8 @@ class BuildTests(unittest.TestCase):
         self._orig_review = advisor.run_review
         self._orig_bars = advisor.fetch_bars_by_tf
         self._orig_key = os.environ.get("GROQ_API_KEY")
+        self._orig_backoff = advisor._rate_limited_until
+        advisor._rate_limited_until = 0.0
         advisor.append_log = lambda record: None
         advisor.recent_news = lambda: []
         advisor.upcoming_events = lambda: []
@@ -412,6 +416,7 @@ class BuildTests(unittest.TestCase):
         advisor.upcoming_events = self._orig_events
         advisor.run_review = self._orig_review
         advisor.fetch_bars_by_tf = self._orig_bars
+        advisor._rate_limited_until = self._orig_backoff
         if self._orig_key is None:
             os.environ.pop("GROQ_API_KEY", None)
         else:
@@ -442,6 +447,37 @@ class BuildTests(unittest.TestCase):
         result = advisor.Advisor()._build()
         self.assertIsNone(result["opinion"])
         self.assertIn("unavailable", result["note"])
+        self.assertNotIn("rate_limited", result)
+
+    def test_a_rate_limited_provider_pauses_the_opinion(self):
+        # The 429 path: the model never runs, the note says why, and the flag
+        # is set so the client can keep the card and snapshot on screen.
+        os.environ["GROQ_API_KEY"] = "test-key"
+        calls = {"n": 0}
+
+        def refusing(prompt, key):
+            calls["n"] += 1
+            advisor._mark_rate_limited()
+            return None
+
+        advisor.call_model = refusing
+        result = advisor.Advisor()._build()
+        self.assertIsNone(result["opinion"])
+        self.assertTrue(result["rate_limited"])
+        self.assertIn("quota", result["note"])
+        self.assertIsNotNone(result["trade_card"])
+        self.assertEqual(calls["n"], 1)
+
+    def test_rate_limited_skips_the_model_entirely(self):
+        # Once the back-off is set, no further model call is even attempted.
+        os.environ["GROQ_API_KEY"] = "test-key"
+        calls = {"n": 0}
+        advisor.call_model = lambda prompt, key: calls.__setitem__("n", calls["n"] + 1)
+        advisor._mark_rate_limited()
+        result = advisor.Advisor()._build()
+        self.assertTrue(result["rate_limited"])
+        self.assertIsNone(result["opinion"])
+        self.assertEqual(calls["n"], 0)
 
     def test_prompt_carries_the_snapshot_and_the_rules(self):
         prompt = advisor.build_prompt({"symbol": "XAUUSD", "price": 4185.9})
@@ -539,6 +575,125 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(captured["body"]["messages"][0]["content"], "hello")
         self.assertEqual(captured["body"]["temperature"], 0.0)
         self.assertEqual(out, '{"stance":"LONG"}')
+
+    def test_groq_429_sets_the_back_off(self):
+        # A 429 is a spent quota, not a bad key: call_groq must record it so the
+        # next build backs off instead of calling again.
+        original_backoff = advisor._rate_limited_until
+        advisor._rate_limited_until = 0.0
+
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                req.full_url, 429, "Too Many Requests", {},
+                __import__("io").BytesIO(b'{"error":{"message":"TPD"}}'))
+
+        original = advisor.urllib.request.urlopen
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            self.assertIsNone(advisor.call_groq("hello", "gsk_test"))
+            self.assertTrue(advisor.rate_limited())
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor._rate_limited_until = original_backoff
+
+    def test_a_non_429_error_does_not_back_off(self):
+        original_backoff = advisor._rate_limited_until
+        advisor._rate_limited_until = 0.0
+
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                req.full_url, 500, "Server Error", {},
+                __import__("io").BytesIO(b"boom"))
+
+        original = advisor.urllib.request.urlopen
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            self.assertIsNone(advisor.call_groq("hello", "gsk_test"))
+            self.assertFalse(advisor.rate_limited())
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor._rate_limited_until = original_backoff
+
+
+class CardTests(unittest.TestCase):
+    """The model-free card: bars in, levels out, no quota spent."""
+
+    def setUp(self):
+        self._orig_bars = advisor.fetch_bars_by_tf
+        self._orig_card_ttl = advisor.CARD_TTL
+
+    def tearDown(self):
+        advisor.fetch_bars_by_tf = self._orig_bars
+        advisor.CARD_TTL = self._orig_card_ttl
+
+    def test_card_is_built_without_a_model(self):
+        called = {"model": 0}
+        original_model = advisor.call_model
+        advisor.call_model = lambda prompt, key: called.__setitem__(
+            "model", called["model"] + 1)
+        n = 120
+        rising = [{"open": 1800.0 + i * 0.5, "high": 1800.0 + i * 0.5 + 0.3,
+                   "low": 1800.0 + i * 0.5 - 0.3, "close": 1800.0 + (i + 1) * 0.5}
+                  for i in range(n)]
+        advisor.fetch_bars_by_tf = lambda: dict.fromkeys(advisor.MTF_TIMEFRAMES, rising)
+        try:
+            card = advisor.Advisor().card()
+        finally:
+            advisor.call_model = original_model
+        self.assertTrue(card["available"])
+        self.assertEqual(card["verdict"], "LONG")
+        self.assertEqual(called["model"], 0)
+
+    def test_card_is_cached_within_its_ttl(self):
+        calls = {"n": 0}
+
+        def bars():
+            calls["n"] += 1
+            return {}
+
+        advisor.fetch_bars_by_tf = bars
+        a = advisor.Advisor()
+        a.card()
+        a.card()
+        self.assertEqual(calls["n"], 1)
+
+    def test_health_reports_the_rate_limit(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), advisor.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        original_backoff = advisor._rate_limited_until
+        try:
+            host, port = server.server_address
+            advisor._rate_limited_until = 0.0
+            with urllib.request.urlopen(
+                    "http://%s:%d/v1/health" % (host, port), timeout=5) as resp:
+                self.assertFalse(json.loads(resp.read())["rate_limited"])
+            advisor._mark_rate_limited()
+            with urllib.request.urlopen(
+                    "http://%s:%d/v1/health" % (host, port), timeout=5) as resp:
+                self.assertTrue(json.loads(resp.read())["rate_limited"])
+        finally:
+            advisor._rate_limited_until = original_backoff
+            server.shutdown()
+            server.server_close()
+
+    def test_card_route_answers_without_a_model(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), advisor.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        original_bars = advisor.fetch_bars_by_tf
+        try:
+            advisor.fetch_bars_by_tf = lambda: {}
+            host, port = server.server_address
+            with urllib.request.urlopen(
+                    "http://%s:%d/v1/card" % (host, port), timeout=5) as resp:
+                body = json.loads(resp.read())
+            self.assertIn("trade_card", body)
+            self.assertFalse(body["trade_card"]["available"])
+        finally:
+            advisor.fetch_bars_by_tf = original_bars
+            server.shutdown()
+            server.server_close()
 
 
 class CacheTests(unittest.TestCase):

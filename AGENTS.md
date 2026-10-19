@@ -103,10 +103,12 @@ The advisor's **trade card** is also pushed: `TradeCardWatch` polls
 `AstraApi.trade_card()` each cycle and alerts only when the card's identity
 (direction + entry/stop/target) differs from the last one announced, so a setup
 already open at boot is primed silently and a still-open setup never re-fires.
-A NEUTRAL read carries no numbers and is never announced; an unreachable advisor
-is silent. The alert reuses `format_trade_card`, the same renderer as `/card`, so
-the pushed text and the on-demand text are identical. Disable with
-`--no-card-alerts` or `ASTRA_CARD_ALERTS=0`.
+The card is read from the advisor's **model-free** `/v1/card` route, so polling
+it never spends the model's token quota and it keeps answering when the opinion
+is paused. A NEUTRAL read carries no numbers and is never announced; an
+unreachable advisor is silent. The alert reuses `format_trade_card`, the same
+renderer as `/card`, so the pushed text and the on-demand text are identical.
+Disable with `--no-card-alerts` or `ASTRA_CARD_ALERTS=0`.
 
 `BOT_COMMANDS` stores the names **with** the leading slash (that is how the user
 types them), but `setMyCommands` must be given the bare names: Telegram rejects
@@ -224,6 +226,15 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   compute. A direction needs >= 3 of 5 frames and H4 must not oppose; otherwise
   the verdict is NEUTRAL and no numbers are emitted. It is rule-based and
   `validated: false`, not a measured edge.
+- **Quota.** The Groq free tier allows ~200k tokens/day and one advisory costs
+  ~1.4k (a ~1k-token prompt plus the reply), so the opinion can only refresh
+  ~140 times a day. `CACHE_TTL` (default 600s) is set to fit inside that budget;
+  the card is served from the model-free `/v1/card` route (`CARD_TTL`, 60s) and
+  never spends a token. A 429 is not a bad key: `call_groq` sets a shared
+  back-off (`RATE_LIMIT_BACKOFF`, 900s), the reply carries `rate_limited: true`
+  and a note naming the quota, and `/v1/health` exposes `rate_limited` so a
+  monitor can see it. The app keeps the snapshot and card on screen and shows
+  the paused note instead of a blank panel.
 
 ## The frozen v1 contract has four copies ŌĆö keep them in step
 
@@ -527,6 +538,16 @@ AI tab sits on placeholders with no error. Check `run/advisor.log` and
 `GET /advisor/v1/advisor` before blaming the shell. The advisor logs
 `provider=... configured=...` on startup, so a missing log line means it never
 came up.
+
+A third mode is the one seen most in production: the AI tab shows "المستشار
+الذكي غير متاح" while everything else is green. That is not a dead process — it
+is a spent model quota. The advisor is up and answers, but the provider returns
+429 ("TPD: Limit 200000"), `call_groq` returns None, and the panel used to fall
+back to a blank "unavailable". Read `rate_limited` from `GET /advisor/v1/health`
+(or the note in `/advisor/v1/advisor`) to tell the two apart: `rate_limited:
+true` means wait for the daily reset, not restart the service. The card and the
+snapshot stay live throughout, because the card comes from the model-free
+`/v1/card` route.
 
 ### Web terminal (the wide-screen view)
 
