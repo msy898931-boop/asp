@@ -9,6 +9,7 @@ calls the production objects make.
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -813,6 +814,40 @@ class TradeCardWatchTests(unittest.TestCase):
         watch = bot.TradeCardWatch()
         watch.poll(_card())
         self.assertEqual(watch.poll(None), [])
+
+    def test_a_burst_of_new_cards_is_throttled_to_one_alert(self):
+        # The live tape shifts the levels every few minutes; without a cooldown
+        # the same setup would be pushed several times a minute.
+        watch = bot.TradeCardWatch(cooldown=600)
+        watch.poll(_card())
+        first = watch.poll(_card(entry=2660.0, stop=2650.0, target=2680.0))
+        self.assertEqual(len(first), 1)
+        for i in range(2, 10):
+            self.assertEqual(
+                watch.poll(_card(entry=2660.0 + i, stop=2650.0 + i,
+                                 target=2680.0 + i)), [])
+
+    def test_a_change_after_the_cooldown_alerts_again(self):
+        watch = bot.TradeCardWatch(cooldown=600)
+        watch._last_alert = time.time() - 601  # the window has elapsed
+        watch.poll(_card())
+        out = watch.poll(_card(entry=2660.0, stop=2650.0, target=2680.0))
+        self.assertEqual(len(out), 1)
+
+    def test_the_clock_is_only_advanced_by_a_real_alert(self):
+        # A neutral or unchanged read must not consume the cooldown, or a real
+        # change arriving right after one would be swallowed.
+        watch = bot.TradeCardWatch(cooldown=600)
+        watch.poll(_card())
+        self.assertEqual(watch._last_alert, 0.0)
+        watch.poll(_card())  # unchanged
+        self.assertEqual(watch._last_alert, 0.0)
+
+    def test_the_cooldown_is_configurable(self):
+        watch = bot.TradeCardWatch(cooldown=0)
+        watch.poll(_card())
+        out = watch.poll(_card(entry=2660.0, stop=2650.0, target=2680.0))
+        self.assertEqual(len(out), 1)
 
 
 class TradeCardCheckTests(unittest.TestCase):

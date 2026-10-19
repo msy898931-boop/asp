@@ -105,10 +105,17 @@ The advisor's **trade card** is also pushed: `TradeCardWatch` polls
 already open at boot is primed silently and a still-open setup never re-fires.
 The card is read from the advisor's **model-free** `/v1/card` route, so polling
 it never spends the model's token quota and it keeps answering when the opinion
-is paused. A NEUTRAL read carries no numbers and is never announced; an
-unreachable advisor is silent. The alert reuses `format_trade_card`, the same
-renderer as `/card`, so the pushed text and the on-demand text are identical.
-Disable with `--no-card-alerts` or `ASTRA_CARD_ALERTS=0`.
+is paused. Identity alone is not enough: the entry is the freshest M5 close, so
+the levels drift every few minutes and the identity changes with them, which
+would push the same setup several times a minute. A cooldown therefore caps the
+rate at one alert per `CARD_ALERT_COOLDOWN` (600s by default,
+`ASTRA_CARD_ALERT_COOLDOWN` or `--card-alert-cooldown` to change it): the first
+genuine change after the window fires and the rest are dropped, never queued, so
+a burst is not replayed. A NEUTRAL read carries no numbers and is never
+announced; an unreachable advisor is silent. The alert reuses
+`format_trade_card`, the same renderer as `/card`, so the pushed text and the
+on-demand text are identical. Disable with `--no-card-alerts` or
+`ASTRA_CARD_ALERTS=0`.
 
 `BOT_COMMANDS` stores the names **with** the leading slash (that is how the user
 types them), but `setMyCommands` must be given the bare names: Telegram rejects

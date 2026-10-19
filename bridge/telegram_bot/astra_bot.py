@@ -103,6 +103,14 @@ _SEND_TIMEOUT_SECONDS = 10
 
 _stop = threading.Event()
 
+# A fresh card is real news, but on a live tape the levels shift with every
+# closed M5 bar, so an unthrottled watch re-announces the same setup several
+# times a minute. A card is therefore announced at most once per cooldown: the
+# first genuine change after the window fires, and the changes that piled up
+# inside it are dropped rather than replayed, so the user only ever sees the
+# current setup.
+CARD_ALERT_COOLDOWN = float(os.environ.get("ASTRA_CARD_ALERT_COOLDOWN", "600"))
+
 # ── the user-facing surface (Arabic) ────────────────────────────────────────
 # The reply keyboard the user taps. Each label maps to a command token, and the
 # router understands the label as well as the token, so a tap works like typing.
@@ -919,13 +927,22 @@ class TradeCardWatch:
     and a fresh one (a new entry/stop/target) is news. A card is only announced
     when a direction holds — a NEUTRAL read has no numbers and never alerts.
 
+    The identity alone is not enough: on a live tape the freshest M5 close is
+    the entry, so the levels move every few minutes and the identity changes with
+    them. A cooldown on top caps the rate at one alert per window
+    (``CARD_ALERT_COOLDOWN``, 600s by default, overridable with
+    ``ASTRA_CARD_ALERT_COOLDOWN``); the first genuine change after the window
+    fires and the rest are dropped, never queued, so a burst is not replayed.
+
     Read-only, like everything else here: it announces a level, it never acts on
     one, and it carries no execution authority.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, cooldown: float = CARD_ALERT_COOLDOWN) -> None:
         self._primed = False
         self._last: Optional[tuple] = None
+        self._cooldown = cooldown
+        self._last_alert = 0.0
 
     @staticmethod
     def _key(card: Dict[str, Any]) -> Optional[tuple]:
@@ -947,6 +964,10 @@ class TradeCardWatch:
         if key is None or key == self._last:
             return []
         self._last = key
+        now = time.time()
+        if now - self._last_alert < self._cooldown:
+            return []
+        self._last_alert = now
         return [format_trade_card(card)]
 
 
@@ -1095,6 +1116,9 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
     p.add_argument("--no-card-alerts", action="store_true",
                    default=os.environ.get("ASTRA_CARD_ALERTS", "1") == "0",
                    help="disable push alerts for new advisor trade cards")
+    p.add_argument("--card-alert-cooldown", type=float,
+                   default=CARD_ALERT_COOLDOWN,
+                   help="seconds between card alerts (default: 600)")
     return p.parse_args(argv)
 
 
@@ -1131,7 +1155,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         subs.add(args.chat)
     router = CommandRouter(api, subs, args.chat or None, levels=levels, ent=ent,
                            vol_model=vol_model)
-    card_watch = None if args.no_card_alerts else TradeCardWatch()
+    card_watch = None if args.no_card_alerts else TradeCardWatch(args.card_alert_cooldown)
 
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         _signal.signal(sig, lambda *_: _stop.set())
