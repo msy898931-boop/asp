@@ -1,5 +1,9 @@
 # AURA / ASTRA
 
+**Version 1.0.0** — the product tag, in `VERSION`, surfaced by `/version.json`
+(the per-artifact tags `android`, `desktop`, `api-v1.0` each cover one surface;
+this one covers the product).
+
 ## Identity
 - Technical project: **AURA**
 - Product brand: **ASTRA**
@@ -90,21 +94,21 @@ proof the background channel works without waiting for a market signal. See
 
 ## Tests
 
-Measured on this fork (2026-10-16):
+Measured on this fork (2026-10-21):
 
 | Suite | Tests |
 | --- | --- |
-| `bot/` | 152 |
+| `bot/` | 161 |
 | `tracker/` | 44 |
 | `research/` | 50 |
 | `akoan/` | 59 |
-| `advisor/` | 92 |
-| `mobile/` | 151 |
-| `bridge/telegram_bot/` | 94 |
+| `advisor/` | 203 |
+| `mobile/` | 227 |
+| `bridge/telegram_bot/` | 180 |
 | `tests/` (models, integration, features) | 308 |
-| **Total (Python)** | **961** |
+| **Total (Python)** | **1232** |
 
-Plus 19 C++ test binaries (`ctest`). Run a suite with
+Plus 20 C++ test binaries (`ctest`). Run a suite with
 `python3 -m unittest discover -s <suite> -p "test_*.py"`. Every Python suite
 also runs in CI, so the figures above are re-measured on each push.
 

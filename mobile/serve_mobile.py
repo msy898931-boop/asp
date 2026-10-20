@@ -239,6 +239,21 @@ def _commit_stamp() -> str:
     return "unknown"
 
 
+def _product_version() -> str:
+    """The product version, read once from the repo-root VERSION file.
+
+    The per-artifact tags (android, desktop, api-v1.0) each cover one surface;
+    this is the single tag for the product as a whole, so 'what version is
+    live?' has one answer. Falls back to 'unknown' if the file is absent, so a
+    partial checkout still serves.
+    """
+    try:
+        with open(os.path.join(ROOT, "VERSION"), "r", encoding="utf-8") as fh:
+            return fh.read().strip() or "unknown"
+    except OSError:
+        return "unknown"
+
+
 def _stamp_shell(body: bytes) -> bytes:
     return _SHELL_ASSET_RE.sub(
         lambda m: b'%s="%s?v=%s"' % (m.group(1), m.group(2), _BUILD.encode()),
@@ -880,6 +895,7 @@ class Handler(BaseHTTPRequestHandler):
         be cached.
         """
         body = json.dumps({
+            "product": _product_version(),
             "shell": _BUILD,
             "commit": _commit_stamp(),
             "started_at": int(_STARTED_AT),
