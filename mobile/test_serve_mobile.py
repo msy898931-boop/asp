@@ -274,6 +274,17 @@ class VersionRouteTest(unittest.TestCase):
         self.assertIn("commit", body)
         self.assertGreaterEqual(body["uptime_s"], 0)
 
+    def test_version_route_reports_the_product_version(self):
+        """One tag for the whole product, so 'what version is live?' has one answer."""
+        status, _headers, body = self._get("/version.json")
+        self.assertEqual(status, 200)
+        self.assertIn("product", body)
+        self.assertEqual(body["product"], sm._product_version())
+        self.assertNotEqual(body["product"], "")
+
+    def test_product_version_reads_the_version_file(self):
+        self.assertEqual(sm._product_version(), "1.0.0")
+
     def test_commit_comes_from_the_host_env_when_present(self):
         old = os.environ.get("RENDER_GIT_COMMIT")
         os.environ["RENDER_GIT_COMMIT"] = "abcdef1234567890"
