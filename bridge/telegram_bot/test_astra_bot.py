@@ -421,6 +421,20 @@ class ArabicSurfaceTests(unittest.TestCase):
             for label in row:
                 self.assertIn(label, bot.BUTTON_COMMANDS)
 
+    def test_the_keyboard_stays_small(self):
+        # The keyboard is for the day-to-day essentials only. It drifted to
+        # eleven buttons once; this pins it so it cannot creep back.
+        labels = [label for row in bot.REPLY_KEYBOARD for label in row]
+        self.assertLessEqual(len(labels), 6)
+        self.assertEqual(len(labels), len(set(labels)), "no duplicate buttons")
+
+    def test_trimmed_buttons_still_work_when_typed(self):
+        # Dropping a button must not drop the function: the Arabic phrase and
+        # the plain command both keep working.
+        router, _, _ = _paid_router()
+        self.assertIn("XAUUSD", router.handle("9", "📊 حالة السوق"))
+        self.assertIn("XAUUSD", router.handle("9", "/status"))
+
     def test_tapping_a_button_runs_its_command(self):
         router, _, _levels = _paid_router()
         out = router.handle("9", "🔔 مستوى جديد")  # same as /level

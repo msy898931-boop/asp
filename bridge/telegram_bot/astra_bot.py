@@ -135,15 +135,18 @@ FORECAST_PREP_MIN = float(os.environ.get("ASTRA_FORECAST_PREP_MIN", "60"))
 # ── the user-facing surface (Arabic) ────────────────────────────────────────
 # The reply keyboard the user taps. Each label maps to a command token, and the
 # router understands the label as well as the token, so a tap works like typing.
+# Kept deliberately short: only the day-to-day essentials sit here. Everything
+# else stays reachable by typing it, through the "/" menu (BOT_COMMANDS) and
+# through /help, so a smaller keyboard costs no function.
 REPLY_KEYBOARD: List[List[str]] = [
-    ["💰 سعر الذهب", "📊 حالة السوق"],
-    ["🎯 بطاقة الصفقة", "📰 الأخبار والذهب"],
-    ["🧭 توقّع الخبر", "🔔 مستوى جديد"],
-    ["📋 مستوياتي", "🗑 مسح المستويات"],
-    ["🤖 محرّك التحليل", "⭐ خطتي"],
-    ["❓ مساعدة"],
+    ["💰 سعر الذهب", "🎯 بطاقة الصفقة"],
+    ["🤖 محرّك التحليل", "📰 الأخبار والذهب"],
+    ["🔔 مستوى جديد", "❓ مساعدة"],
 ]
 
+# Arabic phrase -> command. Covers every label the keyboard has ever shown, so
+# a user who types the Arabic phrase still gets the command even when the
+# button is no longer on the keyboard.
 BUTTON_COMMANDS: Dict[str, str] = {
     "💰 سعر الذهب": "/price",
     "📊 حالة السوق": "/status",
@@ -808,7 +811,7 @@ class CommandRouter:
             cmd = BUTTON_COMMANDS[raw]
             text = cmd
         try:
-            if cmd in ("/start", "/help"):
+            if cmd in ("/start", "/help", "/menu"):
                 return self.HELP
             if cmd == "/myid":
                 return (f"🆔 معرّف محادثتك: {chat_id}\n"
