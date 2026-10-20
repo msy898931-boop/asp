@@ -125,7 +125,12 @@ def main() -> int:
             if sig.get(key) is not None:
                 out.append(f"signal.{key} is non-null (frozen null this release)")
         for key, val in lv.items():
-            if val is not None:
+            # `targets` is the scaled-target ladder: structurally an empty list
+            # in the no-proposal posture, never null (the host emits `[]`).
+            if key == "targets":
+                if val != []:
+                    out.append("levels.targets is not empty (frozen posture)")
+            elif val is not None:
                 out.append(f"levels.{key} is non-null (frozen null this release)")
         if meta.get("data_freshness_sec") is not None:
             out.append("meta.data_freshness_sec is non-null (frozen null this release)")
@@ -176,7 +181,8 @@ def main() -> int:
     check("uncalibrated: score_is_probability is false",
           meta["score_is_probability"] is False)
     check("uncalibrated: every level is null",
-          all(lv[k] is None for k in lv))
+          all(v is None for k, v in lv.items() if k != "targets")
+          and lv.get("targets") == [])
     # F22-1: model_version is a frozen null this release (BACKEND_FRONTEND_API_V1.md)
     check("uncalibrated: model_version is null (F22-1)",
           sig["model_version"] is None)

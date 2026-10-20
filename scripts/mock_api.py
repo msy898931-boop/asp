@@ -212,18 +212,25 @@ def signal_obj(calibrated: bool) -> dict:
     }
 
 
-def levels_obj() -> dict:
+def levels_obj(with_targets: bool = True) -> dict:
     # Frozen nulls in v1: levels come from a live risk proposal, which does not
-    # exist on the synthetic path (F19-1; F15-3 T17 freeze).
-    return {
+    # exist on the synthetic path (F19-1; F15-3 T17 freeze). `targets` is the
+    # scaled-target ladder the host emits on /analysis/latest only; the history
+    # route persists no levels at all, so it omits the key (matching the host).
+    out: dict[str, object] = {
         "entry": None,
         "stop_loss": None,
         "take_profit": None,
+    }
+    if with_targets:
+        out["targets"] = []
+    out.update({
         "reward_risk": None,
         "suggested_risk_pct": None,
         "sl_method": None,
         "tp_method": None,
-    }
+    })
+    return out
 
 
 def meta_obj(calibrated: bool, tier: str) -> dict:
@@ -239,14 +246,14 @@ def meta_obj(calibrated: bool, tier: str) -> dict:
     }
 
 
-def analysis_obj(calibrated: bool, index: int = 0) -> dict:
+def analysis_obj(calibrated: bool, index: int = 0, with_targets: bool = True) -> dict:
     tier = "medium" if calibrated else "unknown"
     return {
         "timestamp": f"2026-10-07T22:{index:02d}:00Z" if calibrated else None,
         "symbol": "XAUUSD",
         "context": context_obj(calibrated),
         "signal": signal_obj(calibrated),
-        "levels": levels_obj(),
+        "levels": levels_obj(with_targets),
         "meta": meta_obj(calibrated, tier),
     }
 
@@ -413,7 +420,7 @@ def build_payloads(schema: dict, calibrated: bool) -> dict:
         }
     )
     payloads["GET /api/v1/analysis/history"] = envelope(
-        [analysis_obj(calibrated, i) for i in range(3)]
+        [analysis_obj(calibrated, i, with_targets=False) for i in range(3)]
     )
     del snapshot
     return payloads
@@ -457,9 +464,12 @@ def check(schema: dict) -> int:
         default["meta"]["data_freshness_sec"],
         default["context"]["mtf_agreement"],
         default["timestamp"],
-        *default["levels"].values(),
+        # `targets` is the one levels key that is structurally an empty list in
+        # the no-proposal posture (the host emits `[]`, never null), so it is
+        # asserted as empty rather than null.
+        *[v for k, v in default["levels"].items() if k != "targets"],
     ]
-    if any(v is not None for v in frozen_nulls):
+    if any(v is not None for v in frozen_nulls) or default["levels"]["targets"] != []:
         failures += 1
         print("[FAIL] F19-4 frozen-null set present in default analysis payload")
     else:
@@ -517,7 +527,7 @@ class Handler(BaseHTTPRequestHandler):
                         limit = 50
             limit = max(0, min(500, limit))
             entries = [
-                analysis_obj(self.calibrated, i) for i in range(limit)
+                analysis_obj(self.calibrated, i, with_targets=False) for i in range(limit)
             ]
             self._send(200, envelope(entries))
             return
