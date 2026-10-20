@@ -139,9 +139,8 @@ FORECAST_PREP_MIN = float(os.environ.get("ASTRA_FORECAST_PREP_MIN", "60"))
 # else stays reachable by typing it, through the "/" menu (BOT_COMMANDS) and
 # through /help, so a smaller keyboard costs no function.
 REPLY_KEYBOARD: List[List[str]] = [
-    ["💰 سعر الذهب", "🎯 بطاقة الصفقة"],
-    ["🤖 محرّك التحليل", "📰 الأخبار والذهب"],
-    ["🔔 مستوى جديد", "❓ مساعدة"],
+    ["💰 سعر الذهب", "🤖 محرّك التحليل"],
+    ["🎯 بطاقة الصفقة", "❓ مساعدة"],
 ]
 
 # Arabic phrase -> command. Covers every label the keyboard has ever shown, so

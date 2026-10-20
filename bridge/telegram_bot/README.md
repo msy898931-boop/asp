@@ -25,12 +25,12 @@ dependencies.
   - `/myid` — your chat id
   - `/subscribe` / `/unsubscribe` — push alerts on/off
   - `/help` — command list
-- **Reply keyboard**: deliberately short — six essentials only
-  (`/price`, `/card`, `/engine`, `/news`, `/level`, `/help`). Every other
-  command stays reachable by typing it, through the `/` menu and `/help`, so a
-  smaller keyboard costs no function. A phrase the keyboard once showed still
-  maps to its command (`BUTTON_COMMANDS`), so typing the Arabic label works
-  even after its button is gone.
+- **Reply keyboard**: deliberately short — four essentials only
+  (`/price`, `/engine`, `/card`, `/help`). Every other command stays reachable by
+  typing it, through the `/` menu and `/help`, so a smaller keyboard costs no
+  function. A phrase the keyboard once showed still maps to its command
+  (`BUTTON_COMMANDS`), so typing the Arabic label works even after its button is
+  gone.
 - **Push alerts** (checked every `--interval` seconds): health transitions,
   MT5 bridge online/offline, new recorded signals, and — via `NewsWatch` —
   the two moments that matter around a high-impact release: the blackout
