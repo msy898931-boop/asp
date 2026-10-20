@@ -140,7 +140,8 @@ REPLY_KEYBOARD: List[List[str]] = [
     ["🎯 بطاقة الصفقة", "📰 الأخبار والذهب"],
     ["🧭 توقّع الخبر", "🔔 مستوى جديد"],
     ["📋 مستوياتي", "🗑 مسح المستويات"],
-    ["⭐ خطتي", "❓ مساعدة"],
+    ["🤖 محرّك التحليل", "⭐ خطتي"],
+    ["❓ مساعدة"],
 ]
 
 BUTTON_COMMANDS: Dict[str, str] = {
@@ -152,6 +153,7 @@ BUTTON_COMMANDS: Dict[str, str] = {
     "🔔 مستوى جديد": "/level",
     "📋 مستوياتي": "/levels",
     "🗑 مسح المستويات": "/clearlevels",
+    "🤖 محرّك التحليل": "/engine",
     "⭐ خطتي": "/plan",
     "❓ مساعدة": "/help",
 }
@@ -168,6 +170,7 @@ BOT_COMMANDS: List[tuple] = [
     ("/clearlevels", "حذف كل مستوياتي"),
     ("/status", "حالة النظام والوضع"),
     ("/card", "بطاقة صفقة متعدّدة الفريمات"),
+    ("/engine", "قراءة محرّك التحليل الذكي (تقديرات)"),
     ("/plan", "خطتي وحدودي"),
     ("/myid", "معرّف محادثتي"),
     ("/subscribe", "تشغيل التنبيهات"),
@@ -400,6 +403,84 @@ def format_bridge(data: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def format_engine(engine: Dict[str, Any]) -> str:
+    """The isolated AI engine's read, rendered for a phone screen.
+
+    Every number here is the model's own claim, never a measurement: the engine
+    stamps ``validated: false`` and the win-rate is an estimate. The renderer
+    keeps that honesty — it labels the win-rate as an estimate and closes with
+    the shadow-mode line, so a trade read from the bot can never read as a
+    measured signal.
+
+    Degrades in the same shape as the rest of the bot: an unconfigured engine
+    reports what to set, a paused one says the quota is spent, and a live one
+    lists its trades with the model's levels.
+    """
+    if not engine:
+        return "🤖 محرّك التحليل غير متاح على هذا الخادم (غير منصّب)."
+
+    provider = engine.get("provider") or "?"
+    lines = [f"🤖 محرّك التحليل · {provider}"]
+
+    if not engine.get("configured", True):
+        lines.append("المحرّك غير مفعّل: لم يُضبط مفتاح المزوّد.")
+        lines.append("وضع الظل. ليست نصيحة مالية.")
+        return "\n".join(lines)
+
+    if engine.get("rate_limited"):
+        lines.append("⏸ متوقّف مؤقتًا: حصة المزوّد اليومية استُهلكت.")
+        lines.append("وضع الظل. ليست نصيحة مالية.")
+        return "\n".join(lines)
+
+    analysis = engine.get("analysis")
+    if not isinstance(analysis, dict):
+        lines.append(engine.get("note") or "لا قراءة متاحة الآن.")
+        lines.append("وضع الظل. ليست نصيحة مالية.")
+        return "\n".join(lines)
+
+    bias = _signal_ar(analysis.get("bias"))
+    lines.append(f"الميل العام: {bias}")
+
+    read = str(analysis.get("market_read") or "").strip()
+    if read:
+        lines.append("")
+        lines.append(read)
+
+    trades = analysis.get("trades") or []
+    if not trades:
+        lines.append("")
+        lines.append("لا صفقات: الفريمات غير متوافقة أو لا إعداد متماسك الآن.")
+    for i, t in enumerate(trades, 1):
+        direction = _signal_ar(t.get("direction"))
+        tf = t.get("timeframe") or "?"
+        lines.append("")
+        lines.append(f"#{i} {direction} ({tf})")
+        lines.append(f"  دخول {_num(t.get('entry'))} · وقف {_num(t.get('stop'))}")
+        targets = t.get("targets") or ([t.get("target")]
+                                       if t.get("target") is not None else [])
+        if targets:
+            lines.append("  أهداف " + " ← ".join(_num(x) for x in targets))
+        rr = t.get("reward_risk")
+        if rr is not None:
+            lines.append(f"  المخاطرة/المكافأة {rr}")
+        win = t.get("win_rate")
+        if win is not None:
+            try:
+                pct = round(float(win) * 100)
+                lines.append(f"  احتمال النجاح (تقدير الموديل): {pct}%")
+            except (TypeError, ValueError):
+                lines.append(f"  احتمال النجاح (تقدير الموديل): {win}")
+
+    event = str(analysis.get("key_event") or "").strip()
+    if event:
+        lines.append("")
+        lines.append(f"🗓 الحدث المهم: {event}")
+
+    lines.append("")
+    lines.append("تقديرات الموديل، لا حافة مقيسة. وضع الظل: لا تنفيذ ولا أوامر.")
+    return "\n".join(lines)
+
+
 # ─────────────────────────── news formatting ────────────────────────────────
 
 _NEWS_WINDOW_AR: Dict[str, str] = {
@@ -577,6 +658,7 @@ class CommandRouter:
         "📊 /status - حالة النظام والوضع\n"
         "🌊 /vol - توقّع تقلّب السوق (لا يتنبّأ بالاتجاه)\n"
         "🎯 /card - بطاقة صفقة متعدّدة الفريمات (أرقام محسوبة)\n"
+        "🤖 /engine - قراءة محرّك التحليل الذكي (تقديرات الموديل، لا حافة مقيسة)\n"
         "🩺 /health - تفاصيل الصحة\n"
         "📈 /analysis - آخر تحليل\n"
         "📶 /bridge - حالة جسر MT5\n"
@@ -668,6 +750,21 @@ class CommandRouter:
             return "🎯 تعذّر قراءة بطاقة الصفقة (المستشار غير متاح الآن)."
         return "🎯 بطاقة الصفقة\n" + mtf_read.format_card(card)
 
+    def _engine_command(self) -> str:
+        """The isolated AI engine's latest read, on demand.
+
+        The engine is opt-in (``ASTRA_ENABLE_ENGINE=1``) and answers on its own
+        port, so a missing one is expected and reported plainly rather than
+        treated as a fault. Reading it can spend the model's token quota, which
+        is why this is an explicit request and never polled.
+        """
+        try:
+            engine = self.api.engine_read()
+        except ApiError:
+            return ("🤖 محرّك التحليل غير متاح الآن (غير منصّب أو متوقّف). "
+                    "فعّله بـ ASTRA_ENABLE_ENGINE=1.")
+        return format_engine(engine)
+
     def _news_command(self) -> str:
         """The live news read: window, schedule, tape and headlines."""
         d = news_digest()
@@ -755,6 +852,8 @@ class CommandRouter:
                 return self._vol_command()
             if cmd == "/card":
                 return self._card_command()
+            if cmd == "/engine":
+                return self._engine_command()
             if cmd == "/news":
                 return self._news_command()
             if cmd == "/forecast":

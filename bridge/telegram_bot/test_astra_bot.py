@@ -1148,6 +1148,139 @@ class CardCommandTests(unittest.TestCase):
         self.assertIn("/card", dict(bot.BOT_COMMANDS))
 
 
+def _engine(configured=True, rate_limited=False, bias="LONG",
+            market_read="الفريمات متوافقة صعودًا.", trades=None,
+            key_event="", analysis=True, provider="mistral", model="m"):
+    """An engine envelope shaped exactly as ai_engine.py emits it."""
+    if trades is None:
+        trades = [{
+            "direction": "LONG", "entry": 4122.5, "stop": 4110.0,
+            "targets": [4135.0, 4148.0], "target": 4148.0,
+            "risk": 12.5, "reward": 25.5, "reward_risk": 2.04,
+            "win_rate": 0.58, "rationale": "امتداد الاتجاه",
+            "timeframe": "H1", "win_rate_validated": False,
+            "anchor": {"anchored": True, "note": ""},
+        }]
+    env = {
+        "schema_version": "1.0", "symbol": "XAUUSD", "validated": False,
+        "source": "ai-engine (isolated)", "provider": provider,
+        "configured": configured, "model": model if configured else None,
+        "snapshot": {"price": 4122.0, "timeframes": {}, "rule_card": None},
+        "analysis": None,
+    }
+    if rate_limited:
+        env["rate_limited"] = True
+        env["note"] = "AI engine paused: the provider's daily quota is spent."
+    elif configured and analysis:
+        env["analysis"] = {
+            "market_read": market_read, "bias": bias, "trades": trades,
+            "rejected": [], "news_used": False, "key_event": key_event,
+        }
+        env["note"] = "AI analysis engine output."
+    return env
+
+
+class FakeEngineApi(FakeApi):
+    """A fake backend whose engine returns a canned read (or is unreachable)."""
+
+    def __init__(self, engine, available=True):
+        super().__init__(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY,
+                         available=available)
+        self._engine = engine
+
+    def engine_read(self, refresh=False):
+        self._maybe_raise()
+        return self._engine
+
+
+class EngineFormatTests(unittest.TestCase):
+    def test_a_trade_carries_the_exact_levels_and_direction(self):
+        text = bot.format_engine(_engine())
+        self.assertIn("شراء", text)
+        self.assertIn("4122.5", text)
+        self.assertIn("4110", text)
+        self.assertIn("4135", text)
+        self.assertIn("4148", text)
+
+    def test_the_win_rate_is_labelled_as_the_model_estimate(self):
+        # The engine stamps win_rate_validated: false; the reply must not read
+        # as a measured probability.
+        text = bot.format_engine(_engine())
+        self.assertIn("تقدير الموديل", text)
+        self.assertIn("58%", text)
+
+    def test_the_shadow_disclaimer_always_closes_a_live_read(self):
+        text = bot.format_engine(_engine())
+        self.assertIn("وضع الظل", text)
+        self.assertIn("لا تنفيذ", text)
+
+    def test_a_neutral_read_reports_no_trades_honestly(self):
+        text = bot.format_engine(_engine(bias="NEUTRAL", trades=[]))
+        self.assertIn("حياد", text)
+        self.assertIn("لا صفقات", text)
+        self.assertNotIn("دخول", text)
+
+    def test_a_scaled_ladder_renders_every_target(self):
+        trades = [{"direction": "SHORT", "entry": 4150.0, "stop": 4162.0,
+                   "targets": [4138.0, 4126.0, 4114.0], "target": 4114.0,
+                   "reward_risk": 3.0, "win_rate": 0.5, "timeframe": "H4"}]
+        text = bot.format_engine(_engine(bias="SHORT", trades=trades))
+        for level in ("4138", "4126", "4114"):
+            self.assertIn(level, text)
+
+    def test_an_unconfigured_engine_says_what_to_set(self):
+        text = bot.format_engine(_engine(configured=False, analysis=False))
+        self.assertIn("غير مفعّل", text)
+        self.assertIn("وضع الظل", text)
+
+    def test_a_paused_engine_reports_the_spent_quota(self):
+        text = bot.format_engine(_engine(rate_limited=True, analysis=False))
+        self.assertIn("استُهلكت", text)
+
+    def test_a_missing_engine_is_reported_plainly(self):
+        self.assertIn("غير متاح", bot.format_engine({}))
+
+    def test_the_key_event_is_surfaced_when_present(self):
+        text = bot.format_engine(_engine(key_event="قرار الفائدة 20:00"))
+        self.assertIn("قرار الفائدة", text)
+
+    def test_a_missing_level_renders_as_a_dash_not_a_crash(self):
+        trades = [{"direction": "LONG", "entry": None, "stop": None,
+                   "targets": [], "target": None, "reward_risk": None,
+                   "win_rate": None, "timeframe": "M15"}]
+        text = bot.format_engine(_engine(trades=trades))
+        self.assertIn("—", text)
+
+
+class EngineCommandTests(unittest.TestCase):
+    def _router(self, engine, available=True):
+        api = FakeEngineApi(engine, available)
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+        return bot.CommandRouter(api, subs, None), api
+
+    def test_engine_command_renders_the_read(self):
+        router, _ = self._router(_engine())
+        reply = router.handle("1", "/engine")
+        self.assertIn("4122.5", reply)
+        self.assertIn("وضع الظل", reply)
+
+    def test_engine_button_runs_the_command(self):
+        router, _ = self._router(_engine())
+        self.assertIn("4122.5", router.handle("1", "🤖 محرّك التحليل"))
+
+    def test_engine_command_degrades_when_the_engine_is_down(self):
+        router, _ = self._router(_engine(), available=False)
+        reply = router.handle("1", "/engine")
+        self.assertIn("غير متاح", reply)
+        self.assertIn("ASTRA_ENABLE_ENGINE", reply)
+
+    def test_help_lists_the_engine_command(self):
+        self.assertIn("/engine", bot.CommandRouter.HELP)
+
+    def test_the_menu_lists_the_engine_command(self):
+        self.assertIn("/engine", dict(bot.BOT_COMMANDS))
+
+
 class CommandMenuPayloadTest(unittest.TestCase):
     """Telegram rejects a command name that carries the leading slash with
     BOT_COMMAND_INVALID and drops the entire list, so the menu stays empty in

@@ -580,7 +580,8 @@ def _model_chain() -> tuple[str, ...]:
     if override:
         chain = [m.strip() for m in override.split(",") if m.strip()]
     else:
-        chain = [active_model(), *_FALLBACK_MODELS.get(PROVIDER, ())]
+        first = active_model()
+        chain = ([first] if first else []) + list(_FALLBACK_MODELS.get(PROVIDER, ()))
     seen: list[str] = []
     for model in chain:
         if model and model not in seen:
