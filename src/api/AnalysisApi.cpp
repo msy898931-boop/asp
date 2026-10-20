@@ -112,6 +112,12 @@ std::string levelsJson(const DecisionContext& context) {
         fields.push_back({"entry", jsonNumber(context.risk.entryPrice), true});
         fields.push_back({"stop_loss", jsonNumber(context.risk.stopPrice), true});
         fields.push_back({"take_profit", jsonNumber(context.risk.targetPrice), true});
+        std::vector<std::string> ladder;
+        ladder.reserve(TARGET_LADDER_SIZE);
+        for (const double level : context.risk.targetLadder) {
+            ladder.push_back(jsonNumber(level));
+        }
+        fields.push_back({"targets", jsonArray(ladder), true});
         fields.push_back({"reward_risk",
                           jsonNumber(context.risk.rewardRiskRatio), true});
         fields.push_back({"suggested_risk_pct",
@@ -120,6 +126,7 @@ std::string levelsJson(const DecisionContext& context) {
         fields.push_back({"entry", kNull, true});
         fields.push_back({"stop_loss", kNull, true});
         fields.push_back({"take_profit", kNull, true});
+        fields.push_back({"targets", jsonArray({}), true});
         fields.push_back({"reward_risk", kNull, true});
         fields.push_back({"suggested_risk_pct", kNull, true});
     }

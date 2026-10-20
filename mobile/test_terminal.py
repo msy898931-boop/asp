@@ -179,9 +179,19 @@ class MarketPanelTest(unittest.TestCase):
     def test_trade_plan_comes_from_the_risk_proposal(self):
         js = _read(TERMINAL_JS)
         for field in ("levels.entry", "levels.stop_loss", "levels.take_profit",
-                      "levels.reward_risk", "levels.suggested_risk_pct"):
+                      "levels.targets", "levels.reward_risk",
+                      "levels.suggested_risk_pct"):
             with self.subTest(field=field):
                 self.assertIn(field, js)
+
+    def test_the_scaled_ladder_renders_as_its_own_row(self):
+        js = _read(TERMINAL_JS)
+        # A ladder is only drawn when there is more than one rung, so a
+        # single-target card keeps the older five-cell grid.
+        self.assertIn("levels.targets", js)
+        self.assertIn("function ladderCell", js)
+        self.assertIn("plan-cell-wide", js)
+        self.assertIn("ladder.length > 1", js)
 
     def test_positions_and_outcomes_are_read_from_the_shadow_surfaces(self):
         js = _read(TERMINAL_JS)

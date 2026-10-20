@@ -168,6 +168,12 @@ def format_report(rows: list[dict], day: str, min_scored: int = MIN_SCORED) -> s
             lines.append("⏳ %s %s مفتوحة · وقف %s · هدف %s"
                          % (_hhmm(r["time"]), r.get("direction"),
                             r.get("stop"), r.get("target")))
+            ladder = bot.target_ladder(r.get("entry"), r.get("stop"),
+                                       r.get("target"))
+            if len(ladder) > 1:
+                lines.append("    ↳ الأهداف (%d): %s"
+                             % (len(ladder),
+                                " ← ".join(str(t) for t in ladder)))
             reason = _reason(r)
             if reason:
                 lines.append("    ↳ %s" % reason)

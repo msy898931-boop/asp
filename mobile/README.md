@@ -31,6 +31,10 @@ scripts/check_deploy.sh https://astra-xlp9.onrender.com
   the market-data source (clearly labelled when it is the synthetic replay feed).
 - **Signal** — direction, regime, entry / stop / target / R:R, score and context.
 - **Chart** — closed-bar candles for the nine canonical timeframes.
+- **Analysis** — the isolated AI engine's own read (behind **More**): its bias,
+  a two-or-three-sentence market read, and up to three trades with entry, stop, a
+  scaled target ladder, reward:risk and the model's own win-rate **labelled as an
+  estimate**. Outside the validated system; the panel says so.
 - **Bridge** — the loopback market-data link's own state.
 
 Everything is read-only and shadow-mode: the app never places trades, and the
@@ -39,12 +43,12 @@ proxies `GET` requests to it.
 
 ## Client source layout
 
-The client is plain JavaScript with no build step. `index.html` loads nine
+The client is plain JavaScript with no build step. `index.html` loads ten
 classic scripts in a fixed order — `app.js`, then `i18n`, `panels`, `advisor`,
-`tracker`, `alerts`, `vol`, `akoan`, `ticker` — and they share one global scope,
-exactly as a single file did before the split. `app.js` holds the shared state
-and the network helpers, so it must stay first. Each script is precached in
-`sw.js` and stamped with the build token by `serve_mobile.py`; the
+`tracker`, `alerts`, `vol`, `akoan`, `engine`, `ticker` — and they share one
+global scope, exactly as a single file did before the split. `app.js` holds the
+shared state and the network helpers, so it must stay first. Each script is
+precached in `sw.js` and stamped with the build token by `serve_mobile.py`; the
 `ClientScriptContractTest` in `test_serve_mobile.py` pins that, so a new script
 cannot ship half-wired.
 

@@ -881,8 +881,14 @@ class ForecastWatchTests(unittest.TestCase):
 
 
 def _card(verdict="LONG", entry=2651.4, stop=2643.1, target=2667.9, rr=2.0,
-          available=True, direction_tf="LONG", rsi=57.0):
+          available=True, direction_tf="LONG", rsi=57.0, targets=None):
     """A trade card shaped exactly as the advisor's reply carries it."""
+    inner = None if not available or verdict == "NEUTRAL" else {
+        "direction": verdict, "entry": entry, "stop": stop,
+        "target": target, "rr": rr, "agreement": "4/5",
+    }
+    if inner is not None and targets is not None:
+        inner["targets"] = targets
     return {
         "available": available,
         "verdict": verdict,
@@ -890,10 +896,7 @@ def _card(verdict="LONG", entry=2651.4, stop=2643.1, target=2667.9, rr=2.0,
         "timeframes": {tf: {"direction": direction_tf, "rsi": rsi}
                        for tf in ("M5", "M15", "M30", "H1", "H4")},
         "reason": "no majority across timeframes",
-        "card": None if not available or verdict == "NEUTRAL" else {
-            "direction": verdict, "entry": entry, "stop": stop,
-            "target": target, "rr": rr, "agreement": "4/5",
-        },
+        "card": inner,
     }
 
 
@@ -936,11 +939,38 @@ class TradeCardFormatTests(unittest.TestCase):
         self.assertIn("M15", text)
         self.assertIn("▲", text)
 
+    def test_a_scaled_ladder_is_pushed_as_one_list(self):
+        targets = [2660.0, 2664.0, 2668.0, 2672.0, 2676.0]
+        text = bot.format_trade_card(_card(target=2676.0, targets=targets))
+        self.assertIn("الأهداف (5)", text)
+        for t in targets:
+            self.assertIn(str(t), text)
+
+    def test_a_single_target_still_renders_as_before(self):
+        # Older cards (no ladder) must keep their exact wording.
+        text = bot.format_trade_card(_card())
+        self.assertIn("الهدف: 2667.9", text)
+        self.assertNotIn("الأهداف", text)
+
 
 class TradeCardWatchTests(unittest.TestCase):
     def test_first_poll_primes_and_stays_silent(self):
         watch = bot.TradeCardWatch()
         self.assertEqual(watch.poll(_card()), [])
+
+    def test_a_ladder_only_change_is_news(self):
+        # The stop holds, but the whole ladder shifts by most of a risk: the
+        # targets are what a trader acts on, so it is announced.
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(targets=[2660.0, 2664.0, 2668.0, 2672.0, 2676.0]))
+        out = watch.poll(_card(targets=[2668.0, 2672.0, 2676.0, 2680.0, 2684.0]))
+        self.assertEqual(len(out), 1)
+
+    def test_a_ladder_nudge_stays_quiet(self):
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(targets=[2660.0, 2664.0, 2668.0, 2672.0, 2676.0]))
+        self.assertEqual(
+            watch.poll(_card(targets=[2660.1, 2664.1, 2668.1, 2672.1, 2676.1])), [])
 
     def test_a_new_card_alerts_once(self):
         watch = bot.TradeCardWatch()

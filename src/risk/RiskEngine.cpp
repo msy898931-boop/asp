@@ -15,6 +15,7 @@ RiskProposal RiskEngine::propose(const SignalCandidate& candidate,
     proposal.entryPrice = candidate.referencePrice;
     proposal.stopPrice = candidate.suggestedStop;
     proposal.targetPrice = candidate.suggestedTarget;
+    proposal.targetLadder = candidate.suggestedTargets;
 
     if (candidate.direction == SignalDirection::NONE) {
         proposal.decision = RiskDecision::DENIED;

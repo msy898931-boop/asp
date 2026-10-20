@@ -39,11 +39,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 TRACKER_BASE = os.environ.get("ASTRA_BOT_TRACKER", "http://127.0.0.1:8793")
+# The isolated AI engine (advisor/ai_engine.py). Optional: /ai only answers when
+# the engine is running, and an unreachable engine is reported as such, never
+# as an error in the tracker.
+ENGINE_BASE = os.environ.get("ASTRA_BOT_ENGINE", "http://127.0.0.1:8794")
 POLL_SECONDS = float(os.environ.get("ASTRA_BOT_POLL", "20"))
 HTTP_TIMEOUT = float(os.environ.get("ASTRA_BOT_TIMEOUT", "15"))
 STATE_PATH = os.environ.get("ASTRA_BOT_STATE",
                             os.path.join(ROOT, "run", "telegram_state.json"))
 _USER_AGENT = os.environ.get("ASTRA_BOT_USER_AGENT", "ASTRA-bot/1.0")
+
+# How many rungs the single target is split into for the alert card. The last
+# rung is the simulator's target, so the ledger and the alert never disagree.
+LADDER_STEPS = int(os.environ.get("ASTRA_BOT_LADDER_STEPS", "5"))
 
 OUTCOME_AR = {"TARGET": "✅ أصابت الهدف", "STOP": "❌ ضربت الوقف",
               "TIMEOUT": "⌛ انتهت المدّة", "OPEN": "… مفتوحة"}
@@ -131,6 +139,25 @@ def signal_key(signal: dict) -> str:
     return "%s:%s" % (signal.get("time"), signal.get("direction"))
 
 
+def target_ladder(entry: float, stop: float, target: float,
+                  steps: int = LADDER_STEPS) -> list:
+    """The single target split into nearby rungs, nearest first.
+
+    The simulator and the ledger settle on the one target, so the plan a trader
+    acts on is that same target taken off in `steps` partial exits: the last rung
+    is exactly `target`, and the rungs below it are the earlier, nearer exits.
+    Returned as prices in travel order (ascending for a long, descending for a
+    short), so callers never have to know the direction.
+    """
+    if entry is None or stop is None or target is None or steps < 2:
+        return []
+    span = target - entry
+    if span == 0:
+        return []
+    # Even fractions of the run to the target; the last one is the target.
+    return [round(entry + span * (i + 1) / steps, 2) for i in range(steps)]
+
+
 def format_new(signal: dict, plan: dict | None = None) -> str:
     entry, stop, target = (signal.get("entry"), signal.get("stop"),
                            signal.get("target"))
@@ -140,6 +167,12 @@ def format_new(signal: dict, plan: dict | None = None) -> str:
         "الدخول: %s" % entry,
         "الوقف: %s  (مسافة %s$/أونصة)" % (stop, round(stop_dist, 2)),
         "الهدف: %s" % target,
+    ]
+    ladder = target_ladder(entry, stop, target)
+    if len(ladder) > 1:
+        lines.append("الأهداف (%d): %s" % (
+            len(ladder), " ← ".join(str(t) for t in ladder)))
+    lines += [
         "المخاطرة/العائد: 1.67",
         "السبب: النظام %s · الميل %s · RSI %s"
         % (_ar(REGIME_AR, signal.get("regime")),
@@ -289,6 +322,44 @@ def format_approach(signal: dict, bar: dict) -> str | None:
     ])
 
 
+def format_engine(result: dict) -> str:
+    """The isolated AI engine's read, as a chat message.
+
+    The engine's trades and win-rates are its own estimates, so every message
+    says so; an unconfigured or unreachable engine is reported plainly rather
+    than left blank.
+    """
+    if not result.get("configured"):
+        return "🧠 محرّك التحليل غير مفعّل. اضبط GROQ_API_KEY لتشغيله."
+    analysis = result.get("analysis")
+    if not analysis:
+        return "🧠 محرّك التحليل: %s" % (result.get("note") or "غير متاح")
+    lines = ["🧠 محرّك التحليل — %s" % _ar(BIAS_AR, analysis.get("bias"))]
+    read = analysis.get("market_read")
+    if read:
+        lines.append(read)
+    trades = analysis.get("trades") or []
+    if not trades:
+        lines.append("ما في صفقات نظامية بهالقراءة.")
+    for i, t in enumerate(trades, 1):
+        rate = t.get("win_rate")
+        rate_txt = "—" if rate is None else "%d%%" % round(rate * 100)
+        lines.append("")
+        lines.append("#%d %s (%s) · نسبة نجاح تقديرية %s"
+                     % (i, _ar(DIRECTION_AR, t.get("direction")),
+                        t.get("timeframe") or "—", rate_txt))
+        lines.append("دخول %s · وقف %s · أهداف %s"
+                     % (t.get("entry"), t.get("stop"),
+                        " ← ".join(str(x) for x in (t.get("targets") or []))))
+        lines.append("R:R %s" % t.get("reward_risk"))
+        if t.get("rationale"):
+            lines.append(t["rationale"])
+    lines.append("")
+    lines.append("تحليل تقديري من محرّك الذكاء الاصطناعي، خارج النظام المعتمد. "
+                 "نِسَب النجاح تقديرية وليست مقيسة. ما في تنفيذ صفقات.")
+    return "\n".join(lines)
+
+
 def format_summary(summary: dict) -> str:
     lines = ["📊 الملخّص",
              "الإشارات: %s" % summary.get("total_signals", 0),
@@ -392,9 +463,16 @@ class Bot:
                 else:
                     self.tg.send(self.chat_id,
                                  "\n\n".join(format_result(s) for s in rows))
+            elif text.startswith("/ai") or text.startswith("/engine"):
+                env = _get_json("%s/v1/engine" % ENGINE_BASE)
+                result = (env or {}).get("engine")
+                if not result:
+                    self.tg.send(self.chat_id, "محرّك التحليل غير متاح.")
+                    continue
+                self.tg.send(self.chat_id, format_engine(result))
             elif text.startswith("/start"):
                 self.tg.send(self.chat_id,
-                             "بوت ASTRA جاهز. الأوامر: /status /signals")
+                             "بوت ASTRA جاهز. الأوامر: /status /signals /ai")
         if updates:
             self._save()
 

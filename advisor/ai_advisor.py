@@ -482,6 +482,8 @@ def _merge_card_levels(opinion: dict, mtf: dict | None) -> dict:
         plan["note"] = card.get("basis", "")
     for key in ("entry", "stop", "target"):
         plan[key] = str(card[key]) if card.get(key) is not None else "--"
+    targets = card.get("targets") or []
+    plan["targets"] = [str(t) for t in targets]
     opinion["plan"] = plan
     return opinion
 

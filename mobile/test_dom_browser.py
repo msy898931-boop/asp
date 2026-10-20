@@ -39,10 +39,10 @@ except Exception:  # noqa: BLE001 - absent browser must skip, never fail
 
 # Paths whose responses the backend would own. Aborting them keeps the tests
 # off the network and pins the app's no-data behaviour.
-LIVE_PREFIXES = ("/api/", "/bridge/", "/advisor/", "/tracker/", "/push")
+LIVE_PREFIXES = ("/api/", "/bridge/", "/advisor/", "/tracker/", "/engine/", "/push")
 
 PRIMARY_VIEWS = ["status", "signal", "chart", "vol", "akoan"]
-SECONDARY_VIEWS = ["tracker", "ai", "conn", "bridge"]
+SECONDARY_VIEWS = ["tracker", "ai", "engine", "conn", "bridge"]
 
 
 class _QuietServer(ThreadingHTTPServer):

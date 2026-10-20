@@ -328,7 +328,7 @@ function updateTabFades() {
 }
 
 // The secondary views live behind More so the bar is one row on a phone.
-const SECONDARY_VIEWS = ["tracker", "ai", "conn", "bridge"];
+const SECONDARY_VIEWS = ["tracker", "ai", "engine", "conn", "bridge"];
 
 function selectView(view) {
   const tabs = [...document.querySelectorAll(".tab")];
@@ -352,6 +352,7 @@ function selectView(view) {
   if (view === "conn") renderConn();
   if (view === "tracker") loadTracker();
   if (view === "ai") loadAdvisor(false);
+  if (view === "engine") loadEngine(false);
 }
 
 function setMoreOpen(open) {
@@ -400,6 +401,7 @@ function init() {
   bindJournalFilter();
   $("refresh").addEventListener("click", refresh);
   $("ai-refresh").addEventListener("click", () => loadAdvisor(true));
+  $("eng-refresh").addEventListener("click", () => loadEngine(true));
   $("alerts").addEventListener("click", toggleAlerts);
   $("push-test").addEventListener("click", sendTestPush);
   $("level-form").addEventListener("submit", (e) => {

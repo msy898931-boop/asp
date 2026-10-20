@@ -30,7 +30,8 @@ import serve_mobile as sm  # noqa: E402
 # scope. Tests that assert on client source read them all, in load order, as
 # one string, so a symbol's file may change without breaking the assertion.
 CLIENT_SCRIPTS = ("app.js", "i18n.js", "panels.js", "advisor.js",
-                  "tracker.js", "alerts.js", "vol.js", "akoan.js", "ticker.js")
+                  "tracker.js", "alerts.js", "vol.js", "akoan.js", "engine.js",
+                  "ticker.js")
 
 
 def client_js() -> str:
@@ -369,7 +370,7 @@ class BotHeartbeatTest(unittest.TestCase):
 
 
 class TabBarTest(unittest.TestCase):
-    """Nine views: five primary tabs in one row plus a More sheet for the rest."""
+    """Ten views: five primary tabs in one row plus a More sheet for the rest."""
 
     def _read(self, name):
         with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
@@ -382,10 +383,10 @@ class TabBarTest(unittest.TestCase):
         self.assertEqual(nav.count('class="tab"'), 5)
         self.assertIn('class="tab tab-more"', nav)
         self.assertIn('aria-controls="tabs-more"', nav)
-        # The secondary row holds the other four views and starts hidden.
+        # The secondary row holds the other five views and starts hidden.
         sheet = html[html.index('id="tabs-more"'):html.index("</div>", html.index('id="tabs-more"'))]
-        self.assertEqual(sheet.count('class="tab"'), 4)
-        for view in ("tracker", "ai", "conn", "bridge"):
+        self.assertEqual(sheet.count('class="tab"'), 5)
+        for view in ("tracker", "ai", "engine", "conn", "bridge"):
             self.assertIn('data-view="%s"' % view, sheet)
         self.assertIn("hidden", html[html.index('class="tabs-more" id="tabs-more"'):html.index(">", html.index('id="tabs-more"'))])
 
@@ -393,9 +394,9 @@ class TabBarTest(unittest.TestCase):
         css = self._read("styles.css")
         self.assertIn("grid-template-columns: repeat(6, 1fr)", css)
         self.assertIn("display: grid", css)
-        # The More sheet anchors above the fixed-height bar, four across.
+        # The More sheet anchors above the fixed-height bar, five across.
         self.assertIn(".tabs-more:not([hidden])", css)
-        self.assertIn("grid-template-columns: repeat(4, 1fr)", css)
+        self.assertIn("grid-template-columns: repeat(5, 1fr)", css)
         # The overflow affordance stays for a wide screen that still overflows.
         self.assertIn(".tabs.more-left", css)
         self.assertIn(".tabs.more-right", css)
@@ -436,7 +437,7 @@ class PanelLoadingTest(unittest.TestCase):
     def test_js_toggles_loading_on_the_slow_panels(self):
         js = client_js()
         self.assertIn("function setPanelLoading", js)
-        for view in ("akoan", "chart", "vol", "ai", "tracker"):
+        for view in ("akoan", "chart", "vol", "ai", "engine", "tracker"):
             self.assertIn('setPanelLoading("%s"' % view, js,
                           "no loading indicator wired for %s" % view)
 
@@ -1495,6 +1496,49 @@ class AdvisorCardRenderTest(unittest.TestCase):
             i18n = fh.read()
         for key in ("ai_card_hold", "ai_card_none", "ai_dir_long",
                     "ai_dir_short", "ai_dir_up", "ai_dir_down"):
+            self.assertGreaterEqual(i18n.count(key + ":"), 2,
+                                    "%s must be in en and ar" % key)
+
+
+class EnginePanelRenderTest(unittest.TestCase):
+    """The engine panel reads the *inner* analysis, and calls the rate a guess.
+
+    The engine's reply is an envelope whose `analysis` wraps the model's own
+    trades. Rendering `bias` or `trades` off the envelope would stringify the
+    whole object as "[object Object]" on the phone — the same bug the advisor
+    card once had, in a new renderer. The win-rate is the model's claim, never a
+    measured edge, so every surface of it must say "estimate".
+    """
+
+    def setUp(self):
+        with open(os.path.join(sm.HERE, "engine.js"), encoding="utf-8") as fh:
+            self.src = fh.read()
+
+    def test_the_analysis_object_is_read_from_the_envelope(self):
+        self.assertIn("env.engine", self.src)
+        self.assertIn("e.analysis", self.src)
+
+    def test_the_win_rate_is_labelled_an_estimate(self):
+        self.assertIn("t.win_rate", self.src)
+        self.assertIn("eng_winrate_est", self.src)
+
+    def test_an_unconfigured_engine_is_shown_not_hidden(self):
+        self.assertIn("e.configured", self.src)
+        self.assertIn("eng_unconfigured", self.src)
+        self.assertIn("eng_unreachable", self.src)
+
+    def test_a_rejected_trade_is_surfaced(self):
+        # The engine drops incoherent model trades with a reason. Hiding the
+        # count would make a partial reply look complete.
+        self.assertIn("rejected", self.src)
+        self.assertIn("eng_rejected", self.src)
+
+    def test_the_engine_strings_exist_in_both_languages(self):
+        with open(os.path.join(sm.HERE, "i18n.js"), encoding="utf-8") as fh:
+            i18n = fh.read()
+        for key in ("tab_engine", "eng_title", "eng_warn", "eng_winrate",
+                    "eng_winrate_est", "eng_no_trades", "eng_ok",
+                    "eng_unconfigured", "eng_unreachable", "eng_rejected"):
             self.assertGreaterEqual(i18n.count(key + ":"), 2,
                                     "%s must be in en and ar" % key)
 

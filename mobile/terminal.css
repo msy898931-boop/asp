@@ -84,6 +84,11 @@ html[dir="rtl"] .dir-side { align-items: flex-start; }
 .plan-value.down { color: var(--down); }
 .plan-value.warn { color: var(--gold); }
 .plan-value.unknown { color: var(--muted); }
+.plan-cell-wide { grid-column: 1 / -1; }
+.plan-value.ladder {
+  font-size: 15px; font-weight: 600; display: flex; flex-wrap: wrap;
+  gap: 4px 10px; letter-spacing: .01em;
+}
 
 .pos-list { display: grid; gap: 1px; background: var(--edge); border: 1px solid var(--edge); border-radius: 14px; overflow: hidden; }
 .pos-card { background: var(--ink); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }

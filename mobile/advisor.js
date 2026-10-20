@@ -95,6 +95,27 @@ async function loadAdvisor(force) {
         grid.appendChild(div);
       }
       cardEl.appendChild(grid);
+      // The scaled ladder: the same setup taken off in five steps, nearest
+      // first. Rendered as its own list so a long row of numbers stays legible
+      // on a phone instead of wrapping inside a grid cell.
+      const ladder = Array.isArray(c.targets) ? c.targets.filter((t) => t != null) : [];
+      if (ladder.length > 1) {
+        const block = document.createElement("div");
+        block.className = "ai-card-targets";
+        const lbl = document.createElement("div");
+        lbl.className = "ai-card-targets-label";
+        lbl.textContent = fmt(T("ai_card_targets"), { n: ladder.length });
+        block.appendChild(lbl);
+        const list = document.createElement("ol");
+        list.className = "ai-card-targets-list";
+        for (const t of ladder) {
+          const li = document.createElement("li");
+          li.textContent = num(t);
+          list.appendChild(li);
+        }
+        block.appendChild(list);
+        cardEl.appendChild(block);
+      }
       const tf = card.timeframes || {};
       const bits = Object.keys(tf).map((k) => {
         const arrow = { LONG: "▲", SHORT: "▼", NEUTRAL: "–" }[tf[k].direction] || "–";
@@ -159,6 +180,18 @@ async function loadAdvisor(force) {
         dt.textContent = T(k);
         const dd = document.createElement("dd");
         dd.textContent = v;
+        div.appendChild(dt);
+        div.appendChild(dd);
+        planEl.appendChild(div);
+      }
+      const planLadder = Array.isArray(op.plan.targets)
+        ? op.plan.targets.filter((t) => t) : [];
+      if (planLadder.length > 1) {
+        const div = document.createElement("div");
+        const dt = document.createElement("dt");
+        dt.textContent = fmt(T("ai_card_targets"), { n: planLadder.length });
+        const dd = document.createElement("dd");
+        dd.textContent = planLadder.join(" ← ");
         div.appendChild(dt);
         div.appendChild(dd);
         planEl.appendChild(div);

@@ -142,6 +142,7 @@ const STRINGS = {
     dq_STALE: "قديم", dq_MISSING: "ناقص", dq_UNKNOWN: "مجهول",
     el_ELIGIBLE: "مؤهّل", el_NOT_ELIGIBLE: "غير مؤهّل",
     pl_entry: "الدخول", pl_stop: "الوقف", pl_target: "الهدف",
+    pl_targets: "أهداف متدرّجة",
     pl_rr: "المخاطرة/العائد", pl_risk: "المخاطرة المقترحة",
     cp_symbol: "الأداة", cp_regime: "النظام", cp_h4: "اتجاه H4",
     cp_m15: "زناد M15", cp_vol: "التقلّب", cp_agreement: "توافق الإطارات",
@@ -270,6 +271,7 @@ const STRINGS = {
     dq_STALE: "STALE", dq_MISSING: "MISSING", dq_UNKNOWN: "UNKNOWN",
     el_ELIGIBLE: "ELIGIBLE", el_NOT_ELIGIBLE: "NOT ELIGIBLE",
     pl_entry: "Entry", pl_stop: "Stop", pl_target: "Target",
+    pl_targets: "Scaled targets",
     pl_rr: "R:R", pl_risk: "Suggested risk",
     cp_symbol: "Instrument", cp_regime: "Regime", cp_h4: "H4 bias",
     cp_m15: "M15 trigger", cp_vol: "Volatility", cp_agreement: "MTF agreement",
@@ -597,6 +599,21 @@ function planCell(label, value, cls) {
   return el;
 }
 
+// A full-width plan row listing several levels in one line: the scaled-target
+// ladder. Kept apart from planCell so the two-up grid above keeps its shape.
+function ladderCell(label, values, cls) {
+  const el = document.createElement("div");
+  el.className = "plan-cell plan-cell-wide";
+  const l = document.createElement("span");
+  l.className = "plan-label";
+  l.textContent = label;
+  const v = document.createElement("span");
+  v.className = "plan-value ladder" + (cls ? " " + cls : "");
+  v.textContent = values.map((t) => num(t)).join(" ← ");
+  el.append(l, v);
+  return el;
+}
+
 function posCard(p, closed) {
   const card = document.createElement("div");
   card.className = "pos-card";
@@ -708,6 +725,13 @@ function renderMarket() {
       planCell(T("pl_risk"), levels.suggested_risk_pct == null
         ? null : num(levels.suggested_risk_pct, 2) + "%"),
     );
+    // The scaled ladder, nearest first. A full-width row of its own: five
+    // numbers will not fit legibly in a grid cell beside the single target.
+    const ladder = Array.isArray(levels.targets)
+      ? levels.targets.filter((t) => t != null) : [];
+    if (ladder.length > 1) {
+      grid.append(ladderCell(T("pl_targets"), ladder, dirClass(dirWord)));
+    }
   } else {
     // No plan: name the gate the engine is sitting on instead of leaving a
     // blank "waiting" line the operator cannot act on.

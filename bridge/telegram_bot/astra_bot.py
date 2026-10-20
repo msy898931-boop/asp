@@ -1082,14 +1082,16 @@ class TradeCardWatch:
     def _key(card: Dict[str, Any]) -> Optional[tuple]:
         if not card.get("card"):
             return None
-        return (card.get("verdict"), card["card"].get("stop"),
-                card["card"].get("target"))
+        inner = card["card"]
+        targets = tuple(inner.get("targets") or ([inner.get("target")]
+                                                 if inner.get("target") is not None else ()))
+        return (card.get("verdict"), inner.get("stop"), targets)
 
     def _moved(self, card: Dict[str, Any]) -> float:
         """How far the structure moved since the last alert, in units of risk.
 
-        The stop and the target are the levels a trader acts on; the entry only
-        sets the scale. A same-direction re-read that nudges all three by cents
+        The stop and the targets are the levels a trader acts on; the entry only
+        sets the scale. A same-direction re-read that nudges all of them by cents
         scores near zero and is dropped; a re-read that lifts the stop by most
         of a risk scores near one and is announced.
         """
@@ -1100,8 +1102,14 @@ class TradeCardWatch:
             risk = abs(float(new["entry"]) - float(new["stop"]))
             if risk <= 0.0:
                 return 1.0
-            return max(abs(float(new["stop"]) - float(old["stop"])),
-                       abs(float(new["target"]) - float(old["target"]))) / risk
+            moved = abs(float(new["stop"]) - float(old["stop"]))
+            new_t = new.get("targets") or [new.get("target")]
+            old_t = old.get("targets") or [old.get("target")]
+            for nt, ot in zip(new_t, old_t):
+                if nt is None or ot is None:
+                    continue
+                moved = max(moved, abs(float(nt) - float(ot)))
+            return moved / risk
         except (KeyError, TypeError, ValueError):
             return 1.0
 

@@ -105,14 +105,15 @@ class CardTest(unittest.TestCase):
         anchor = min(b["low"] for b in op[-mtf_read.STOP_SWING_BARS:])
         stop = anchor - mtf_read.STOP_BUFFER_ATR * atr
         risk = entry - stop
-        target = entry + mtf_read.REWARD_R * risk
+        final_r = mtf_read.LADDER_BY_AGREEMENT[len(TIMEFRAMES)][-1]
+        target = entry + final_r * risk
 
         self.assertAlmostEqual(card["entry"], round(entry, 2), places=2)
         self.assertAlmostEqual(card["stop"], round(stop, 2), places=2)
         self.assertAlmostEqual(card["target"], round(target, 2), places=2)
         self.assertLess(card["stop"], card["entry"])
         self.assertLess(card["entry"], card["target"])
-        self.assertAlmostEqual(card["rr"], mtf_read.REWARD_R, places=2)
+        self.assertAlmostEqual(card["rr"], final_r, places=2)
 
     def test_full_agreement_down_yields_a_short_card(self):
         result = build(_all_tfs(step=-0.5))
@@ -120,7 +121,8 @@ class CardTest(unittest.TestCase):
         card = result["card"]
         self.assertGreater(card["stop"], card["entry"])
         self.assertGreater(card["entry"], card["target"])
-        self.assertAlmostEqual(card["rr"], mtf_read.REWARD_R, places=2)
+        self.assertAlmostEqual(
+            card["rr"], mtf_read.LADDER_BY_AGREEMENT[len(TIMEFRAMES)][-1], places=2)
 
     def test_structural_opposition_stands_aside(self):
         bars_by_tf = _all_tfs(step=0.5)
@@ -182,6 +184,50 @@ class FormatTest(unittest.TestCase):
         self.assertIn(str(card["stop"]), text)
         self.assertIn(str(card["target"]), text)
         self.assertIn("شراء", text)
+
+    def test_the_card_carries_five_ascending_targets(self):
+        card = build(_all_tfs(step=0.5))["card"]
+        targets = card["targets"]
+        self.assertEqual(len(targets), 5)
+        self.assertEqual(targets, sorted(targets))
+        # Every rung sits beyond the entry on a long.
+        self.assertTrue(all(t > card["entry"] for t in targets))
+        # And inside the risked geometry: the ladder is risk multiples, so the
+        # first rung is closer than the stop is far.
+        self.assertLess(targets[0] - card["entry"], card["entry"] - card["stop"])
+
+    def test_targets_are_risk_multiples_of_the_stop_distance(self):
+        card = build(_all_tfs(step=0.5))["card"]
+        risk = card["entry"] - card["stop"]
+        mults = mtf_read.LADDER_BY_AGREEMENT[5]
+        # Each rung is the entry offset by its own R multiple, within a cent of
+        # rounding (entry/stop are themselves rounded to 2dp on the card).
+        for m, t in zip(mults, card["targets"]):
+            self.assertAlmostEqual(t, card["entry"] + m * risk, delta=0.02)
+
+    def test_the_ladder_text_lists_every_target(self):
+        result = build(_all_tfs(step=0.5))
+        text = mtf_read.format_card(result)
+        self.assertIn("الأهداف (5)", text)
+        for t in result["card"]["targets"]:
+            self.assertIn(str(t), text)
+
+    def test_a_short_ladder_descends(self):
+        card = build(_all_tfs(step=-0.5))["card"]
+        self.assertEqual(card["targets"], sorted(card["targets"], reverse=True))
+        self.assertTrue(all(t < card["entry"] for t in card["targets"]))
+
+    def test_a_weaker_read_takes_profit_sooner(self):
+        strong = build(_all_tfs(step=0.5))["card"]
+        bars = _all_tfs(step=0.5)
+        bars["M30"] = _series(120, step=-0.5)  # one frame dissents: 4/5
+        weak = build(bars)["card"]
+        self.assertEqual(weak["agreement"], "4/5")
+        # The 4/5 ladder ends at the legacy 2.0R; the 5/5 ladder reaches past it.
+        self.assertLess(weak["targets"][-1], strong["targets"][-1])
+        self.assertAlmostEqual(
+            weak["targets"][-1], weak["entry"] + 2.0 * (weak["entry"] - weak["stop"]),
+            delta=0.02)
 
     def test_no_trade_text_when_neutral(self):
         result = build({tf: _flat(120) for tf in TIMEFRAMES})
