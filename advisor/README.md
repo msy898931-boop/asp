@@ -45,6 +45,15 @@ Override the model with `ASTRA_ADVISOR_MODEL` (default `mistral-small-latest`
 for Mistral, `openai/gpt-oss-120b` for Groq). The same variables drive
 `ai_engine.py`.
 
+Mistral's free **Experiment** tier refuses some models with HTTP 429 and a
+`x-ratelimit-limit-req-minute: 0` header — that is a per-model plan limit, not a
+spent quota, so the key is fine and other models still answer. When it sees that
+header the advisor does **not** pause the provider; it walks its free-tier
+fallbacks (`open-mistral-nemo`, then `ministral-8b-latest`) and reports whichever
+model actually replied in the payload's `model` field. A 429 without that header
+is a real spent quota, so it backs off as before. Pin your own order with
+`ASTRA_ADVISOR_MODELS` (comma-separated); it replaces the chain outright.
+
 Started by `scripts/start_stack.sh` unless `ASTRA_DISABLE_ADVISOR=1`. The app
 reaches it through the same-origin proxy at `/advisor/...`; the key stays on
 the server and is never sent to the browser.

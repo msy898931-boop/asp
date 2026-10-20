@@ -433,6 +433,7 @@ class Engine:
             return result
 
         result["analysis"] = assemble(snapshot, parsed)
+        result["model"] = ai_advisor.answered_model() or result["model"]
         result["note"] = ("AI analysis engine output. Trades and win-rates are "
                           "the model's estimates, produced outside the validated "
                           "pipeline. Shadow analysis only, not financial advice.")
@@ -444,15 +445,17 @@ class Engine:
             "trade_count": len(parsed["trades"]),
             "trades": parsed["trades"],
             "provider": ai_advisor.PROVIDER,
-            "model": ai_advisor.active_model(),
+            "model": ai_advisor.answered_model() or ai_advisor.active_model(),
         })
         return result
 
 
 def _print_once(result: dict) -> None:
     """Human-readable dump for ``--once``. Arabic text, plain numbers."""
-    print("AI engine · %s · provider=%s configured=%s"
-          % (result["symbol"], result["provider"], result["configured"]))
+    model = result.get("model") or "?"
+    print("AI engine · %s · provider=%s model=%s configured=%s"
+          % (result["symbol"], result["provider"], model,
+             result["configured"]))
     if not result["configured"]:
         print(result["note"])
         return
