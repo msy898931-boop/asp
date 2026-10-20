@@ -362,12 +362,12 @@ html[data-theme="light"] .console-out {
   .tf-name { font-size: 15px; }
 }
 
-/* The terminal has eight primary views where the app has six. Overriding the
+/* The terminal has nine primary views where the app has six. Overriding the
    shared bar here (rather than editing styles.css) keeps the phone app's tab
    geometry untouched. On a narrow phone the row scrolls instead of crushing the
    Arabic labels into an ellipsis; on a wide screen every tab still fits. */
 .tabs {
-  grid-template-columns: repeat(8, minmax(88px, 1fr));
+  grid-template-columns: repeat(9, minmax(84px, 1fr));
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }

@@ -36,6 +36,7 @@ const STRINGS = {
     banner_updated: "آخر تحديث {t} UTC",
     nav_overview: "النظرة العامة", nav_timeframes: "الإطارات",
     nav_services: "الخدمات", nav_audit: "التدقيق",
+    nav_engine: "المحرّك",
     nav_risk: "المخاطر", nav_console: "الطرفية",
     ov_sub: "حالة السوق والبنية والخدمات في لمحة",
     ov_waiting: "بانتظار حالة الباكند…",
@@ -156,6 +157,26 @@ const STRINGS = {
     pos_r: "R", pos_tf: "الإطار", pos_reason: "السبب",
     pos_none_open: "لا مراكز ظلّ مفتوحة.",
     pos_none_outcomes: "لا نتائج مسجّلة بعد.",
+    /* the isolated AI engine panel */
+    eng_title: "محرّك التحليل الذكي",
+    eng_sub: "قراءة من نموذج خارجي: يقرأ كل الفريمات والأخبار، ويقترح صفقات بأرقامه هو",
+    eng_warn: "يقرأ كل الفريمات والأخبار، ويقترح صفقات مع نسبة نجاح تقديرية من عنده. خارج النظام المُتحقَّق منه، وغير مُقيَّم. ليس نصيحة مالية.",
+    eng_refresh: "اسأل مرة أخرى",
+    eng_winrate: "نسبة النجاح (تقديرية)",
+    eng_winrate_est: "{p}% (تقديري)",
+    eng_no_trades: "ما في صفقة نظامية بهالقراءة.",
+    eng_timeframes: "الفريمات المقروءة", eng_news_used: "استخدم الأخبار",
+    eng_rejected: "{n} صفقة مُستبعدة لعدم اتساقها",
+    eng_anchor_warn: "ملاحظة: {note} — الدخول خارج نطاق حركة اليوم.",
+    eng_ok: "تم تحميل قراءة المحرّك",
+    eng_unconfigured: "محرّك التحليل غير مُهيَّأ",
+    eng_off_sub: "اضبط مفتاح المزوّد (GROQ_API_KEY) على الخادم لتفعيله.",
+    eng_unreachable: "محرّك التحليل غير متاح",
+    eng_paused: "المحرّك متوقّف مؤقتاً: انتهت حصة النموذج اليومية",
+    eng_dir_long: "شراء", eng_dir_short: "بيع", eng_dir_neutral: "بلا اتجاه",
+    eng_card_entry: "الدخول", eng_card_stop: "الوقف",
+    eng_card_rr: "المخاطرة/العائد", eng_card_targets: "أهداف متدرّجة ({n})",
+    eng_model: "النموذج", eng_event: "الحدث",
   },
   en: {
     title_sub: "Market console · shadow mode",
@@ -168,6 +189,7 @@ const STRINGS = {
     banner_updated: "updated {t} UTC",
     nav_overview: "Overview", nav_timeframes: "Timeframes",
     nav_services: "Services", nav_audit: "Audit",
+    nav_engine: "Engine",
     nav_risk: "Risk", nav_console: "Console",
     ov_sub: "Market state, structure and services at a glance",
     ov_waiting: "waiting for backend state…",
@@ -285,6 +307,26 @@ const STRINGS = {
     pos_r: "R", pos_tf: "TF", pos_reason: "Reason",
     pos_none_open: "No open shadow positions.",
     pos_none_outcomes: "No outcomes recorded yet.",
+    /* the isolated AI engine panel */
+    eng_title: "AI analysis engine",
+    eng_sub: "A read from an external model: every timeframe and the news, with trades in its own numbers",
+    eng_warn: "Reads every timeframe and the news, then proposes trades with its own win-rate estimate. Outside the validated system, unvalidated. Not financial advice.",
+    eng_refresh: "Ask again",
+    eng_winrate: "Win-rate (est.)",
+    eng_winrate_est: "{p}% (estimate)",
+    eng_no_trades: "No coherent trade this read.",
+    eng_timeframes: "Frames read", eng_news_used: "News used",
+    eng_rejected: "{n} trade(s) dropped as incoherent",
+    eng_anchor_warn: "Note: {note} — the entry sits outside the day's range.",
+    eng_ok: "Engine read loaded",
+    eng_unconfigured: "Analysis engine not configured",
+    eng_off_sub: "Set the provider key (GROQ_API_KEY) on the server to enable it.",
+    eng_unreachable: "Analysis engine unreachable",
+    eng_paused: "Engine paused: the model's daily quota is spent",
+    eng_dir_long: "LONG", eng_dir_short: "SHORT", eng_dir_neutral: "NEUTRAL",
+    eng_card_entry: "Entry", eng_card_stop: "Stop",
+    eng_card_rr: "R:R", eng_card_targets: "Scaled targets ({n})",
+    eng_model: "Model", eng_event: "Event",
   },
 };
 
@@ -489,6 +531,7 @@ function renderOverview() {
   [["market", T("nav_market")], ["news", T("nav_news")],
    ["timeframes", T("nav_timeframes")],
    ["services", T("nav_services")], ["audit", T("nav_audit")],
+   ["engine", T("nav_engine")],
    ["risk", T("nav_risk")], ["console", T("nav_console")]
   ].forEach(([route, label]) => {
     const b = document.createElement("button");
@@ -1179,6 +1222,144 @@ function renderRisk() {
              g.live_trading_authorised === true ? "warn" : "ok");
 }
 
+/* ── panel: isolated AI analysis engine ─────────────────────────────── */
+
+/* One model trade as a card: the model's own numbers, shown verbatim. The
+   win-rate is labelled an estimate wherever it appears, because it is the
+   model's claim and not a measured edge. */
+function engTradeCard(t, index) {
+  const card = document.createElement("div");
+  card.className = "ai-card";
+  const head = document.createElement("div");
+  head.className = "ai-card-dir";
+  const dir = { LONG: T("eng_dir_long"), SHORT: T("eng_dir_short") }[t.direction]
+    || T("eng_dir_neutral");
+  head.textContent = index + ". " + dir + (t.timeframe ? " · " + t.timeframe : "");
+  card.appendChild(head);
+
+  const grid = document.createElement("div");
+  grid.className = "ai-card-grid";
+  for (const [k, v] of [["eng_card_entry", t.entry], ["eng_card_stop", t.stop],
+                        ["eng_card_rr", t.reward_risk]]) {
+    if (v == null) continue;
+    const div = document.createElement("div");
+    const dt = document.createElement("dt");
+    dt.textContent = T(k);
+    const dd = document.createElement("dd");
+    dd.textContent = num(v);
+    div.append(dt, dd);
+    grid.appendChild(div);
+  }
+  if (t.win_rate != null) {
+    const div = document.createElement("div");
+    const dt = document.createElement("dt");
+    dt.textContent = T("eng_winrate");
+    const dd = document.createElement("dd");
+    dd.textContent = T("eng_winrate_est").replace(
+      "{p}", String(Math.round(t.win_rate * 100)));
+    div.append(dt, dd);
+    grid.appendChild(div);
+  }
+  card.appendChild(grid);
+
+  const ladder = Array.isArray(t.targets) ? t.targets.filter((x) => x != null) : [];
+  if (ladder.length) {
+    const block = document.createElement("div");
+    block.className = "ai-card-targets";
+    const lbl = document.createElement("div");
+    lbl.className = "ai-card-targets-label";
+    lbl.textContent = T("eng_card_targets").replace("{n}", String(ladder.length));
+    block.appendChild(lbl);
+    const list = document.createElement("ol");
+    list.className = "ai-card-targets-list";
+    for (const x of ladder) {
+      const li = document.createElement("li");
+      li.textContent = num(x);
+      list.appendChild(li);
+    }
+    block.appendChild(list);
+    card.appendChild(block);
+  }
+  if (t.rationale) {
+    const note = document.createElement("div");
+    note.className = "eng-rationale";
+    note.textContent = t.rationale;
+    card.appendChild(note);
+  }
+  if (t.anchor && t.anchor.anchored === false && t.anchor.note) {
+    const warn = document.createElement("div");
+    warn.className = "eng-anchor";
+    warn.textContent = T("eng_anchor_warn").replace("{note}", t.anchor.note);
+    card.appendChild(warn);
+  }
+  return card;
+}
+
+/* Reads the isolated engine through the same-origin proxy. A failure here is
+   shown as "unreachable" and changes nothing else: the engine sits outside the
+   validated system and must never affect the other panels. */
+async function loadEngine(force) {
+  const statusEl = $("eng-status");
+  const tradesEl = $("eng-trades");
+  statusEl.textContent = T("connecting");
+  try {
+    const env = await getJson("engine/v1/engine" + (force ? "?refresh=1" : ""),
+                              30000);
+    const e = (env && env.engine) || {};
+    const analysis = e.analysis;
+
+    tradesEl.textContent = "";
+    $("eng-read").textContent = "";
+    $("eng-meta").textContent = "";
+
+    if (!e.configured) {
+      statusEl.textContent = T("eng_unconfigured");
+      $("eng-read").textContent = e.note || T("eng_off_sub");
+      return;
+    }
+    if (!analysis) {
+      statusEl.textContent = e.rate_limited ? T("eng_paused") : T("eng_unreachable");
+      $("eng-read").textContent = e.note || "";
+      return;
+    }
+
+    const biasEl = $("eng-bias");
+    biasEl.textContent = { LONG: T("eng_dir_long"), SHORT: T("eng_dir_short") }[analysis.bias]
+      || T("eng_dir_neutral");
+    biasEl.className = "ai-stance " + String(analysis.bias || "neutral").toLowerCase();
+    $("eng-read").textContent = analysis.market_read || "";
+
+    const trades = analysis.trades || [];
+    if (!trades.length) {
+      const empty = document.createElement("p");
+      empty.className = "eng-empty";
+      empty.textContent = T("eng_no_trades");
+      tradesEl.appendChild(empty);
+    } else {
+      trades.forEach((t, i) => tradesEl.appendChild(engTradeCard(t, i + 1)));
+    }
+
+    const eng = analysis.engine || {};
+    const tf = (eng.timeframes_read || []).join(" ");
+    const bits = [];
+    if (e.model) bits.push(T("eng_model") + ": " + e.model);
+    if (tf) bits.push(T("eng_timeframes") + ": " + tf);
+    if (analysis.news_used) bits.push(T("eng_news_used"));
+    if (analysis.key_event) bits.push(T("eng_event") + ": " + analysis.key_event);
+    const rejected = (analysis.rejected || []).length;
+    if (rejected) bits.push(T("eng_rejected").replace("{n}", String(rejected)));
+    $("eng-meta").textContent = bits.join(" · ");
+    statusEl.textContent = T("eng_ok");
+  } catch (err) {
+    statusEl.textContent = T("eng_unreachable");
+    $("eng-read").textContent = "";
+    $("eng-meta").textContent = "";
+    tradesEl.textContent = "";
+    $("eng-bias").textContent = "--";
+    $("eng-bias").className = "ai-stance neutral";
+  }
+}
+
 /* ── console ────────────────────────────────────────────────────────── */
 
 function initConsole() {
@@ -1215,7 +1396,7 @@ async function runConsole() {
 
 /* ── routing ────────────────────────────────────────────────────────── */
 
-const ROUTES = ["overview", "market", "news", "timeframes", "services", "audit", "risk", "console"];
+const ROUTES = ["overview", "market", "news", "timeframes", "services", "audit", "engine", "risk", "console"];
 
 function go(route) {
   if (!ROUTES.includes(route)) route = "overview";
@@ -1233,6 +1414,7 @@ function go(route) {
   if (route === "services") renderServices();
   if (route === "market") renderMarket();
   if (route === "news") renderNews();
+  if (route === "engine") loadEngine(false);
 }
 
 function initTabs() {
@@ -1353,6 +1535,7 @@ function boot() {
     renderTimeframes();
     renderRisk();
     if (state.route === "services") renderServices();
+    if (state.route === "engine") loadEngine(false);
   });
   $("theme").addEventListener("click", () => {
     const cur = document.documentElement.getAttribute("data-theme") || "dark";
@@ -1362,6 +1545,7 @@ function boot() {
     applyTheme();
   });
   $("refresh").addEventListener("click", refresh);
+  $("eng-refresh").addEventListener("click", () => loadEngine(true));
 
   go(location.hash.slice(1) || "overview");
   refresh();

@@ -35,6 +35,10 @@ scripts/check_deploy.sh https://astra-xlp9.onrender.com
   a two-or-three-sentence market read, and up to three trades with entry, stop, a
   scaled target ladder, reward:risk and the model's own win-rate **labelled as an
   estimate**. Outside the validated system; the panel says so.
+- **Web terminal** — the same read is reachable from a browser at
+  `/terminal.html` (linked in the app's footer), where it is its own **Engine**
+  tab. Both faces read the engine through the app's own `/engine/` proxy, so
+  neither holds a key and neither reaches a second origin.
 - **Bridge** — the loopback market-data link's own state.
 
 Everything is read-only and shadow-mode: the app never places trades, and the

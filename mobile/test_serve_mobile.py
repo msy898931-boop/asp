@@ -710,6 +710,57 @@ class FetchTimeoutTest(unittest.TestCase):
         self.assertIn("setInterval", js)
 
 
+class EngineProxyTimeoutTest(unittest.TestCase):
+    """The engine does a synchronous model round-trip on a cold read.
+
+    The shared 6s proxy budget would turn a healthy-but-cold engine into a 503
+    for a caller who did nothing wrong, so the /engine/ route carries its own
+    wider budget. These run the real proxy against a stub that answers slower
+    than the shared budget but inside the engine's.
+    """
+
+    class _SlowEngine(BaseHTTPRequestHandler):
+        delay = 0.0
+
+        def log_message(self, *a):  # silence
+            pass
+
+        def do_GET(self):
+            time.sleep(self.delay)
+            body = json.dumps({"engine": {"configured": True, "analysis": None,
+                                          "note": "cold read"}}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def test_a_cold_engine_inside_its_budget_is_not_a_503(self):
+        saved_base = sm.Handler.engine_base
+        slow = _serve(self._SlowEngine)
+        self._SlowEngine.delay = sm._PROXY_TIMEOUT + 0.4  # longer than shared
+        sm.Handler.engine_base = "http://127.0.0.1:%d" % slow.server_address[1]
+        app = _serve(sm.Handler)
+        try:
+            url = "http://127.0.0.1:%d/engine/v1/engine" % app.server_address[1]
+            with urllib.request.urlopen(url, timeout=15) as resp:
+                self.assertEqual(resp.status, 200)
+                body = json.loads(resp.read().decode("utf-8"))
+        finally:
+            self._SlowEngine.delay = 0.0
+            _stop(app)
+            _stop(slow)
+            sm.Handler.engine_base = saved_base
+        self.assertIn("engine", body)
+
+    def test_the_engine_route_carries_its_own_budget(self):
+        src = inspect.getsource(sm.Handler._proxy)
+        self.assertIn("timeout", src)
+        # The route passes the wider engine budget explicitly.
+        routing = inspect.getsource(sm.Handler.do_GET)
+        self.assertIn("_ENGINE_PROXY_TIMEOUT", routing)
+
+
 class AccessControlTest(unittest.TestCase):
     """The gate is opt-in: unset means open, set means every route but health.
 

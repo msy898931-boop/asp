@@ -68,6 +68,12 @@ _CONTENT_TYPES = {
 
 _PROXY_TIMEOUT = 6.0
 
+# The AI engine answers from cache almost always, but a cold read does a
+# synchronous model round-trip (the advisor's own budget defaults to 20s). The
+# plain 6s proxy budget would turn a healthy-but-cold engine into a 503, so the
+# /engine/ route gets its own, wider budget.
+_ENGINE_PROXY_TIMEOUT = float(os.environ.get("ASTRA_ENGINE_TIMEOUT", "30"))
+
 # Access control. Unset by default, and an unset token means the server is
 # open exactly as it was before this gate existed — so nothing changes until
 # the operator sets it. Set ASTRA_ACCESS_TOKEN to require it. This mirrors the
@@ -673,7 +679,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path.startswith("/tracker/"):
             self._proxy(self.tracker_base + path[len("/tracker"):], self.path)
         elif path.startswith("/engine/"):
-            self._proxy(self.engine_base + path[len("/engine"):], self.path)
+            self._proxy(self.engine_base + path[len("/engine"):], self.path,
+                        timeout=_ENGINE_PROXY_TIMEOUT)
         else:
             self._static(path)
 
@@ -1001,12 +1008,13 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- reverse proxy ------------------------------------------------------
 
-    def _proxy(self, url: str, original_path: str) -> None:
+    def _proxy(self, url: str, original_path: str, timeout: float | None = None) -> None:
         query = original_path.split("?", 1)[1] if "?" in original_path else ""
         full = url + ("?" + query if query else "")
         req = urllib.request.Request(full, method="GET")
         try:
-            with urllib.request.urlopen(req, timeout=_PROXY_TIMEOUT) as resp:
+            with urllib.request.urlopen(
+                    req, timeout=_PROXY_TIMEOUT if timeout is None else timeout) as resp:
                 body = resp.read()
                 ctype = resp.headers.get("Content-Type",
                                          "application/json; charset=utf-8")
