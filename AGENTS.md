@@ -341,6 +341,12 @@ Notes: the container must reach `api.telegram.org` (default egress is fine),
 `api.gold-api.com`, and `api.kraken.com`; the loopback API/bridge are never
 exposed publicly.
 
+Both managed deploys build from **`main`** (`deploy-render.yml` triggers on
+pushes to `main`; `render.yaml` / `fly.toml` track it). Work that lands only on a
+side branch is therefore live in no environment until it reaches `main` — a
+branch left open against another feature branch is a dead end, not a staging
+area.
+
 ### Deploy verification (is my fix live?)
 
 `GET /version.json` answers it in one curl: the `shell` stamp (changes when the
