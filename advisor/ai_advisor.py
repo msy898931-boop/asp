@@ -17,8 +17,11 @@ market snapshot with ``configured: false`` and no opinion, so the UI degrades
 to "not configured" rather than erroring.
 
 Providers (``ASTRA_ADVISOR_PROVIDER``, default ``groq``):
-  * ``groq``   - GROQ_API_KEY, OpenAI-compatible, global free tier.
-  * ``gemini`` - GEMINI_API_KEY, region-restricted free tier.
+  * ``groq``    - GROQ_API_KEY, OpenAI-compatible, global free tier.
+  * ``gemini``  - GEMINI_API_KEY, region-restricted free tier.
+  * ``mistral`` - MISTRAL_API_KEY, OpenAI-compatible, EU-hosted free tier.
+    The sign-up is not region-locked the way Groq's and Gemini's are, so it is
+    the fallback when those two refuse to issue a key.
 
 Run: python3 advisor/ai_advisor.py --port 8792
 """
@@ -61,9 +64,15 @@ GROQ_MODEL = os.environ.get("ASTRA_ADVISOR_MODEL", "openai/gpt-oss-120b")
 GEMINI_MODEL = os.environ.get("ASTRA_ADVISOR_MODEL", "gemini-2.5-flash")
 GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
               "{model}:generateContent")
+# Mistral is OpenAI-compatible too, and its free Experiment tier is not
+# region-locked the way Groq's and Gemini's sign-ups are.
+MISTRAL_URL = os.environ.get("ASTRA_ADVISOR_MISTRAL_URL",
+                             "https://api.mistral.ai/v1/chat/completions")
+MISTRAL_MODEL = os.environ.get("ASTRA_ADVISOR_MODEL", "mistral-small-latest")
 
 # Which env var holds the key for each provider.
-_KEY_ENV = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}
+_KEY_ENV = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY",
+            "mistral": "MISTRAL_API_KEY"}
 
 # Groq sits behind Cloudflare, which rejects the default urllib user agent with
 # a 403 (error 1010). Identify ourselves so the request is served.
@@ -488,21 +497,22 @@ def _merge_card_levels(opinion: dict, mtf: dict | None) -> dict:
     return opinion
 
 
-def call_groq(prompt: str, api_key: str) -> str | None:
-    """OpenAI-compatible chat completion on Groq.
+def call_openai_compatible(url: str, model: str, prompt: str, api_key: str,
+                           label: str) -> str | None:
+    """A chat completion on any OpenAI-compatible endpoint.
 
     A 429 means the daily token budget is spent, not that the key is wrong, so
     it is recorded in ``_rate_limited_until`` (read by ``Advisor._build``) to
     back off instead of hammering the provider on every request.
     """
     body = json.dumps({
-        "model": GROQ_MODEL,
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.0,
         "response_format": {"type": "json_object"},
     }).encode("utf-8")
     req = urllib.request.Request(
-        GROQ_URL, data=body, method="POST",
+        url, data=body, method="POST",
         headers={"Content-Type": "application/json",
                  "Authorization": "Bearer " + api_key,
                  "User-Agent": _USER_AGENT})
@@ -513,17 +523,26 @@ def call_groq(prompt: str, api_key: str) -> str | None:
         detail = ""
         with contextlib.suppress(OSError):
             detail = exc.read().decode("utf-8", "replace")[:200]
-        sys.stderr.write("[advisor] groq HTTP %s: %s\n" % (exc.code, detail))
+        sys.stderr.write("[advisor] %s HTTP %s: %s\n" % (label, exc.code, detail))
         if exc.code == 429:
             _mark_rate_limited()
         return None
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        sys.stderr.write("[advisor] groq request failed: %s\n" % (exc,))
+        sys.stderr.write("[advisor] %s request failed: %s\n" % (label, exc))
         return None
     try:
         return payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
         return None
+
+
+def call_groq(prompt: str, api_key: str) -> str | None:
+    return call_openai_compatible(GROQ_URL, GROQ_MODEL, prompt, api_key, "groq")
+
+
+def call_mistral(prompt: str, api_key: str) -> str | None:
+    return call_openai_compatible(MISTRAL_URL, MISTRAL_MODEL, prompt, api_key,
+                                  "mistral")
 
 
 def call_model(prompt: str, api_key: str) -> str | None:
@@ -532,6 +551,8 @@ def call_model(prompt: str, api_key: str) -> str | None:
         return call_gemini(prompt, api_key)
     if PROVIDER == "groq":
         return call_groq(prompt, api_key)
+    if PROVIDER == "mistral":
+        return call_mistral(prompt, api_key)
     return None
 
 
@@ -541,7 +562,8 @@ def provider_key() -> str:
 
 
 def active_model() -> str | None:
-    return {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL}.get(PROVIDER)
+    return {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL,
+            "mistral": MISTRAL_MODEL}.get(PROVIDER)
 
 
 # Unix time until which the provider should not be called again (set when it

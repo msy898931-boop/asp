@@ -583,6 +583,72 @@ class ProviderTests(unittest.TestCase):
         finally:
             advisor.PROVIDER = original
 
+    def test_mistral_is_a_known_provider(self):
+        self.assertEqual(advisor._KEY_ENV["mistral"], "MISTRAL_API_KEY")
+        self.assertEqual(advisor.MISTRAL_MODEL, "mistral-small-latest")
+        self.assertIn("api.mistral.ai", advisor.MISTRAL_URL)
+
+    def test_mistral_key_reads_its_own_env_var(self):
+        original = advisor.PROVIDER
+        advisor.PROVIDER = "mistral"
+        os.environ["MISTRAL_API_KEY"] = "  sk-mistral  "
+        try:
+            self.assertEqual(advisor.provider_key(), "sk-mistral")
+            self.assertEqual(advisor.active_model(), "mistral-small-latest")
+        finally:
+            os.environ.pop("MISTRAL_API_KEY", None)
+            advisor.PROVIDER = original
+
+    def test_mistral_dispatch_hits_the_mistral_endpoint(self):
+        captured = {}
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps(
+                    {"choices": [{"message": {"content": '{"stance":"SHORT"}'}}]}
+                ).encode()
+
+        def fake_urlopen(req, timeout=None):
+            captured["url"] = req.full_url
+            captured["auth"] = req.get_header("Authorization")
+            captured["body"] = json.loads(req.data.decode())
+            return FakeResp()
+
+        original_provider = advisor.PROVIDER
+        original = advisor.urllib.request.urlopen
+        advisor.PROVIDER = "mistral"
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            out = advisor.call_model("hello", "sk-mistral")
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor.PROVIDER = original_provider
+        self.assertIn("api.mistral.ai", captured["url"])
+        self.assertEqual(captured["auth"], "Bearer sk-mistral")
+        self.assertEqual(captured["body"]["model"], "mistral-small-latest")
+        self.assertEqual(captured["body"]["messages"][0]["content"], "hello")
+        self.assertEqual(out, '{"stance":"SHORT"}')
+
+    def test_mistral_429_sets_the_back_off(self):
+        original_backoff = advisor._rate_limited_until
+        advisor._rate_limited_until = 0.0
+
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                req.full_url, 429, "Too Many Requests", {},
+                __import__("io").BytesIO(b'{"error":"rate limit"}'))
+
+        original = advisor.urllib.request.urlopen
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            self.assertIsNone(advisor.call_mistral("hello", "sk-mistral"))
+            self.assertTrue(advisor.rate_limited())
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor._rate_limited_until = original_backoff
+
     def test_groq_request_shape_is_openai_compatible(self):
         captured = {}
 

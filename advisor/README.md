@@ -33,6 +33,18 @@ ASTRA_ADVISOR_PROVIDER=gemini GEMINI_API_KEY=... \
   python3 advisor/ai_advisor.py --port 8792
 ```
 
+Mistral is opt-in too, and useful when Groq and Gemini refuse to issue a key
+from your region — Mistral's sign-up is not region-locked:
+
+```bash
+ASTRA_ADVISOR_PROVIDER=mistral MISTRAL_API_KEY=... \
+  python3 advisor/ai_advisor.py --port 8792
+```
+
+Override the model with `ASTRA_ADVISOR_MODEL` (default `mistral-small-latest`
+for Mistral, `openai/gpt-oss-120b` for Groq). The same variables drive
+`ai_engine.py`.
+
 Started by `scripts/start_stack.sh` unless `ASTRA_DISABLE_ADVISOR=1`. The app
 reaches it through the same-origin proxy at `/advisor/...`; the key stays on
 the server and is never sent to the browser.
