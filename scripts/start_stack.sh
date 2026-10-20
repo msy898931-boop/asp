@@ -104,13 +104,18 @@ else
     setsid nohup python3 "$ROOT/advisor/ai_advisor.py" --port "$ADVISOR_PORT" \
         > "$RUNDIR/advisor.log" 2>&1 < /dev/null &
     echo $! > "$RUNDIR/advisor.pid"
-    # Groq is the default provider (global free tier); Gemini is opt-in.
+    # Groq is the default provider (global free tier); Gemini and Mistral are
+    # opt-in. The key name follows the provider.
     _prov="${ASTRA_ADVISOR_PROVIDER:-groq}"
-    if [ "$_prov" = "gemini" ]; then _key="${GEMINI_API_KEY:-}"; else _key="${GROQ_API_KEY:-}"; fi
+    case "$_prov" in
+        gemini)  _key="${GEMINI_API_KEY:-}";  _keyname="GEMINI_API_KEY" ;;
+        mistral) _key="${MISTRAL_API_KEY:-}"; _keyname="MISTRAL_API_KEY" ;;
+        *)       _key="${GROQ_API_KEY:-}";    _keyname="GROQ_API_KEY" ;;
+    esac
     if [ -n "$_key" ]; then
         echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, configured"
     else
-        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, not configured (set GROQ_API_KEY)"
+        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, not configured (set $_keyname)"
     fi
 fi
 
@@ -130,11 +135,15 @@ else
         > "$RUNDIR/engine.log" 2>&1 < /dev/null &
     echo $! > "$RUNDIR/engine.pid"
     _prov="${ASTRA_ADVISOR_PROVIDER:-groq}"
-    if [ "$_prov" = "gemini" ]; then _key="${GEMINI_API_KEY:-}"; else _key="${GROQ_API_KEY:-}"; fi
+    case "$_prov" in
+        gemini)  _key="${GEMINI_API_KEY:-}";  _keyname="GEMINI_API_KEY" ;;
+        mistral) _key="${MISTRAL_API_KEY:-}"; _keyname="MISTRAL_API_KEY" ;;
+        *)       _key="${GROQ_API_KEY:-}";    _keyname="GROQ_API_KEY" ;;
+    esac
     if [ -n "$_key" ]; then
         echo "[start] ai engine launched on :$ENGINE_PORT (pid $!) - provider $_prov, configured"
     else
-        echo "[start] ai engine launched on :$ENGINE_PORT (pid $!) - provider $_prov, not configured (set GROQ_API_KEY)"
+        echo "[start] ai engine launched on :$ENGINE_PORT (pid $!) - provider $_prov, not configured (set $_keyname)"
     fi
 fi
 
