@@ -8,6 +8,7 @@ JSON envelopes to short operator messages. Standard library only.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional
@@ -17,6 +18,12 @@ BRIDGE_PORT = 8791   # the host's Python bridge port (see StartupCoordinator)
 ADVISOR_PORT = 8792  # the isolated AI advisor's loopback port
 ENGINE_PORT = 8794   # the isolated AI analysis engine's loopback port
 _READ_TIMEOUT_SECONDS = 5.0
+# The engine builds its read with a synchronous model round-trip, so a cold
+# request can take as long as the advisor's own HTTP budget (default 20s).
+# Reading it on the plain read timeout would report a healthy engine as
+# unreachable, so it gets its own, longer budget.
+_ENGINE_TIMEOUT_SECONDS = float(
+    os.environ.get("ASTRA_BOT_ENGINE_TIMEOUT", "30"))
 
 
 class ApiError(RuntimeError):
@@ -54,9 +61,10 @@ class AstraApi:
 
     # -- transport ----------------------------------------------------------
 
-    def _get_abs(self, url: str) -> Dict[str, Any]:
+    def _get_abs(self, url: str, timeout: Optional[float] = None) -> Dict[str, Any]:
         try:
-            with urllib.request.urlopen(url, timeout=self.timeout) as resp:
+            with urllib.request.urlopen(
+                    url, timeout=self.timeout if timeout is None else timeout) as resp:
                 raw = resp.read()
         except urllib.error.URLError as exc:
             raise ApiError(f"backend unreachable at {url}: {exc.reason}") from exc
@@ -151,7 +159,8 @@ class AstraApi:
         inventing a read.
         """
         suffix = "?refresh=1" if refresh else ""
-        env = self._get_abs(f"{self.engine_base}/engine{suffix}")
+        env = self._get_abs(f"{self.engine_base}/engine{suffix}",
+                            timeout=_ENGINE_TIMEOUT_SECONDS)
         engine = env.get("engine") if isinstance(env, dict) else None
         return engine if isinstance(engine, dict) else {}
 

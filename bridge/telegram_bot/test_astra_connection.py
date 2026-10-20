@@ -320,6 +320,31 @@ class ConnectionTest(unittest.TestCase):
         reply = router.handle("123", "/engine")
         self.assertIn("غير متاح", reply)  # reported, not crashed
 
+    def test_the_engine_read_gets_a_longer_timeout_than_the_plain_reads(self):
+        # The engine builds its read with a synchronous model round-trip. On the
+        # plain 5s read timeout a healthy but cold engine reported as
+        # unreachable; the read must carry its own, longer budget.
+        from astra_api import _ENGINE_TIMEOUT_SECONDS, _READ_TIMEOUT_SECONDS
+        self.assertGreater(_ENGINE_TIMEOUT_SECONDS, _READ_TIMEOUT_SECONDS)
+
+    def test_a_slow_engine_read_is_still_waited_for(self):
+        # A handler that answers just past the plain read timeout, but inside
+        # the engine budget, must still succeed.
+        import astra_api
+
+        class _SlowEngine(_EngineHandler):
+            def do_GET(self):
+                time.sleep(astra_api._READ_TIMEOUT_SECONDS + 0.5)
+                super().do_GET()
+
+        slow = _Server(_SlowEngine)
+        self.addCleanup(slow.close)
+        api = AstraApi(base_url=self.backend.url("/api/v1"),
+                       bridge_base=self.bridge.url("/v1"),
+                       advisor_base=self.advisor.url("/v1"),
+                       engine_base=slow.url("/v1"))
+        self.assertEqual(api.engine_read()["provider"], "mistral")
+
     # -- the commands, end to end ------------------------------------------
 
     def test_status_renders_the_live_backend(self):
