@@ -23,7 +23,8 @@ If you are new, read these four, in order:
 | Audit | `docs/PROJECT_AUDIT_2026-10-14.md` | Full-repo audit and 100-point score (85.0) |
 | Audit | `docs/ASSESSMENT_2026-10-16.md` | Independent re-assessment (84.5), measured live; supersedes the audit's test counts |
 | Audit | `docs/ASSESSMENT_2026-10-19.md` | Independent assessment (88.5); names the live Telegram bot |
-| Audit | `docs/ASSESSMENT_2026-10-20.md` | Latest independent assessment (90.0) on `feat/scaled-targets`; supersedes the 2026-10-19 counts and adds the worth estimate |
+| Audit | `docs/ASSESSMENT_2026-10-20.md` | Independent assessment (90.0) on `feat/scaled-targets`; supersedes the 2026-10-19 counts and adds the worth estimate |
+| Audit | `docs/ASSESSMENT_2026-10-21.md` | Independent assessment (90.0) on `main` (`458d884`); 1230 tests, coverage 85%, and the engine reached the deploy branch |
 | Product | `docs/SELLING.md` | Pricing and what the tool honestly does |
 | Mobile | `mobile/README.md` | The PWA: routes, tabs, offline shell |
 | Evidence | `docs/evidence/FIELD_TEST_apk_2026-10-17.md` | The `.apk` run on real hardware (first such record) |
