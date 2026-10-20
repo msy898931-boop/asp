@@ -139,7 +139,8 @@ def signal_key(signal: dict) -> str:
     return "%s:%s" % (signal.get("time"), signal.get("direction"))
 
 
-def target_ladder(entry: float, stop: float, target: float,
+def target_ladder(entry: float | None, stop: float | None,
+                  target: float | None,
                   steps: int = LADDER_STEPS) -> list:
     """The single target split into nearby rungs, nearest first.
 
