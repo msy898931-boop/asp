@@ -421,6 +421,27 @@ class ArabicSurfaceTests(unittest.TestCase):
             for label in row:
                 self.assertIn(label, bot.BUTTON_COMMANDS)
 
+    def test_the_keyboard_stays_small(self):
+        # The keyboard is for the day-to-day essentials only. It drifted to
+        # eleven buttons once, then to six; this pins the four that survived
+        # so it cannot creep back.
+        labels = [label for row in bot.REPLY_KEYBOARD for label in row]
+        self.assertLessEqual(len(labels), 4)
+        self.assertEqual(len(labels), len(set(labels)), "no duplicate buttons")
+
+    def test_the_keyboard_keeps_the_engine_visible(self):
+        # The engine button was added but got lost in the crowd; it now sits in
+        # the top row so it is the first thing a user sees.
+        self.assertEqual(bot.REPLY_KEYBOARD[0][1], "🤖 محرّك التحليل")
+        self.assertEqual(bot.BUTTON_COMMANDS["🤖 محرّك التحليل"], "/engine")
+
+    def test_trimmed_buttons_still_work_when_typed(self):
+        # Dropping a button must not drop the function: the Arabic phrase and
+        # the plain command both keep working.
+        router, _, _ = _paid_router()
+        self.assertIn("XAUUSD", router.handle("9", "📊 حالة السوق"))
+        self.assertIn("XAUUSD", router.handle("9", "/status"))
+
     def test_tapping_a_button_runs_its_command(self):
         router, _, _levels = _paid_router()
         out = router.handle("9", "🔔 مستوى جديد")  # same as /level
@@ -881,8 +902,14 @@ class ForecastWatchTests(unittest.TestCase):
 
 
 def _card(verdict="LONG", entry=2651.4, stop=2643.1, target=2667.9, rr=2.0,
-          available=True, direction_tf="LONG", rsi=57.0):
+          available=True, direction_tf="LONG", rsi=57.0, targets=None):
     """A trade card shaped exactly as the advisor's reply carries it."""
+    inner = None if not available or verdict == "NEUTRAL" else {
+        "direction": verdict, "entry": entry, "stop": stop,
+        "target": target, "rr": rr, "agreement": "4/5",
+    }
+    if inner is not None and targets is not None:
+        inner["targets"] = targets
     return {
         "available": available,
         "verdict": verdict,
@@ -890,10 +917,7 @@ def _card(verdict="LONG", entry=2651.4, stop=2643.1, target=2667.9, rr=2.0,
         "timeframes": {tf: {"direction": direction_tf, "rsi": rsi}
                        for tf in ("M5", "M15", "M30", "H1", "H4")},
         "reason": "no majority across timeframes",
-        "card": None if not available or verdict == "NEUTRAL" else {
-            "direction": verdict, "entry": entry, "stop": stop,
-            "target": target, "rr": rr, "agreement": "4/5",
-        },
+        "card": inner,
     }
 
 
@@ -936,11 +960,38 @@ class TradeCardFormatTests(unittest.TestCase):
         self.assertIn("M15", text)
         self.assertIn("▲", text)
 
+    def test_a_scaled_ladder_is_pushed_as_one_list(self):
+        targets = [2660.0, 2664.0, 2668.0, 2672.0, 2676.0]
+        text = bot.format_trade_card(_card(target=2676.0, targets=targets))
+        self.assertIn("الأهداف (5)", text)
+        for t in targets:
+            self.assertIn(str(t), text)
+
+    def test_a_single_target_still_renders_as_before(self):
+        # Older cards (no ladder) must keep their exact wording.
+        text = bot.format_trade_card(_card())
+        self.assertIn("الهدف: 2667.9", text)
+        self.assertNotIn("الأهداف", text)
+
 
 class TradeCardWatchTests(unittest.TestCase):
     def test_first_poll_primes_and_stays_silent(self):
         watch = bot.TradeCardWatch()
         self.assertEqual(watch.poll(_card()), [])
+
+    def test_a_ladder_only_change_is_news(self):
+        # The stop holds, but the whole ladder shifts by most of a risk: the
+        # targets are what a trader acts on, so it is announced.
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(targets=[2660.0, 2664.0, 2668.0, 2672.0, 2676.0]))
+        out = watch.poll(_card(targets=[2668.0, 2672.0, 2676.0, 2680.0, 2684.0]))
+        self.assertEqual(len(out), 1)
+
+    def test_a_ladder_nudge_stays_quiet(self):
+        watch = bot.TradeCardWatch()
+        watch.poll(_card(targets=[2660.0, 2664.0, 2668.0, 2672.0, 2676.0]))
+        self.assertEqual(
+            watch.poll(_card(targets=[2660.1, 2664.1, 2668.1, 2672.1, 2676.1])), [])
 
     def test_a_new_card_alerts_once(self):
         watch = bot.TradeCardWatch()
@@ -1116,6 +1167,139 @@ class CardCommandTests(unittest.TestCase):
 
     def test_the_menu_lists_the_card_command(self):
         self.assertIn("/card", dict(bot.BOT_COMMANDS))
+
+
+def _engine(configured=True, rate_limited=False, bias="LONG",
+            market_read="الفريمات متوافقة صعودًا.", trades=None,
+            key_event="", analysis=True, provider="mistral", model="m"):
+    """An engine envelope shaped exactly as ai_engine.py emits it."""
+    if trades is None:
+        trades = [{
+            "direction": "LONG", "entry": 4122.5, "stop": 4110.0,
+            "targets": [4135.0, 4148.0], "target": 4148.0,
+            "risk": 12.5, "reward": 25.5, "reward_risk": 2.04,
+            "win_rate": 0.58, "rationale": "امتداد الاتجاه",
+            "timeframe": "H1", "win_rate_validated": False,
+            "anchor": {"anchored": True, "note": ""},
+        }]
+    env = {
+        "schema_version": "1.0", "symbol": "XAUUSD", "validated": False,
+        "source": "ai-engine (isolated)", "provider": provider,
+        "configured": configured, "model": model if configured else None,
+        "snapshot": {"price": 4122.0, "timeframes": {}, "rule_card": None},
+        "analysis": None,
+    }
+    if rate_limited:
+        env["rate_limited"] = True
+        env["note"] = "AI engine paused: the provider's daily quota is spent."
+    elif configured and analysis:
+        env["analysis"] = {
+            "market_read": market_read, "bias": bias, "trades": trades,
+            "rejected": [], "news_used": False, "key_event": key_event,
+        }
+        env["note"] = "AI analysis engine output."
+    return env
+
+
+class FakeEngineApi(FakeApi):
+    """A fake backend whose engine returns a canned read (or is unreachable)."""
+
+    def __init__(self, engine, available=True):
+        super().__init__(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY,
+                         available=available)
+        self._engine = engine
+
+    def engine_read(self, refresh=False):
+        self._maybe_raise()
+        return self._engine
+
+
+class EngineFormatTests(unittest.TestCase):
+    def test_a_trade_carries_the_exact_levels_and_direction(self):
+        text = bot.format_engine(_engine())
+        self.assertIn("شراء", text)
+        self.assertIn("4122.5", text)
+        self.assertIn("4110", text)
+        self.assertIn("4135", text)
+        self.assertIn("4148", text)
+
+    def test_the_win_rate_is_labelled_as_the_model_estimate(self):
+        # The engine stamps win_rate_validated: false; the reply must not read
+        # as a measured probability.
+        text = bot.format_engine(_engine())
+        self.assertIn("تقدير الموديل", text)
+        self.assertIn("58%", text)
+
+    def test_the_shadow_disclaimer_always_closes_a_live_read(self):
+        text = bot.format_engine(_engine())
+        self.assertIn("وضع الظل", text)
+        self.assertIn("لا تنفيذ", text)
+
+    def test_a_neutral_read_reports_no_trades_honestly(self):
+        text = bot.format_engine(_engine(bias="NEUTRAL", trades=[]))
+        self.assertIn("حياد", text)
+        self.assertIn("لا صفقات", text)
+        self.assertNotIn("دخول", text)
+
+    def test_a_scaled_ladder_renders_every_target(self):
+        trades = [{"direction": "SHORT", "entry": 4150.0, "stop": 4162.0,
+                   "targets": [4138.0, 4126.0, 4114.0], "target": 4114.0,
+                   "reward_risk": 3.0, "win_rate": 0.5, "timeframe": "H4"}]
+        text = bot.format_engine(_engine(bias="SHORT", trades=trades))
+        for level in ("4138", "4126", "4114"):
+            self.assertIn(level, text)
+
+    def test_an_unconfigured_engine_says_what_to_set(self):
+        text = bot.format_engine(_engine(configured=False, analysis=False))
+        self.assertIn("غير مفعّل", text)
+        self.assertIn("وضع الظل", text)
+
+    def test_a_paused_engine_reports_the_spent_quota(self):
+        text = bot.format_engine(_engine(rate_limited=True, analysis=False))
+        self.assertIn("استُهلكت", text)
+
+    def test_a_missing_engine_is_reported_plainly(self):
+        self.assertIn("غير متاح", bot.format_engine({}))
+
+    def test_the_key_event_is_surfaced_when_present(self):
+        text = bot.format_engine(_engine(key_event="قرار الفائدة 20:00"))
+        self.assertIn("قرار الفائدة", text)
+
+    def test_a_missing_level_renders_as_a_dash_not_a_crash(self):
+        trades = [{"direction": "LONG", "entry": None, "stop": None,
+                   "targets": [], "target": None, "reward_risk": None,
+                   "win_rate": None, "timeframe": "M15"}]
+        text = bot.format_engine(_engine(trades=trades))
+        self.assertIn("—", text)
+
+
+class EngineCommandTests(unittest.TestCase):
+    def _router(self, engine, available=True):
+        api = FakeEngineApi(engine, available)
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+        return bot.CommandRouter(api, subs, None), api
+
+    def test_engine_command_renders_the_read(self):
+        router, _ = self._router(_engine())
+        reply = router.handle("1", "/engine")
+        self.assertIn("4122.5", reply)
+        self.assertIn("وضع الظل", reply)
+
+    def test_engine_button_runs_the_command(self):
+        router, _ = self._router(_engine())
+        self.assertIn("4122.5", router.handle("1", "🤖 محرّك التحليل"))
+
+    def test_engine_command_degrades_when_the_engine_is_down(self):
+        router, _ = self._router(_engine(), available=False)
+        reply = router.handle("1", "/engine")
+        self.assertIn("غير متاح", reply)
+        self.assertIn("ASTRA_ENABLE_ENGINE", reply)
+
+    def test_help_lists_the_engine_command(self):
+        self.assertIn("/engine", bot.CommandRouter.HELP)
+
+    def test_the_menu_lists_the_engine_command(self):
+        self.assertIn("/engine", dict(bot.BOT_COMMANDS))
 
 
 class CommandMenuPayloadTest(unittest.TestCase):

@@ -104,6 +104,39 @@ class BotTests(unittest.TestCase):
         self.assertIn("الملخّص", tg.sent[0][1])
         self.assertIn("—", tg.sent[0][1], "no rate stated on thin data")
 
+    def test_ai_command_reports_the_engine_read(self):
+        b, tg = self._make()
+        engine = {"configured": True, "analysis": {
+            "bias": "LONG", "market_read": "قراءة.",
+            "trades": [{"direction": "LONG", "entry": 2000.0, "stop": 1995.0,
+                        "targets": [2006.0, 2012.0], "reward_risk": 2.4,
+                        "win_rate": 0.62, "rationale": "سبب", "timeframe": "M15"}]}}
+        b._fetch = lambda: None
+        orig = bot._get_json
+        bot._get_json = lambda url: {"engine": engine} if "/v1/engine" in url else None
+        try:
+            tg.updates_queue = [[{"update_id": 6, "message": {"text": "/ai"}}]]
+            b.handle_updates()
+        finally:
+            bot._get_json = orig
+        self.assertEqual(len(tg.sent), 1)
+        self.assertIn("شراء", tg.sent[0][1])
+        self.assertIn("62%", tg.sent[0][1])
+        self.assertIn("2006.0", tg.sent[0][1])
+
+    def test_ai_command_says_when_the_engine_is_unreachable(self):
+        b, tg = self._make()
+        b._fetch = lambda: None
+        orig = bot._get_json
+        bot._get_json = lambda url: None
+        try:
+            tg.updates_queue = [[{"update_id": 7, "message": {"text": "/ai"}}]]
+            b.handle_updates()
+        finally:
+            bot._get_json = orig
+        self.assertEqual(len(tg.sent), 1)
+        self.assertIn("غير متاح", tg.sent[0][1])
+
 
 class FormatTests(unittest.TestCase):
     def test_new_signal_has_levels_and_rr(self):
@@ -117,6 +150,28 @@ class FormatTests(unittest.TestCase):
         self.assertIn("شراء", bot.format_new(signal(1, "LONG")))
         self.assertIn("بيع", bot.format_new(signal(1, "SHORT")))
         self.assertNotIn("SHORT", bot.format_new(signal(1, "SHORT")))
+
+    def test_new_signal_lists_the_scaled_target_ladder(self):
+        # entry 4000, target 4020, 5 steps -> 4004, 4008, 4012, 4016, 4020.
+        text = bot.format_new(signal(1, "LONG"))
+        self.assertIn("الأهداف (5)", text)
+        self.assertIn("4004.0 ← 4008.0 ← 4012.0 ← 4016.0 ← 4020.0", text)
+
+    def test_target_ladder_last_rung_is_the_single_target(self):
+        ladder = bot.target_ladder(4000.0, 3990.0, 4020.0)
+        self.assertEqual(ladder[-1], 4020.0)
+        self.assertEqual(ladder, sorted(ladder))  # ascending on a long
+
+    def test_target_ladder_descends_on_a_short(self):
+        ladder = bot.target_ladder(4000.0, 4010.0, 3980.0)
+        self.assertEqual(ladder[-1], 3980.0)
+        self.assertEqual(ladder, sorted(ladder, reverse=True))
+
+    def test_target_ladder_needs_both_levels(self):
+        self.assertEqual(bot.target_ladder(4000.0, 3990.0, None), [])
+        self.assertEqual(bot.target_ladder(None, 3990.0, 4020.0), [])
+        # A zero-distance target has no ladder to draw.
+        self.assertEqual(bot.target_ladder(4000.0, 3990.0, 4000.0), [])
 
     def test_result_labels_direction_in_arabic(self):
         text = bot.format_result(signal(1, "SHORT", "STOP"))

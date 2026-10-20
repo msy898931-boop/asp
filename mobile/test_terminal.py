@@ -153,9 +153,9 @@ class MarketPanelTest(unittest.TestCase):
         self.assertIn('id="mk-positions"', html)
         self.assertIn('id="mk-outcomes"', html)
 
-    def test_the_bar_has_eight_tabs(self):
+    def test_the_bar_has_nine_tabs(self):
         html = _read(TERMINAL)
-        self.assertEqual(html.count('class="tab"'), 8)
+        self.assertEqual(html.count('class="tab"'), 9)
 
     def test_market_is_a_route(self):
         js = _read(TERMINAL_JS)
@@ -179,9 +179,19 @@ class MarketPanelTest(unittest.TestCase):
     def test_trade_plan_comes_from_the_risk_proposal(self):
         js = _read(TERMINAL_JS)
         for field in ("levels.entry", "levels.stop_loss", "levels.take_profit",
-                      "levels.reward_risk", "levels.suggested_risk_pct"):
+                      "levels.targets", "levels.reward_risk",
+                      "levels.suggested_risk_pct"):
             with self.subTest(field=field):
                 self.assertIn(field, js)
+
+    def test_the_scaled_ladder_renders_as_its_own_row(self):
+        js = _read(TERMINAL_JS)
+        # A ladder is only drawn when there is more than one rung, so a
+        # single-target card keeps the older five-cell grid.
+        self.assertIn("levels.targets", js)
+        self.assertIn("function ladderCell", js)
+        self.assertIn("plan-cell-wide", js)
+        self.assertIn("ladder.length > 1", js)
 
     def test_positions_and_outcomes_are_read_from_the_shadow_surfaces(self):
         js = _read(TERMINAL_JS)
@@ -354,6 +364,90 @@ class PrepPlanPanelTest(unittest.TestCase):
         # The Arabic block (STRINGS.ar) must carry the honesty word.
         ar = js.split("ar: {", 1)[1].split("en: {", 1)[0]
         self.assertIn('nw_prep_note: "الاتجاه غير متوقّع', ar)
+
+
+class EnginePanelTest(unittest.TestCase):
+    """The isolated AI engine panel: a second opinion, never a validated read.
+
+    The engine is the one surface whose numbers are a model's own claims, so
+    these pin the honesty: it reads the engine through the app's own /engine/
+    proxy, its win-rate is always labelled an estimate, and a dead or
+    unconfigured engine degrades in place without touching the other panels.
+    """
+
+    def test_the_section_and_tab_exist(self):
+        html = _read(TERMINAL)
+        self.assertIn('id="view-engine"', html)
+        self.assertIn('data-view="engine"', html)
+        for el in ("eng-bias", "eng-status", "eng-read", "eng-trades", "eng-meta"):
+            with self.subTest(el=el):
+                self.assertIn('id="%s"' % el, html)
+
+    def test_the_panel_is_hidden_by_default(self):
+        html = _read(TERMINAL)
+        self.assertRegex(html, r'id="view-engine"[^>]*hidden')
+
+    def test_engine_is_a_route(self):
+        js = _read(TERMINAL_JS)
+        self.assertRegex(js, r'const ROUTES = \[[^\]]*"engine"')
+        self.assertIn('if (route === "engine") loadEngine(false);', js)
+
+    def test_the_panel_reads_the_same_origin_proxy(self):
+        js = _read(TERMINAL_JS)
+        # Same origin, never the engine's own loopback port or an external host.
+        self.assertIn('getJson("engine/v1/engine"', js)
+        self.assertNotRegex(js, r'https?://[^"\']*/engine')
+
+    def test_the_win_rate_is_always_labelled_an_estimate(self):
+        js = _read(TERMINAL_JS)
+        # The rate is the model's claim, so it is never shown bare.
+        self.assertIn("t.win_rate", js)
+        self.assertIn('T("eng_winrate_est")', js)
+        # And the Arabic block must carry the honesty word too.
+        ar = js.split("ar: {", 1)[1].split("en: {", 1)[0]
+        self.assertIn("تقديري", ar)
+
+    def test_the_panel_calls_the_read_isolated_and_unvalidated(self):
+        js = _read(TERMINAL_JS)
+        html = _read(TERMINAL)
+        # The disclaimer lives in the markup, bilingual and always visible.
+        self.assertIn('data-i18n="eng_warn"', html)
+        self.assertIn("eng_warn:", js)
+        self.assertIn("eng_title:", js)
+
+    def test_an_unconfigured_engine_is_shown_not_hidden(self):
+        js = _read(TERMINAL_JS)
+        fn = re.search(r"async function loadEngine[\s\S]*?\n\}", js).group(0)
+        self.assertIn("!e.configured", fn)
+        self.assertIn('T("eng_unconfigured")', fn)
+
+    def test_a_dead_engine_degrades_in_place(self):
+        js = _read(TERMINAL_JS)
+        fn = re.search(r"async function loadEngine[\s\S]*?\n\}", js).group(0)
+        # A fetch failure is caught and named; it never bubbles to blank the app.
+        self.assertIn("catch (err)", fn)
+        self.assertIn('T("eng_unreachable")', fn)
+
+    def test_the_panel_reuses_the_shared_card_styles(self):
+        # The engine panel reuses the advisor's card classes rather than
+        # duplicating them, so the shared stylesheet stays the single source.
+        shared = _read(os.path.join(HERE, "styles.css"))
+        for cls in (".ai-card", ".ai-card-grid", ".eng-rationale", ".eng-anchor"):
+            with self.subTest(cls=cls):
+                self.assertIn(cls, shared)
+        # And the engine-specific strings stay out of the shared sheet.
+        self.assertNotIn(".eng-rationale", _read(TERMINAL_CSS))
+
+    def test_every_string_key_is_shared_by_both_languages(self):
+        js = _read(TERMINAL_JS)
+        ar = _object_keys(js, "  ar: {")
+        en = _object_keys(js, "  en: {")
+        self.assertEqual(ar, en)
+        for key in ("nav_engine", "eng_title", "eng_warn", "eng_refresh",
+                    "eng_winrate", "eng_winrate_est", "eng_no_trades",
+                    "eng_unconfigured", "eng_unreachable", "eng_paused"):
+            with self.subTest(key=key):
+                self.assertIn(key, ar)
 
 
 class GateTest(unittest.TestCase):

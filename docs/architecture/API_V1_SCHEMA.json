@@ -1,5 +1,5 @@
 {
-  "$comment": "ASTRA backend/frontend API v1 - frozen contract (T17). Hand-maintained, machine-checked by tests/integration/test_mock_api_t19.py and scripts/mock_api.py --check. Routes not listed here are NOT part of the frozen frontend contract; /probability/latest and /signals/latest exist but are superseded by /analysis/latest. Every response body is enveloped as {api:'v1', schema:'1.0', data:...}. A missing dependency yields HTTP 503 with the flat error object {error:'true', code, message}; unknown routes yield 404; wrong method 405. T30 (2026-10-08): additive extension declaring every leaf field the real host serves (bridge/status, context, timeframes capability_impact/quality, risk proposal, research, governance, audit, shadow and analysis/history element shapes); additive only, no tag change.",
+  "$comment": "ASTRA backend/frontend API v1 - frozen contract (T17). Hand-maintained, machine-checked by tests/integration/test_mock_api_t19.py and scripts/mock_api.py --check. Routes not listed here are NOT part of the frozen frontend contract; /probability/latest and /signals/latest exist but are superseded by /analysis/latest. Every response body is enveloped as {api:'v1', schema:'1.0', data:...}. A missing dependency yields HTTP 503 with the flat error object {error:'true', code, message}; unknown routes yield 404; wrong method 405. T30 (2026-10-08): additive extension declaring every leaf field the real host serves (bridge/status, context, timeframes capability_impact/quality, risk proposal, research, governance, audit, shadow and analysis/history element shapes); additive only, no tag change. T31 (2026-10-20): declare `levels.targets`, the scaled-target ladder the host emits on /analysis/latest; additive only, no tag change.",
   "api": "v1",
   "schema": "1.0",
   "base": "http://127.0.0.1:8790/api/v1/",
@@ -174,11 +174,12 @@
         },
         "levels": {
           "type": "object",
-          "required": ["entry", "stop_loss", "take_profit", "reward_risk", "suggested_risk_pct", "sl_method", "tp_method"],
+          "required": ["entry", "stop_loss", "take_profit", "targets", "reward_risk", "suggested_risk_pct", "sl_method", "tp_method"],
           "properties": {
             "entry": {"type": ["number", "null"]},
             "stop_loss": {"type": ["number", "null"]},
             "take_profit": {"type": ["number", "null"]},
+            "targets": {"type": "array"},
             "reward_risk": {"type": ["number", "null"]},
             "suggested_risk_pct": {"type": ["number", "null"]},
             "sl_method": {"type": ["string", "null"]},

@@ -84,6 +84,36 @@ VOL = {"available": True, "probability": 0.5, "threshold": 0.65,
        "reason": None}
 PUSH = {"available": False}
 
+# The isolated analysis engine's envelope, shaped exactly like ai_engine.py's
+# `Engine._build`: `analysis` is null unless a provider key is configured. The
+# panel must read `analysis` (never the envelope) and label the win-rate as an
+# estimate, so the fixture carries a populated reply.
+ENGINE = {
+    "engine": {
+        "schema_version": "1.0", "symbol": "XAUUSD", "validated": False,
+        "source": "ai-engine (isolated)", "provider": "groq",
+        "configured": True, "model": "llama-3.3-70b",
+        "analysis": {
+            "market_read": "الفريمات الصغيرة صاعدة والبنية العامة تدعم الشراء.",
+            "bias": "LONG",
+            "news_used": True, "key_event": "بيانات التضخم",
+            "rejected": [],
+            "trades": [{
+                "direction": "LONG", "entry": 2415.5, "stop": 2408.0,
+                "targets": [2422.0, 2430.0], "target": 2430.0,
+                "reward_risk": 1.93, "win_rate": 0.55,
+                "timeframe": "M15",
+                "rationale": "كسر مقاومة قصيرة مع زخم صاعد.",
+                "anchor": {"anchored": True, "note": ""},
+            }],
+            "engine": {"timeframes_read": ["M15", "H1", "H4"],
+                       "timeframes_missing": [], "rule_card": None,
+                       "note": "isolated"},
+        },
+        "note": "AI analysis engine output.",
+    }
+}
+
 
 class _QuietServer(ThreadingHTTPServer):
     daemon_threads = True
@@ -150,6 +180,8 @@ class SeededDomTest(unittest.TestCase):
             fulfil(VOL)
         elif path == "/push.json":
             fulfil(PUSH)
+        elif path.startswith("/engine/v1/engine"):
+            fulfil(payloads.get("engine", ENGINE))
         elif url.startswith(self.base):
             route.continue_()
         else:
@@ -238,6 +270,34 @@ class SeededDomTest(unittest.TestCase):
         finally:
             page.close()
 
+    def test_signal_panel_renders_the_scaled_ladder_when_present(self):
+        payloads = json.loads(json.dumps(PAYLOADS))
+        levels = payloads["GET /api/v1/analysis/latest"]["data"]["levels"]
+        levels.update({"entry": 2000.0, "stop_loss": 1995.0,
+                       "take_profit": 2012.0, "reward_risk": 2.4,
+                       "targets": [2002.4, 2004.8, 2007.2, 2009.6, 2012.0]})
+        page, _ = self._open(payloads=payloads)
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click('.tab[data-view="signal"]')
+            self.assertFalse(page.is_hidden("#l-ladder-row"))
+            text = page.text_content("#l-ladder")
+            self.assertIn("2002.4", text)
+            self.assertIn("2012.0", text)
+        finally:
+            page.close()
+
+    def test_signal_panel_hides_the_ladder_on_a_single_target(self):
+        page, _ = self._open()  # the frozen-null payload has no ladder
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click('.tab[data-view="signal"]')
+            self.assertTrue(page.is_hidden("#l-ladder-row"))
+        finally:
+            page.close()
+
     # -- the ticker and the chart -----------------------------------------
 
     def test_ticker_shows_the_live_price(self):
@@ -304,6 +364,55 @@ class SeededDomTest(unittest.TestCase):
             self.assertIn("offline", page.text_content("#banner-text"))
             self.assertIn("last reading", page.text_content("#banner-text"))
             self.assertEqual(page.text_content("#price"), "2401.00")
+        finally:
+            page.close()
+
+
+    # -- the isolated analysis engine panel --------------------------------
+
+    def test_engine_panel_renders_the_model_trades(self):
+        page, _ = self._open()
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click(".tab-more")
+            page.click('#tabs-more .tab[data-view="engine"]')
+            self._wait(page, "document.querySelectorAll('#eng-trades .ai-card')"
+                             ".length === 1")
+            card = page.text_content("#eng-trades .ai-card")
+            self.assertIn("2415.50", card)
+            self.assertIn("2408.00", card)
+            # The win-rate is the model's claim; it must be labelled as one.
+            self.assertIn("55%", card)
+            self.assertIn("estimate", card)
+            self.assertIn("1.93", card)
+            # Two targets render as a ladder, not a single number.
+            self.assertEqual(
+                page.eval_on_selector_all(
+                    "#eng-trades .ai-card-targets-list li", "e => e.length"), 2)
+            self.assertIn("LONG" if "LONG" in card else "buy", card.lower())
+            self.assertIn("M15", card)
+        finally:
+            page.close()
+
+    def test_engine_panel_reads_analysis_not_the_envelope(self):
+        # `configured: true` with a null `analysis` is the paused/unavailable
+        # shape. Rendering the envelope would print "[object Object]"; the panel
+        # must instead show the honest status and no trade cards.
+        stalled = {"engine": {"configured": True, "analysis": None,
+                              "rate_limited": True,
+                              "note": "AI engine paused: quota spent."}}
+        page, _ = self._open(payloads={**PAYLOADS, "engine": stalled})
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click(".tab-more")
+            page.click('#tabs-more .tab[data-view="engine"]')
+            self._wait(page, "document.querySelector('#eng-status')"
+                             ".textContent.length > 0")
+            self.assertIn("quota", page.text_content("#eng-status"))
+            self.assertEqual(
+                page.eval_on_selector_all("#eng-trades .ai-card", "e => e.length"), 0)
         finally:
             page.close()
 

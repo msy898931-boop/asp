@@ -149,6 +149,10 @@
       <div><dt data-i18n="stop">Stop</dt><dd id="l-stop">--</dd></div>
       <div><dt data-i18n="target">Target</dt><dd id="l-tp">--</dd></div>
       <div><dt data-i18n="rr">R:R</dt><dd id="l-rr">--</dd></div>
+      <div class="levels-wide" id="l-ladder-row" hidden>
+        <dt data-i18n="ladder_title">Scaled targets</dt>
+        <dd id="l-ladder" class="ladder">--</dd>
+      </div>
     </div>
     <div class="bars">
       <div class="bar"><span data-i18n="score">Score</span><i id="b-score"></i><b id="v-score">--</b></div>
@@ -246,6 +250,20 @@
     <button id="ai-refresh" class="text-btn" type="button" data-i18n="ai_refresh">Ask again</button>
   </section>
 
+  <!-- AI ANALYSIS ENGINE (isolated, unvalidated) -->
+  <section class="panel" id="view-engine" hidden>
+    <h2 class="panel-title" data-i18n="eng_title">AI analysis engine</h2>
+    <p class="panel-note ai-warn" data-i18n="eng_warn">Reads every timeframe and the news, then proposes trades with its own win-rate estimate. Outside the validated system, unvalidated. Not financial advice.</p>
+    <div class="ai-stance-row">
+      <span class="ai-stance" id="eng-bias">--</span>
+      <span class="ai-conf" id="eng-status"></span>
+    </div>
+    <p class="ai-thesis" id="eng-read"></p>
+    <div id="eng-trades"></div>
+    <p class="ai-review" id="eng-meta"></p>
+    <button id="eng-refresh" class="text-btn" type="button" data-i18n="ai_refresh">Ask again</button>
+  </section>
+
   <!-- VOLATILITY -->
   <section class="panel" id="view-vol" hidden>
     <h2 class="panel-title" data-i18n="vol_title">Volatility filter</h2>
@@ -308,6 +326,7 @@
 <div class="tabs-more" id="tabs-more" role="tablist" hidden>
   <button class="tab" data-view="tracker" type="button" data-i18n="tab_tracker">Signals</button>
   <button class="tab" data-view="ai" type="button" data-i18n="tab_ai">AI</button>
+  <button class="tab" data-view="engine" type="button" data-i18n="tab_engine">Analysis</button>
   <button class="tab" data-view="conn" type="button" data-i18n="tab_conn">Data</button>
   <button class="tab" data-view="bridge" type="button" data-i18n="tab_bridge">Bridge</button>
 </div>
@@ -332,6 +351,7 @@
 <script src="alerts.js"></script>
 <script src="vol.js"></script>
 <script src="akoan.js"></script>
+<script src="engine.js"></script>
 <script src="ticker.js"></script>
 </body>
 </html>

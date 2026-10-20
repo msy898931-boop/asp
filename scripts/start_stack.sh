@@ -20,6 +20,7 @@ PORT="${1:-12000}"
 API_PORT=8790
 BRIDGE_PORT=8791
 ADVISOR_PORT=8792
+ENGINE_PORT=8794
 TRACKER_PORT=8793
 RUNDIR="$ROOT/run"
 mkdir -p "$RUNDIR"
@@ -85,6 +86,7 @@ else
         --host 0.0.0.0 --port "$PORT" \
         --api-port "$API_PORT" --bridge-port "$BRIDGE_PORT" \
         --advisor-port "$ADVISOR_PORT" --tracker-port "$TRACKER_PORT" \
+        --engine-port "$ENGINE_PORT" \
         > "$RUNDIR/mobile.log" 2>&1 < /dev/null &
     echo $! > "$RUNDIR/mobile.pid"
     echo "[start] mobile launched on :$PORT (pid $!)"
@@ -102,13 +104,46 @@ else
     setsid nohup python3 "$ROOT/advisor/ai_advisor.py" --port "$ADVISOR_PORT" \
         > "$RUNDIR/advisor.log" 2>&1 < /dev/null &
     echo $! > "$RUNDIR/advisor.pid"
-    # Groq is the default provider (global free tier); Gemini is opt-in.
+    # Groq is the default provider (global free tier); Gemini and Mistral are
+    # opt-in. The key name follows the provider.
     _prov="${ASTRA_ADVISOR_PROVIDER:-groq}"
-    if [ "$_prov" = "gemini" ]; then _key="${GEMINI_API_KEY:-}"; else _key="${GROQ_API_KEY:-}"; fi
+    case "$_prov" in
+        gemini)  _key="${GEMINI_API_KEY:-}";  _keyname="GEMINI_API_KEY" ;;
+        mistral) _key="${MISTRAL_API_KEY:-}"; _keyname="MISTRAL_API_KEY" ;;
+        *)       _key="${GROQ_API_KEY:-}";    _keyname="GROQ_API_KEY" ;;
+    esac
     if [ -n "$_key" ]; then
         echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, configured"
     else
-        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, not configured (set GROQ_API_KEY)"
+        echo "[start] ai advisor launched on :$ADVISOR_PORT (pid $!) - provider $_prov, not configured (set $_keyname)"
+    fi
+fi
+
+# --- AI engine (isolated, opt-in) ----------------------------------------
+# Its own process and port, separate from the advisor. It reads every timeframe
+# and the news and asks the model for trades; it never touches the engine or the
+# ledger. Off by default so it is switched on deliberately; opt in with
+# ASTRA_ENABLE_ENGINE=1 and out with ASTRA_DISABLE_ENGINE=1.
+if [ "${ASTRA_DISABLE_ENGINE:-0}" = "1" ]; then
+    echo "[start] ai engine disabled (ASTRA_DISABLE_ENGINE=1)"
+elif [ "${ASTRA_ENABLE_ENGINE:-0}" != "1" ]; then
+    echo "[start] ai engine off (set ASTRA_ENABLE_ENGINE=1 to enable)"
+elif alive "$(pid_of engine)"; then
+    echo "[start] ai engine already running (pid $(pid_of engine))"
+else
+    setsid nohup python3 "$ROOT/advisor/ai_engine.py" --port "$ENGINE_PORT" \
+        > "$RUNDIR/engine.log" 2>&1 < /dev/null &
+    echo $! > "$RUNDIR/engine.pid"
+    _prov="${ASTRA_ADVISOR_PROVIDER:-groq}"
+    case "$_prov" in
+        gemini)  _key="${GEMINI_API_KEY:-}";  _keyname="GEMINI_API_KEY" ;;
+        mistral) _key="${MISTRAL_API_KEY:-}"; _keyname="MISTRAL_API_KEY" ;;
+        *)       _key="${GROQ_API_KEY:-}";    _keyname="GROQ_API_KEY" ;;
+    esac
+    if [ -n "$_key" ]; then
+        echo "[start] ai engine launched on :$ENGINE_PORT (pid $!) - provider $_prov, configured"
+    else
+        echo "[start] ai engine launched on :$ENGINE_PORT (pid $!) - provider $_prov, not configured (set $_keyname)"
     fi
 fi
 

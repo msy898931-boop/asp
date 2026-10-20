@@ -251,6 +251,30 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   mobile panel reads `trade_card.card.*` (the inner object), never
   `trade_card.agreement` — the latter is an object and renders as
   `[object Object]`.
+- The **AI engine** (`advisor/ai_engine.py`, port 8794) is the user-facing
+  "let the AI analyse everything" mode: an isolated, opt-in process that reads
+  **every** timeframe the bridge serves (M1..MN1) plus the news and calendar,
+  hands the lot to the same external model, and asks for concrete trades with
+  numeric entry/stop/targets and the model's **own** win-rate estimate. It is
+  outside the engine and the ledger exactly like the advisor: its own process,
+  its own port, its own log (`run/ai_engine_trades.jsonl`), loopback reads only,
+  no ledger write, no order. Opt in with `ASTRA_ENABLE_ENGINE=1` (off by
+  default); disable with `ASTRA_DISABLE_ENGINE=1`. Every reply is stamped
+  `validated: false`, and each trade carries `win_rate_validated: false`, so a
+  model probability is never mistaken for a measured edge. `validate_trade`
+  enforces coherence before anything is shown — stop on the losing side, targets
+  in travel order, first target beyond the entry, positive R:R — and a bad trade
+  is dropped with the reason recorded (`rejected`), never repaired. The rule
+  card is included as an anchor and each trade is flagged (`anchor.anchored`)
+  when its entry sits more than `FAR_ATR` from the rule-based entry, but the
+  engine is independent by design so a flagged trade is kept, not deleted. The
+  phone app exposes it as the **Analysis** view (behind More): `mobile/engine.js`
+  renders the inner `analysis` object — bias, market read, one card per trade
+  with entry/stop/scaled ladder/reward:risk and the win-rate **labelled as an
+  estimate** — and shows an honest status (unconfigured, paused on a spent
+  quota, unreachable) instead of a blank panel. The panel is read-only and
+  changes nothing else in the app: a dead engine leaves every other tab green.
+  Run it once with `python3 advisor/ai_engine.py --once`; serve it with `--port`.
 - **Quota.** The Groq free tier allows ~200k tokens/day and one advisory costs
   ~1.4k (a ~1k-token prompt plus the reply), so the opinion can only refresh
   ~140 times a day. `CACHE_TTL` (default 600s) is set to fit inside that budget;
@@ -316,6 +340,12 @@ Set `ASTRA_DATA_SOURCE=replay` for an offline synthetic demo.
 Notes: the container must reach `api.telegram.org` (default egress is fine),
 `api.gold-api.com`, and `api.kraken.com`; the loopback API/bridge are never
 exposed publicly.
+
+Both managed deploys build from **`main`** (`deploy-render.yml` triggers on
+pushes to `main`; `render.yaml` / `fly.toml` track it). Work that lands only on a
+side branch is therefore live in no environment until it reaches `main` — a
+branch left open against another feature branch is a dead end, not a staging
+area.
 
 ### Deploy verification (is my fix live?)
 
@@ -500,19 +530,26 @@ public quote feed, not a broker ŌĆö not a trading path.
 `mobile/` is an installable phone app (no store, no build step): an
 instrument-panel shell that reads the same loopback API through its own origin.
 `mobile/serve_mobile.py` serves the shell and reverse-proxies `/api/v1/*`,
-`/bridge/*` and `/advisor/*` to 127.0.0.1 (GET only, upstream fixed to loopback).
+`/bridge/*`, `/advisor/*`, `/tracker/*` and `/engine/*` to 127.0.0.1 (GET only,
+upstream fixed to loopback).
 Run it on a public port; icons are generated with `mobile/icons/make_icons.py`
 (stdlib only). Install on the phone via the browser's "Add to Home screen".
 
-The client is nine classic scripts, not one. `index.html` loads `app.js` first,
-then `i18n`, `panels`, `advisor`, `tracker`, `alerts`, `vol`, `akoan`, `ticker`;
-they share one global scope, so there is no module loader and no build step.
-`app.js` holds the shared state and the network helpers and must stay first.
+The client is ten classic scripts, not one. `index.html` loads `app.js` first,
+then `i18n`, `panels`, `advisor`, `tracker`, `alerts`, `vol`, `akoan`, `engine`,
+`ticker`; they share one global scope, so there is no module loader and no build
+step. `app.js` holds the shared state and the network helpers and must stay first.
 Each script repeats `"use strict"` (a separate classic script would otherwise be
 sloppy). A script ships correctly only if it is loaded by the page, precached in
 `sw.js` and stamped by `serve_mobile.py`; `ClientScriptContractTest` in
 `mobile/test_serve_mobile.py` pins all three, and the source-reading tests read
-the nine as one string so a symbol may move file without breaking an assertion.
+the ten as one string so a symbol may move file without breaking an assertion.
+
+The bar is one row on a phone: five primary tabs (`status`, `signal`, `chart`,
+`vol`, `akoan`) plus a **More** button that opens a sheet above the bar with the
+rest (`tracker`, `ai`, `engine`, `conn`, `bridge`). `SECONDARY_VIEWS` in
+`app.js`, the sheet markup in `index.html` and `TabBarTest` in
+`test_serve_mobile.py` must agree on that split.
 
 Access control: the server is **open by default**. Set `ASTRA_ACCESS_TOKEN`
 (or pass `--access-token`) and every route but `/api/v1/health` answers `401`
@@ -533,8 +570,9 @@ judge" rather than reporting a false failure. `render.yaml` declares the env var
 so the Blueprint and the running service do not drift.
 
 The service worker caches the shell only. Everything that carries a current
-number is network-only: `/api/*`, `/bridge/*`, `/tracker/*`, `/advisor/*`, and
-the panel readings `/vol.json` and `/akoan.json`. The volatility panel stamps
+number is network-only: `/api/*`, `/bridge/*`, `/tracker/*`, `/advisor/*`,
+`/engine/*`, and the panel readings `/vol.json` and `/akoan.json`. The
+volatility panel stamps
 the *render* time, not the data time, so a cached reading would look freshly
 computed ŌĆö that is why the readings join the live list rather than the shell
 cache. `ServiceWorkerGateTest::test_panel_readings_are_never_cached` pins it.
@@ -558,6 +596,19 @@ The limiter is in-process and bounded (`_GATE_MAX_TRACKED`, pruned), so a
 restart forgets it and a flood of distinct addresses cannot grow it without
 limit. `GateRateLimitTest` and `RateLimiterUnitTest` lock the rules; the unit
 test injects a clock so nothing sleeps.
+
+Exercising the AI engine without a provider key: point the advisor at a local
+OpenAI-compatible stub and drive the real bridge. The engine reuses
+`ai_advisor` for both the key and the call, so two env vars are enough —
+`ASTRA_ADVISOR_GROQ_URL=http://127.0.0.1:<port>/v1/chat/completions` and a dummy
+`GROQ_API_KEY`. Run the bridge on real bars with
+`ASTRA_REPLAY_CSV=research/data/xauusd_m1/xauusd_m1_real.csv` and
+`--data-source replay`; then `python3 advisor/ai_engine.py --once` prints the
+trades and `--port 8794` serves them through the phone proxy at `/engine/v1/engine`.
+This is how the panel's three states were verified end to end: a live read, a
+dead engine (proxy 503 → "unknown"/unreachable), and a stub answering 429
+(`rate_limited: true`, `analysis: null` → "paused: quota spent"). Keep such stubs
+in `run/`, which is gitignored, so they never ship.
 
 Shell caching: the shell is served `Cache-Control: no-cache` and the HTML has a
 content hash appended to `styles.css`/`app.js` (`?v=<build>`), while `sw.js`

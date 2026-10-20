@@ -11,10 +11,16 @@
 #include "regime/RegimeState.h"
 #include "structure/StructureSnapshot.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 
 namespace aura {
+
+// Number of rungs in the scaled-target ladder. Matches the advisor's Python
+// ladder (advisor/mtf_read.py) so the phone app and the web terminal show the
+// same shape.
+constexpr std::size_t TARGET_LADDER_SIZE = 5;
 
 enum class SignalDirection {
     LONG,
@@ -39,6 +45,9 @@ struct SignalCandidate {
     double referencePrice = 0.0;
     double suggestedStop = 0.0;
     double suggestedTarget = 0.0;
+    // The scaled ladder: TARGET_LADDER_SIZE levels, nearest first. suggestedTarget
+    // is the furthest rung, so the two never disagree.
+    std::array<double, TARGET_LADDER_SIZE> suggestedTargets{};
     std::string rationale;
     DataQualityState quality = DataQualityState::UNKNOWN;
     bool valid = false;
@@ -49,6 +58,13 @@ struct SignalConfig {
     double rsiShortThreshold = 48.0;
     double atrStopMultiplier = 1.5;
     double atrTargetMultiplier = 2.5;
+    // The scaled ladder, nearest first, as fractions of the target distance
+    // (atrTargetMultiplier * atr). The last rung is 1.0, so suggestedTarget —
+    // and therefore the shadow simulator and the ledger — are unchanged; the
+    // rungs below it are the partial exits. The shape matches the advisor's
+    // Python ladder so the phone app and the terminal show one plan.
+    std::array<double, TARGET_LADDER_SIZE> targetLadderFractions =
+        {0.3, 0.5, 0.7, 0.875, 1.0};
 };
 
 class SignalEngine {

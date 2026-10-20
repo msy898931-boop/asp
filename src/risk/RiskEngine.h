@@ -35,6 +35,9 @@ struct RiskProposal {
     double entryPrice = 0.0;
     double stopPrice = 0.0;
     double targetPrice = 0.0;
+    // The scaled ladder from the signal candidate, nearest first. targetPrice
+    // is the furthest rung; the rungs below it are the partial exits.
+    std::array<double, TARGET_LADDER_SIZE> targetLadder{};
     double riskFraction = 0.0;    // fraction of equity at risk
     double riskAmount = 0.0;
     double positionSizeLots = 0.0;

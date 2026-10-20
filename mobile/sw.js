@@ -1,12 +1,12 @@
 /* ASTRA service worker — offline shell, live data.
-   Live endpoints (API, bridge, advisor) and the panel readings (vol, akoan)
-   are network-only so readings are never stale. The shell is network-first
+   Live endpoints (API, bridge, advisor, engine) and the panel readings (vol,
+   akoan) are network-only so readings are never stale. The shell is network-first
    with a cache fallback: a deploy is picked up on the next load instead of the
    load after next, and the app still opens offline. The app keeps the *last
    reading* itself (localStorage), so offline it opens to that reading rather
    than an empty panel. */
 
-const SHELL = "astra-shell-v39";
+const SHELL = "astra-shell-v40";
 const ASSETS = [
   "./",
   "./index.html",
@@ -19,6 +19,7 @@ const ASSETS = [
   "./alerts.js",
   "./vol.js",
   "./akoan.js",
+  "./engine.js",
   "./ticker.js",
   "./terminal.html",
   "./terminal.css",
@@ -52,7 +53,8 @@ self.addEventListener("fetch", (event) => {
   const live = url.pathname.includes("/api/") ||
                url.pathname.includes("/bridge/") ||
                url.pathname.includes("/tracker/") ||
-               url.pathname.includes("/advisor/");
+               url.pathname.includes("/advisor/") ||
+               url.pathname.includes("/engine/");
   // The panel readings are the same kind of thing as a live endpoint: a number
   // that must be the current one. /vol.json, /akoan.json and /forecast.json are
   // not shell assets — caching one serves a stale reading under a fresh

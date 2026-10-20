@@ -59,6 +59,19 @@ SignalCandidate SignalEngine::generate(const FeatureSnapshot& features,
             features.lastClose - config_.atrTargetMultiplier * features.atr;
     }
 
+    // The scaled ladder: each rung a fraction of the target distance, nearest
+    // first. The last rung equals suggestedTarget exactly, so a reader of the
+    // ladder and a reader of the single target see the same final level.
+    if (candidate.direction != SignalDirection::NONE) {
+        const double sign = (candidate.direction == SignalDirection::LONG) ? 1.0 : -1.0;
+        const double distance =
+            config_.atrTargetMultiplier * features.atr;
+        for (std::size_t i = 0; i < TARGET_LADDER_SIZE; ++i) {
+            candidate.suggestedTargets[i] =
+                features.lastClose + sign * config_.targetLadderFractions[i] * distance;
+        }
+    }
+
     candidate.rationale = "structure=" + std::string(toString(structure.bias)) +
                           " regime=" + std::string(toString(regime.regime)) +
                           " longVotes=" + std::to_string(longVotes) +

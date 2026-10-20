@@ -250,6 +250,23 @@
     <p class="panel-note" data-i18n="rk_note">هذا نظام ظلّي. لا يملك تفويض تنفيذ، ولن ينفّذ صفقة من هذه الواجهة.</p>
   </section>
 
+  <!-- ══ AI ANALYSIS ENGINE (isolated, unvalidated) ═══════════════════ -->
+  <section class="panel" id="view-engine" hidden aria-labelledby="eg-title">
+    <div class="panel-head">
+      <h2 class="panel-title" id="eg-title" data-i18n="eng_title">محرّك التحليل الذكي</h2>
+      <span class="panel-sub" data-i18n="eng_sub">قراءة من نموذج خارجي: يقرأ كل الفريمات والأخبار، ويقترح صفقات بأرقامه هو</span>
+    </div>
+    <p class="panel-note ai-warn" data-i18n="eng_warn">يقرأ كل الفريمات والأخبار، ويقترح صفقات مع نسبة نجاح تقديرية من عنده. خارج النظام المُتحقَّق منه، وغير مُقيَّم. ليس نصيحة مالية.</p>
+    <div class="ai-stance-row">
+      <span class="ai-stance" id="eng-bias">--</span>
+      <span class="ai-conf" id="eng-status"></span>
+    </div>
+    <p class="ai-thesis" id="eng-read"></p>
+    <div id="eng-trades"></div>
+    <p class="ai-review" id="eng-meta"></p>
+    <button id="eng-refresh" class="text-btn" type="button" data-i18n="eng_refresh">اسأل مرة أخرى</button>
+  </section>
+
   <!-- ══ CONSOLE ══════════════════════════════════════════════════════ -->
   <section class="panel" id="view-console" hidden aria-labelledby="cn-title">
     <div class="panel-head">
@@ -274,6 +291,7 @@
   <button class="tab" data-view="timeframes" type="button" data-i18n="nav_timeframes">الإطارات</button>
   <button class="tab" data-view="services" type="button" data-i18n="nav_services">الخدمات</button>
   <button class="tab" data-view="audit" type="button" data-i18n="nav_audit">التدقيق</button>
+  <button class="tab" data-view="engine" type="button" data-i18n="nav_engine">المحرّك</button>
   <button class="tab" data-view="risk" type="button" data-i18n="nav_risk">المخاطر</button>
   <button class="tab" data-view="console" type="button" data-i18n="nav_console">الطرفية</button>
 </nav>

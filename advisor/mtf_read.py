@@ -18,8 +18,10 @@ LLM, no clock — the caller passes the bars):
     timeframe (H4) must not oppose. Otherwise the verdict is NEUTRAL and no
     numbers are emitted — a fabricated plan is worse than no plan.
   * Entry is the freshest close. The stop sits just beyond the last M15 swing,
-    buffered by a fraction of ATR; the target is a fixed R multiple. Reward:risk
-    is reported, never assumed.
+    buffered by a fraction of ATR. Targets are a ladder of five R multiples of
+    that same risked distance — close together, so a partial exit is always
+    reachable — and the ladder's reach scales with how many timeframes agree.
+    Reward:risk is reported, never assumed.
 
 Honesty: this is deterministic arithmetic, not a measured edge. The pipeline's
 own out-of-sample edge is ~0 (AUC 0.50); nothing here claims better. Every card
@@ -55,8 +57,17 @@ SWING_LOOKBACK = 2
 STOP_SWING_BARS = 12
 STOP_BUFFER_ATR = 0.25
 
-# Target as a reward:risk multiple of the risked distance.
+# Targets: a ladder of R multiples of the risked distance, close together so a
+# partial exit is reachable. The ladder's reach scales with agreement — a 3/5
+# read takes profit sooner, a 5/5 read lets it run. At 4/5 agreement the last
+# target is exactly REWARD_R, preserving the single-target card's geometry.
 REWARD_R = 2.0
+TARGET_LADDER = (0.6, 1.0, 1.4, 1.75, 2.0)
+LADDER_BY_AGREEMENT = {
+    3: (0.5, 0.85, 1.2, 1.5, 1.8),
+    4: TARGET_LADDER,
+    5: (0.75, 1.25, 1.75, 2.25, 2.75),
+}
 
 RSI_LONG = 52.0
 RSI_SHORT = 48.0
@@ -244,7 +255,17 @@ def _build_card(bars_by_tf: Dict[str, Sequence[dict]],
 
     if risk <= 0.0:
         return None
-    reward = REWARD_R * risk
+
+    # The ladder: five R multiples of the same risked distance, direction-aware.
+    agree_n = long_count if direction == "LONG" else short_count
+    mults = LADDER_BY_AGREEMENT.get(agree_n, TARGET_LADDER)
+    sign = 1.0 if direction == "LONG" else -1.0
+    targets = [_round(entry + sign * m * risk) for m in mults]
+
+    # ``target``/``rr`` are the furthest rung, so the singular pair the older
+    # surfaces read stays consistent with the ladder beside it.
+    final_r = mults[-1]
+    reward = final_r * risk
     target = entry + reward if direction == "LONG" else entry - reward
 
     return {
@@ -252,11 +273,14 @@ def _build_card(bars_by_tf: Dict[str, Sequence[dict]],
         "entry": _round(entry),
         "stop": _round(stop),
         "target": _round(target),
+        "targets": targets,
         "risk": _round(risk),
         "reward": _round(reward),
         "rr": _round(reward / risk),
-        "basis": ("stop beyond the last %s swing (%.2f ATR buffer); target at "
-                  "%.1fR" % (OPERATIONAL_TF, STOP_BUFFER_ATR, REWARD_R)),
+        "basis": ("stop beyond the last %s swing (%.2f ATR buffer); five targets "
+                  "at %s R (agreement %d/%d)"
+                  % (OPERATIONAL_TF, STOP_BUFFER_ATR,
+                     "/".join("%.2f" % m for m in mults), agree_n, len(TIMEFRAMES))),
         "entry_timeframe": ENTRY_TF if ENTRY_TF in bars_by_tf else OPERATIONAL_TF,
         "agreement": "%d/%d" % (long_count if direction == "LONG" else short_count,
                                 len(TIMEFRAMES)),
@@ -375,9 +399,15 @@ def format_card(result: Dict) -> str:
                                               card["agreement"]),
         "الدخول: %s" % card["entry"],
         "الوقف: %s" % card["stop"],
-        "الهدف: %s" % card["target"],
-        "R:R = %s" % card["rr"],
     ]
+    targets = card.get("targets") or ([card["target"]] if card.get("target") is not None else [])
+    if targets:
+        if len(targets) == 1:
+            lines.append("الهدف: %s" % targets[0])
+        else:
+            lines.append("الأهداف (%d): %s" % (
+                len(targets), " ← ".join(str(t) for t in targets)))
+    lines.append("R:R = %s" % card["rr"])
     tf_bits = []
     for tf, read in result["timeframes"].items():
         arrow = {"LONG": "▲", "SHORT": "▼", "NEUTRAL": "–"}[read["direction"]]

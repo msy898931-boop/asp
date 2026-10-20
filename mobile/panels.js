@@ -96,6 +96,15 @@ function renderSignal(analysis) {
   $("l-tp").textContent = num(levels.take_profit);
   $("l-rr").textContent = num(levels.reward_risk);
 
+  // The scaled ladder is only shown when the proposal actually carries one;
+  // a single-target payload leaves the row hidden rather than guessing rungs.
+  const ladder = Array.isArray(levels.targets)
+    ? levels.targets.filter((t) => t != null) : [];
+  const ladderRow = $("l-ladder-row");
+  ladderRow.hidden = ladder.length <= 1;
+  $("l-ladder").textContent = ladder.length > 1
+    ? ladder.map((t) => num(t)).join(" ← ") : "--";
+
   const score = signal.score;
   const scorePct = score == null ? 0 : Math.max(0, Math.min(100, score));
   $("b-score").style.setProperty("--fill", `${scorePct}%`);

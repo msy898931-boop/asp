@@ -14,6 +14,7 @@ API_PORT="${API_PORT:-8790}"
 BRIDGE_PORT="${BRIDGE_PORT:-8791}"
 TRACKER_PORT="${TRACKER_PORT:-8793}"
 ADVISOR_PORT="${ADVISOR_PORT:-8792}"
+ENGINE_PORT="${ENGINE_PORT:-8794}"
 
 echo "[entry] backend host starting (api=${API_PORT})"
 /app/aura_backend_host --api-port "${API_PORT}" --interval-ms 5000 &
@@ -41,6 +42,13 @@ python3 /app/tracker/signal_tracker.py --host 127.0.0.1 --port "${TRACKER_PORT}"
 echo "[entry] AI advisor starting (advisor=${ADVISOR_PORT})"
 python3 /app/advisor/ai_advisor.py --port "${ADVISOR_PORT}" &
 
+# The AI analysis engine is a second, isolated opinion behind its own tab. Like
+# the advisor it always starts and answers "not configured" until the provider
+# key is set, so the tab degrades instead of erroring. It reads the same
+# loopback surfaces and never touches the engine or the ledger.
+echo "[entry] AI analysis engine starting (engine=${ENGINE_PORT})"
+python3 /app/advisor/ai_engine.py --port "${ENGINE_PORT}" &
+
 echo "[entry] serving phone app on 0.0.0.0:${PORT}"
 exec python3 /app/mobile/serve_mobile.py \
     --host 0.0.0.0 \
@@ -48,4 +56,5 @@ exec python3 /app/mobile/serve_mobile.py \
     --api-port "${API_PORT}" \
     --bridge-port "${BRIDGE_PORT}" \
     --tracker-port "${TRACKER_PORT}" \
-    --advisor-port "${ADVISOR_PORT}"
+    --advisor-port "${ADVISOR_PORT}" \
+    --engine-port "${ENGINE_PORT}"

@@ -68,6 +68,12 @@ _CONTENT_TYPES = {
 
 _PROXY_TIMEOUT = 6.0
 
+# The AI engine answers from cache almost always, but a cold read does a
+# synchronous model round-trip (the advisor's own budget defaults to 20s). The
+# plain 6s proxy budget would turn a healthy-but-cold engine into a 503, so the
+# /engine/ route gets its own, wider budget.
+_ENGINE_PROXY_TIMEOUT = float(os.environ.get("ASTRA_ENGINE_TIMEOUT", "30"))
+
 # Access control. Unset by default, and an unset token means the server is
 # open exactly as it was before this gate existed — so nothing changes until
 # the operator sets it. Set ASTRA_ACCESS_TOKEN to require it. This mirrors the
@@ -206,7 +212,7 @@ def _build_stamp() -> str:
     h = hashlib.sha1()
     for name in ("index.html", "styles.css", "app.js", "i18n.js", "panels.js",
                  "advisor.js", "tracker.js", "alerts.js", "vol.js", "akoan.js",
-                 "ticker.js", "sw.js",
+                 "engine.js", "ticker.js", "sw.js",
                  "terminal.html", "terminal.css", "terminal.js"):
         try:
             with open(os.path.join(HERE, name), "rb") as fh:
@@ -219,7 +225,7 @@ def _build_stamp() -> str:
 _BUILD = _build_stamp()
 _SHELL_ASSET_RE = re.compile(
     rb'(href|src)="(styles\.css|app\.js|i18n\.js|panels\.js|advisor\.js|'
-    rb'tracker\.js|alerts\.js|vol\.js|akoan\.js|ticker\.js|'
+    rb'tracker\.js|alerts\.js|vol\.js|akoan\.js|engine\.js|ticker\.js|'
     rb'terminal\.css|terminal\.js)')
 _STARTED_AT = time.time()
 
@@ -620,6 +626,7 @@ class Handler(BaseHTTPRequestHandler):
     bridge_base = "http://127.0.0.1:8791"
     advisor_base = "http://127.0.0.1:8792"
     tracker_base = "http://127.0.0.1:8793"
+    engine_base = "http://127.0.0.1:8794"
     apk_path = ""
 
     def log_message(self, fmt, *args):  # quieter logs
@@ -671,6 +678,9 @@ class Handler(BaseHTTPRequestHandler):
             self._proxy(self.advisor_base + path[len("/advisor"):], self.path)
         elif path.startswith("/tracker/"):
             self._proxy(self.tracker_base + path[len("/tracker"):], self.path)
+        elif path.startswith("/engine/"):
+            self._proxy(self.engine_base + path[len("/engine"):], self.path,
+                        timeout=_ENGINE_PROXY_TIMEOUT)
         else:
             self._static(path)
 
@@ -998,12 +1008,13 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- reverse proxy ------------------------------------------------------
 
-    def _proxy(self, url: str, original_path: str) -> None:
+    def _proxy(self, url: str, original_path: str, timeout: float | None = None) -> None:
         query = original_path.split("?", 1)[1] if "?" in original_path else ""
         full = url + ("?" + query if query else "")
         req = urllib.request.Request(full, method="GET")
         try:
-            with urllib.request.urlopen(req, timeout=_PROXY_TIMEOUT) as resp:
+            with urllib.request.urlopen(
+                    req, timeout=_PROXY_TIMEOUT if timeout is None else timeout) as resp:
                 body = resp.read()
                 ctype = resp.headers.get("Content-Type",
                                          "application/json; charset=utf-8")
@@ -1050,6 +1061,7 @@ def main(argv=None) -> int:
     parser.add_argument("--bridge-port", type=int, default=8791)
     parser.add_argument("--advisor-port", type=int, default=8792)
     parser.add_argument("--tracker-port", type=int, default=8793)
+    parser.add_argument("--engine-port", type=int, default=8794)
     parser.add_argument("--apk", default=os.path.join(
         os.path.dirname(HERE), "android", "dist", "astra.apk"),
         help="APK to offer at /astra.apk (optional)")
@@ -1065,6 +1077,7 @@ def main(argv=None) -> int:
     Handler.bridge_base = f"http://127.0.0.1:{args.bridge_port}"
     Handler.advisor_base = f"http://127.0.0.1:{args.advisor_port}"
     Handler.tracker_base = f"http://127.0.0.1:{args.tracker_port}"
+    Handler.engine_base = f"http://127.0.0.1:{args.engine_port}"
     Handler.apk_path = os.path.abspath(args.apk)
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
