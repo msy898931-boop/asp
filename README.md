@@ -63,6 +63,18 @@ rate limited — after `ASTRA_GATE_MAX_FAILURES` (10) failed tries within
 counted, and a plain visit carrying no key is not a guess, so a real user is
 not locked out by mistyping or reloading. Treat the live URL as private.
 
+## Privacy & terms
+
+- **[Privacy policy](docs/PRIVACY.md)** — what the app stores (a Telegram chat
+  id and a push endpoint, only if you opt in; nothing else), and how to remove
+  it. No accounts, no analytics, no tracking.
+- **[Terms of service](docs/TERMS.md)** — the app is **decision support in
+  shadow mode**: it does not trade, and its AI win-rates are the model's
+  estimates, not measurements.
+
+In one line: it holds almost nothing about you, it never touches your money, and
+it says so out loud.
+
 ## Alerts
 
 The phone app has an **Alerts** button. With it on, a state change (a new signal,
