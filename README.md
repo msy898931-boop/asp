@@ -4,6 +4,13 @@
 (the per-artifact tags `android`, `desktop`, `api-v1.0` each cover one surface;
 this one covers the product).
 
+> **Independent assessment: 93.5 / 100** — the v1.0.0 release review, measured
+> on `main` at `1da233e`. Up 3.5 from the 90.0 measured earlier the same day,
+> after the legal pages, the product version tag, the refreshed test counts, and
+> the `AGENTS.md` mojibake repair all landed. Every figure re-measured, not
+> copied. Full report: [`docs/ASSESSMENT_2026-10-21_v1.0.md`](docs/ASSESSMENT_2026-10-21_v1.0.md).
+> The remaining gap is users and a multi-user gate — not code.
+
 ## Identity
 - Technical project: **AURA**
 - Product brand: **ASTRA**
