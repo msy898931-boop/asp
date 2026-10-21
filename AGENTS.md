@@ -57,7 +57,7 @@ python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, fe
 ```
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style
-churn) ŌĆö see `ruff.toml`. It must stay clean:
+churn) — see `ruff.toml`. It must stay clean:
 
 ```bash
 ruff check .        # must print "All checks passed!"
@@ -76,7 +76,7 @@ Two gotchas that have bitten before:
 ## Telegram bot
 
 `bridge/telegram_bot/` reads the frontend-facing loopback API
-(`127.0.0.1:8790/api/v1`) ŌĆö it never touches runtime internals.
+(`127.0.0.1:8790/api/v1`) — it never touches runtime internals.
 
 ```bash
 # backend must run first
@@ -92,7 +92,7 @@ when `TELEGRAM_BOT_TOKEN` is set (mirroring how it launches the MT5 bridge).
 Absence of a token is not an error.
 
 Commands: `/start` `/price` `/level` `/levels` `/clearlevels` `/status` `/plan`
-`/myid` `/subscribe` `/unsubscribe` `/help` ŌĆö exactly the menu the bot registers
+`/myid` `/subscribe` `/unsubscribe` `/help` — exactly the menu the bot registers
 with `setMyCommands`, described in Arabic. `/menu`, `/vol`, `/card`, `/grant` and the
 diagnostic `/health` `/analysis` `/signal` `/bridge` also work but stay off the
 menu.
@@ -111,11 +111,11 @@ The key therefore holds direction + stop + target (not the entry), and a
 same-direction change is only news when the structure moved by at least
 `CARD_ALERT_MATERIAL` of one risk (stop-to-entry, 0.5 by default,
 `ASTRA_CARD_ALERT_MATERIAL` or `--card-alert-material` to change it). On the live
-tape that fires ~62 alerts/day ŌĆö the same volume the old 900s window produced,
+tape that fires ~62 alerts/day — the same volume the old 900s window produced,
 but every alert is a moved structure instead of an arbitrary clock tick.
 `CARD_ALERT_COOLDOWN` (0 by default, `ASTRA_CARD_ALERT_COOLDOWN` or
 `--card-alert-cooldown`) remains an optional floor for an operator who wants a
-hard ceiling regardless. A change of **direction** bypasses both rules ŌĆö a
+hard ceiling regardless. A change of **direction** bypasses both rules — a
 reversal is pushed at once, because it is the one change a trader must not miss.
 A NEUTRAL read carries no numbers and is never announced; an unreachable advisor
 is silent. The alert reuses `format_trade_card`, the same renderer as `/card`,
@@ -130,8 +130,8 @@ slash; `CommandMenuPayloadTest` pins it.
 
 The unit suite fakes both the backend client and Telegram, so it proves routing
 and formatting but never that `urllib` speaks to a server. `test_astra_connection.py`
-starts real loopback servers ŌĆö the `scripts/mock_api.py` handler, a candle-envelope
-bridge, and a recording Bot API ŌĆö and drives the production clients through them.
+starts real loopback servers — the `scripts/mock_api.py` handler, a candle-envelope
+bridge, and a recording Bot API — and drives the production clients through them.
 That is the layer that catches a contract rename, a bridge-envelope mix-up, or a
 Bot API call Telegram would reject. It never reaches the network: the deployment
 owns the token and a second poller would 409 it.
@@ -143,33 +143,33 @@ shows the wrong commands while nothing errors. Also check `getWebhookInfo`: the
 bot long-polls `getUpdates`, so a non-empty `url` there means a webhook would
 starve polling.
 
-**Language: Arabic.** Everything the user sees is Arabic ŌĆö command replies,
+**Language: Arabic.** Everything the user sees is Arabic — command replies,
 alerts, and the startup message. On boot the bot calls `setMyCommands` with
 `BOT_COMMANDS` and `setChatMenuButton`, so the Telegram menu always shows the
 real command list regardless of what BotFather was set to. `REPLY_KEYBOARD`
 draws a persistent tap keyboard; `BUTTON_COMMANDS` maps each label to its
 command, and the router accepts either the label or the command. Direction words
-accept Arabic (`┘ü┘ł┘é`/`ž¬žŁž¬`/`žŻ┘Ŗ`) or English (`above`/`below`/`cross`).
+accept Arabic (`فوق`/`تحت`/`أي`) or English (`above`/`below`/`cross`).
 
 ### Selling the tool (tiers)
 
 `entitlements.py` + `price_levels.py` add a free/pro gate and price alerts. The
-gate is **dormant until `ASTRA_UPGRADE_URL` is set** ŌĆö with no URL everyone is
+gate is **dormant until `ASTRA_UPGRADE_URL` is set** — with no URL everyone is
 Pro, so dev and CI are unchanged. Related knobs: `ASTRA_FREE_LEVELS` (2),
 `ASTRA_PRO_LEVELS` (50), `ASTRA_PRO_CHATS` (always-Pro ids). Payment uses a
 Stripe Payment Link (no server code, no secret). `mobile/pricing.html` is the
 plan page; the buy button reads its URL from `/upgrade.json`, which the mobile
 server fills from `ASTRA_UPGRADE_URL`. An admin grants Pro with
-`/grant <chat_id> pro`; users read their id with `/myid`. See RUNBOOK ┬¦11 for
+`/grant <chat_id> pro`; users read their id with `/myid`. See RUNBOOK §11 for
 the mechanics and docs/SELLING.md for the Stripe product/custom-field copy.
 
-`mobile/performance.html` is the **transparency page** ŌĆö the honest numbers the
+`mobile/performance.html` is the **transparency page** — the honest numbers the
 project already publishes in `docs/FINAL_REPORT.md`, shown to the buyer: OOS
-Brier skill Ōēł +0.0012, directional accuracy 51.7%, ECE 0.0015, AUC Ōēł 0.50, plus
+Brier skill ≈ +0.0012, directional accuracy 51.7%, ECE 0.0015, AUC ≈ 0.50, plus
 the walk-forward and the second-provider cross-check. It is a selling point, not
 a confession: it says plainly that the model is well calibrated and carries no
 demonstrated edge, so the product is the alert tool, not a prediction. If the
-tuning changes the numbers, update this page in the same commit ŌĆö a stale
+tuning changes the numbers, update this page in the same commit — a stale
 honesty page is worse than none. `mobile/check_shell.py` (run in CI) fails if any
 file named in `sw.js`'s `ASSETS` list is missing, so the offline shell cannot
 break silently.
@@ -181,8 +181,8 @@ break silently.
 release on `main` (mirrors the Android APK's rolling release; artifacts alone
 expire after 30 days). Two assets:
 
-- `ASTRA-windows.zip` ŌĆö the Qt UI alone (~24 MB).
-- `ASTRA-full.zip` ŌĆö UI + backend host + embedded Python, runs standalone
+- `ASTRA-windows.zip` — the Qt UI alone (~24 MB).
+- `ASTRA-full.zip` — UI + backend host + embedded Python, runs standalone
   (~64 MB): unzip and double-click `ASTRA.bat`.
 
 `ASTRA.bat` (written by `scripts/bundle.py`) starts `aura_backend_host.exe`,
@@ -215,7 +215,7 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   any 401. When adding a new server reader, send the cookie or exempt the route.
 - The backend build is self-contained; the MT5 bridge is loopback-only by design.
 - `HttpClient` in `src/foundation/` deliberately refuses non-loopback hosts, so
-  it cannot reach Telegram's HTTPS API ŌĆö that is why the bot is Python, not C++.
+  it cannot reach Telegram's HTTPS API — that is why the bot is Python, not C++.
 - Telemetry-style posture: everything is shadow-mode; nothing carries execution
   authority, and messages always carry a "not financial advice" disclaimer.
 - Re-staging the bundle: `python3 scripts/bundle.py --out dist/ASTRA
@@ -233,7 +233,7 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   stack.
 - The advisor also publishes a **trade card** (`trade_card` in its reply): a
   deterministic multi-timeframe read of M5/M15/M30/H1/H4 built by
-  `advisor/mtf_read.py`. It is the *only* source of entry/stop/target ŌĆö the
+  `advisor/mtf_read.py`. It is the *only* source of entry/stop/target — the
   model is never handed those levels, so it cannot restate a number it did not
   compute. A direction needs >= 3 of 5 frames and H4 must not oppose; otherwise
   the verdict is NEUTRAL and no numbers are emitted. It is rule-based and
@@ -244,12 +244,12 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   (`_no_trade_line`), so a suppressed sell never reads as "the system only
   ever sees buys". The phone's card panel surfaces the same reason instead of
   hiding the panel. The **plan** the model returns is
-  prose only (bias/trigger/note) ŌĆö the prompt forbids prices ŌĆö and
+  prose only (bias/trigger/note) — the prompt forbids prices — and
   `_merge_card_levels` stamps the card's entry/stop/target onto it before the
   reply goes out, so the plan's levels always equal the card's. (With no model
   there is no opinion and the plan panel is hidden; the card still shows.) The
   mobile panel reads `trade_card.card.*` (the inner object), never
-  `trade_card.agreement` ŌĆö the latter is an object and renders as
+  `trade_card.agreement` — the latter is an object and renders as
   `[object Object]`.
 - The **AI engine** (`advisor/ai_engine.py`, port 8794) is the user-facing
   "let the AI analyse everything" mode: an isolated, opt-in process that reads
@@ -262,16 +262,16 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   default); disable with `ASTRA_DISABLE_ENGINE=1`. Every reply is stamped
   `validated: false`, and each trade carries `win_rate_validated: false`, so a
   model probability is never mistaken for a measured edge. `validate_trade`
-  enforces coherence before anything is shown ŌĆö stop on the losing side, targets
-  in travel order, first target beyond the entry, positive R:R ŌĆö and a bad trade
+  enforces coherence before anything is shown — stop on the losing side, targets
+  in travel order, first target beyond the entry, positive R:R — and a bad trade
   is dropped with the reason recorded (`rejected`), never repaired. The rule
   card is included as an anchor and each trade is flagged (`anchor.anchored`)
   when its entry sits more than `FAR_ATR` from the rule-based entry, but the
   engine is independent by design so a flagged trade is kept, not deleted. The
   phone app exposes it as the **Analysis** view (behind More): `mobile/engine.js`
-  renders the inner `analysis` object ŌĆö bias, market read, one card per trade
+  renders the inner `analysis` object — bias, market read, one card per trade
   with entry/stop/scaled ladder/reward:risk and the win-rate **labelled as an
-  estimate** ŌĆö and shows an honest status (unconfigured, paused on a spent
+  estimate** — and shows an honest status (unconfigured, paused on a spent
   quota, unreachable) instead of a blank panel. The panel is read-only and
   changes nothing else in the app: a dead engine leaves every other tab green.
   Run it once with `python3 advisor/ai_engine.py --once`; serve it with `--port`.
@@ -285,7 +285,7 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   monitor can see it. The app keeps the snapshot and card on screen and shows
   the paused note instead of a blank panel.
 
-## The frozen v1 contract has four copies ŌĆö keep them in step
+## The frozen v1 contract has four copies — keep them in step
 
 A field on a host route lives in four places, and CI now checks all of them:
 
@@ -299,14 +299,14 @@ fixtures against the schema; `tests/integration/test_e2e_real_host_t13.py`
 starts the built host and checks every route against the schema in both
 postures (no-data and the `T13_REAL_DATA=1` real-corpus replay). T13 runs in
 CI's `backend` job. If you change a host field and only update the C++, the
-`timeframes`/`snapshot` exact-shape checks go red ŌĆö that drift is what this
+`timeframes`/`snapshot` exact-shape checks go red — that drift is what this
 gate exists to catch, and it stayed hidden for a while because T13 was not
 wired into CI and the mock silently lagged the host.
 
 - `scripts/start_stack.sh` must stage `build/resources/bridge/mt5_python` as a
   **real copy**, never a symlink back to the repo: T13 copies into that tree,
   and a symlink makes source and destination the same inode, which raises
-  `SameFileError` and ŌĆö worse ŌĆö would list a tracked source file for deletion
+  `SameFileError` and — worse — would list a tracked source file for deletion
   during replay cleanup. `ensure_bundle()` guards this with `os.path.samefile`,
   but the staging must not create the situation in the first place.
 
@@ -315,7 +315,7 @@ wired into CI and the mock silently lagged the host.
 For a 24/7 bot (no PC needed) the repo ships a headless image. One container
 runs **everything**: the backend host (supervising the MT5 bridge and the
 Telegram bot) and the phone app (PWA) on the public port. That means the bot
-and the phone app deploy as **one service on one port** ŌĆö see `DEPLOY.md`.
+and the phone app deploy as **one service on one port** — see `DEPLOY.md`.
 
 ```bash
 cp .env.example .env      # set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
@@ -343,7 +343,7 @@ exposed publicly.
 
 Both managed deploys build from **`main`** (`deploy-render.yml` triggers on
 pushes to `main`; `render.yaml` / `fly.toml` track it). Work that lands only on a
-side branch is therefore live in no environment until it reaches `main` ŌĆö a
+side branch is therefore live in no environment until it reaches `main` — a
 branch left open against another feature branch is a dead end, not a staging
 area.
 
@@ -366,7 +366,7 @@ Two checks watch the live service, both free (GitHub Actions):
   for ~5h17m, pinging `/api/v1/health` every 5 minutes, then re-arms itself
   with a `workflow_dispatch` so the next run takes over. It opens with a
   canary that prints `/version.json` and **fails** if `/akoan.json` answers
-  `available:false` ŌĆö the exact bug that once shipped the News tab blank.
+  `available:false` — the exact bug that once shipped the News tab blank.
   The long run exists because the cron trigger is too slow to beat the
   15-minute sleep window (see "Never let the server sleep" below).
 - `astra-chain-guard` (hourly) is the safety net for the warm chains: if no
@@ -375,7 +375,7 @@ Two checks watch the live service, both free (GitHub Actions):
 - `astra-scan-chain` gives the scanner a real five-minute cadence. The
   `astra-bot.yml` cron degraded from ~40 runs/day to 7-8 (5-minute slots landing
   20-40 minutes apart), so an idea could arrive a couple of bars late. This chain
-  dispatches `astra-bot.yml` every five minutes for ~5h17m, then re-arms itself ŌĆö
+  dispatches `astra-bot.yml` every five minutes for ~5h17m, then re-arms itself —
   the same self-re-arming shape as `astra-keepalive`, because a job that runs for
   hours is reliable where GitHub's best-effort cron is not. `astra-bot.yml` keeps
   its cron as a fallback; its concurrency group serialises the two triggers and
@@ -425,25 +425,25 @@ tiers on every push. `bridge/telegram_bot/test_astra_bot.py`
 The deployed host and the fork repo are read from the environment, not baked in,
 so a clone can move to a new deployment by setting two variables:
 
-- `ASTRA_URL` ŌĆö the service root, trailing slash optional. Read by
+- `ASTRA_URL` — the service root, trailing slash optional. Read by
   `bot/astra_env.py` (used by `daily_report`, `miss_alert`, `review_digest`,
   `watchdog`), the keepalive and watchdog workflows, and `check_deploy.sh`.
-- `ASTRA_REPO` ŌĆö `owner/repo`, used by `serve_mobile.py` to build the
+- `ASTRA_REPO` — `owner/repo`, used by `serve_mobile.py` to build the
   `/astra.apk` fallback link (or set `ASTRA_APK_URL` to override the link whole).
-- `ASTRA_ACCESS_TOKEN` ŌĆö optional. Set it and every phone-app route needs the
+- `ASTRA_ACCESS_TOKEN` — optional. Set it and every phone-app route needs the
   key; leave it unset (the default) and the server is open exactly as before.
   See *Access control* under the phone app below.
-- `ASTRA_GATE_MAX_FAILURES` / `ASTRA_GATE_WINDOW_S` / `ASTRA_GATE_LOCKOUT_S` ŌĆö
+- `ASTRA_GATE_MAX_FAILURES` / `ASTRA_GATE_WINDOW_S` / `ASTRA_GATE_LOCKOUT_S` —
   optional. Tune the gate's per-address failure limit (defaults 10 / 300 s /
   900 s). Only wrong keys are counted; a correct key clears the record.
-- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` ŌĆö optional. Enable Web Push (see
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — optional. Enable Web Push (see
   *Web Push* below). Both are base64url, unpadded; generate them locally for
   free with `python3 -c "import webpush; print(webpush.generate_keys())"`. Unset
   is the default: the phone keeps using its in-app alerts.
-- `VAPID_SUBJECT` ŌĆö optional. The push-service contact claim; defaults to
+- `VAPID_SUBJECT` — optional. The push-service contact claim; defaults to
   `mailto:admin@example.com`. Apple is strict about it, so set a real `mailto:`
   or `https:` value if you ship to iOS.
-- `ASTRA_PUSH_STORE` ŌĆö optional. Where subscriptions are kept; defaults to
+- `ASTRA_PUSH_STORE` — optional. Where subscriptions are kept; defaults to
   `~/.astra/push_subscriptions.json`, on the same persistent disk as the bot
   heartbeat, so subscriptions survive a redeploy.
 
@@ -454,7 +454,7 @@ changes until the variables are set. `bot/test_astra_env.py` locks this down.
 **Blank means unset.** A workflow that writes `ASTRA_URL: ${{ vars.ASTRA_URL }}`
 sets it to the empty string when the repo variable is absent. `astra_env` treats
 blank or whitespace as unset, and every workflow that passes the variable also
-carries a `|| 'https://ŌĆ”'` fallback. Both guards exist because a blank host once
+carries a `|| 'https://…'` fallback. Both guards exist because a blank host once
 built a relative URL and killed the daily report (`7cd58a8`).
 
 ### Daily report
@@ -462,7 +462,7 @@ built a relative URL and killed the daily report (`7cd58a8`).
 `bot/daily_report.py` (workflow `astra-daily`) sends one Telegram message a day,
 at **21:00 UTC = 00:00 UTC+3** (local midnight), covering the UTC day that just
 ended. Each closed and open idea shows direction, entry, outcome and R, followed
-by the basis the rules saw ŌĆö trend bias, market regime and RSI ŌĆö so the reader
+by the basis the rules saw — trend bias, market regime and RSI — so the reader
 can see *why*. It only reads the tracker, so it can never invent a result, and
 it refuses to state a rate below `MIN_SCORED`. Re-send any day with
 `gh workflow run astra-daily.yml -f date=YYYY-MM-DD -f force=true`.
@@ -474,7 +474,7 @@ replays the engine, and records the trades the pre-specified rule (H4-aligned,
 within 120 minutes of a news event) would have taken to an append-only ledger.
 It places no orders and touches no live state. The ledger and its state ride in
 the Actions cache under the `astra-paper-` scope, and the job speaks on Telegram
-only when the rule trades or the UTC day rolls over ŌĆö it is a trial record, not
+only when the rule trades or the UTC day rolls over — it is a trial record, not
 a heartbeat.
 
 The observer runs as the `paper` job of `astra-bot.yml`, riding that workflow's
@@ -482,7 +482,7 @@ five-minute cron. A standalone `astra-paper.yml` was tried first, but its
 schedule fired only sporadically (twice in total) while `astra-bot` fired
 reliably all day, so the observer was moved onto the trigger that works and the
 standalone workflow was deleted to keep one source of truth. GitHub's cron also
-lags (runs land at :21, :51, ŌĆ”), so the job must stay idempotent and must not
+lags (runs land at :21, :51, …), so the job must stay idempotent and must not
 gate on the wall-clock minute.
 
 ### Synthetic data source
@@ -501,7 +501,7 @@ ASTRA_REPLAY_CSV=/app/research/data/xauusd_m1/xauusd_m1_real.csv
 `broker = "REPLAY (synthetic)"`, so the source is never mistaken for a live
 broker. Default remains `mt5`. This is a development/demo feed, not market data.
 It also shifts the corpus's timestamps onto the current minute, so replayed
-prices are historical values wearing today's clock ŌĆö useful for shape, not for
+prices are historical values wearing today's clock — useful for shape, not for
 a current price.
 
 ### Live data source (no terminal needed)
@@ -524,7 +524,7 @@ Kraken's public `PAXGUSD` market, a gold-backed token that tracks one troy ounce
 and trades 24/7, so every timeframe is available without a market-hours gap.
 History is trimmed to the engine's 400-day bar-plausibility window so
 daily/weekly/monthly series are not rejected as `IMPLAUSIBLE_TIME`. This is a
-public quote feed, not a broker ŌĆö not a trading path.
+public quote feed, not a broker — not a trading path.
 
 ### Mobile app (PWA)
 
@@ -554,7 +554,7 @@ rest (`tracker`, `ai`, `engine`, `conn`, `bridge`). `SECONDARY_VIEWS` in
 
 Access control: the server is **open by default**. Set `ASTRA_ACCESS_TOKEN`
 (or pass `--access-token`) and every route but `/api/v1/health` answers `401`
-without the key. Health stays open on purpose ŌĆö Render, Fly and the keepalive
+without the key. Health stays open on purpose — Render, Fly and the keepalive
 cron poll it with no credential, so gating it would read as "service down".
 A first visit with `?k=KEY` hits `/unlock`, which sets an `HttpOnly` cookie and
 redirects to a clean `/`, so the key does not linger in the address bar, history
@@ -575,7 +575,7 @@ number is network-only: `/api/*`, `/bridge/*`, `/tracker/*`, `/advisor/*`,
 `/engine/*`, and the panel readings `/vol.json` and `/akoan.json`. The
 volatility panel stamps
 the *render* time, not the data time, so a cached reading would look freshly
-computed ŌĆö that is why the readings join the live list rather than the shell
+computed — that is why the readings join the live list rather than the shell
 cache. `ServiceWorkerGateTest::test_panel_readings_are_never_cached` pins it.
 
 The gate is rate limited so it is not an unlimited guessing oracle. Failures are
@@ -585,7 +585,7 @@ within `ASTRA_GATE_WINDOW_S` (300 s), for `ASTRA_GATE_LOCKOUT_S` (900 s). Two
 details matter and are easy to get wrong:
 
 * Only a *presented* wrong key is counted. A request with no key at all is a
-  plain unauthenticated visit, answered `401` without spending the budget ŌĆö so a
+  plain unauthenticated visit, answered `401` without spending the budget — so a
   phone reloading the gate page, or a crawler, cannot lock the real user out.
 * A correct key clears the record, so an operator who mistypes a few times is
   never locked out.
@@ -600,21 +600,21 @@ test injects a clock so nothing sleeps.
 
 Exercising the AI engine without a provider key: point the advisor at a local
 OpenAI-compatible stub and drive the real bridge. The engine reuses
-`ai_advisor` for both the key and the call, so two env vars are enough ŌĆö
+`ai_advisor` for both the key and the call, so two env vars are enough —
 `ASTRA_ADVISOR_GROQ_URL=http://127.0.0.1:<port>/v1/chat/completions` and a dummy
 `GROQ_API_KEY`. Run the bridge on real bars with
 `ASTRA_REPLAY_CSV=research/data/xauusd_m1/xauusd_m1_real.csv` and
 `--data-source replay`; then `python3 advisor/ai_engine.py --once` prints the
 trades and `--port 8794` serves them through the phone proxy at `/engine/v1/engine`.
 This is how the panel's three states were verified end to end: a live read, a
-dead engine (proxy 503 ŌåÆ "unknown"/unreachable), and a stub answering 429
-(`rate_limited: true`, `analysis: null` ŌåÆ "paused: quota spent"). Keep such stubs
+dead engine (proxy 503 → "unknown"/unreachable), and a stub answering 429
+(`rate_limited: true`, `analysis: null` → "paused: quota spent"). Keep such stubs
 in `run/`, which is gitignored, so they never ship.
 
 Shell caching: the shell is served `Cache-Control: no-cache` and the HTML has a
 content hash appended to `styles.css`/`app.js` (`?v=<build>`), while `sw.js`
 fetches the shell network-first. A stale shell is the failure mode to watch for
-ŌĆö the AI tab showed only placeholders because the browser kept an old `app.js`
+— the AI tab showed only placeholders because the browser kept an old `app.js`
 whose panel markup had no renderer. When a UI change does not appear, suspect
 the cache before the code.
 
@@ -625,8 +625,8 @@ AI tab sits on placeholders with no error. Check `run/advisor.log` and
 `provider=... configured=...` on startup, so a missing log line means it never
 came up.
 
-A third mode is the one seen most in production: the AI tab shows "ž¦┘ä┘ģž│ž¬ž┤ž¦ž▒
-ž¦┘äž░┘ā┘Ŗ ž║┘Ŗž▒ ┘ģž¬ž¦žŁ" while everything else is green. That is not a dead process ŌĆö it
+A third mode is the one seen most in production: the AI tab shows "المستشار
+الذكي غير متاح" while everything else is green. That is not a dead process — it
 is a spent model quota. The advisor is up and answers, but the provider returns
 429 ("TPD: Limit 200000"), `call_groq` returns None, and the panel used to fall
 back to a blank "unavailable". Read `rate_limited` from `GET /advisor/v1/health`
@@ -640,14 +640,14 @@ snapshot stay live throughout, because the card comes from the model-free
 `mobile/terminal.html` is the desktop counterpart of the phone app: the same
 backend, the same palette, read on a monitor. It is a **separate page** served
 by the same server (and stamped/gated with the rest of the shell), so it adds no
-risk to the phone shell ŌĆö if it were folded into `index.html` it would have to
+risk to the phone shell — if it were folded into `index.html` it would have to
 be in the offline shell and every phone would pay for a view it never opens.
 
 Eight sections: Overview (aggregate state, a metric matrix with each reading's
 source endpoint, the two honesty badges, degraded reasons), Market & trades,
 News & gold, Timeframes (all nine, each with a tap-for-detail dialog), Services
 (a live latency board over the same endpoints, plus the bridge readout), Audit,
-Risk & System, and Console ŌĆö a raw endpoint runner so "what does the app
+Risk & System, and Console — a raw endpoint runner so "what does the app
 actually receive?" is one click.
 
 **Market & trades** is the one panel built from the decision engine's own
@@ -663,12 +663,12 @@ one, and an absent analysis document reads "unavailable", never a direction of
 `NONE`. **RULE C is enforced in the renderer**: the probability is shown only
 when `signal.probability_calibrated === true`, otherwise the raw score is
 labelled a score, never dressed as a probability. Its CSS lives in
-`terminal.css` only ŌĆö the shared `styles.css` the phone app depends on is not
+`terminal.css` only — the shared `styles.css` the phone app depends on is not
 touched, and the tab bar is widened to eight in `terminal.css`.
 
 When no plan is drawn, the panel does not leave a blank "waiting" line: it
 names the gate the values are consistent with (`whyNoTrade`), read from the
-context the backend already sent ŌĆö "the regime and structure did not agree on a
+context the backend already sent — "the regime and structure did not agree on a
 direction", "the regime is not eligible under policy", or "the engine denied
 the trade". A locked analysis route (401) reads "backend is key-protected", not
 a decision of `NONE`. The regime label keys use the surface's real vocabulary
@@ -676,16 +676,16 @@ a decision of `NONE`. The regime label keys use the surface's real vocabulary
 `TREND_UP` would silently fall back to the raw English word in the Arabic UI.
 
 The rule that governs every panel: **show the backend's real answer, and when
-the answer is unknown say so.** A missing reading renders `ž║┘Ŗž▒ ┘ģž¬ž¦žŁ`, never a
+the answer is unknown say so.** A missing reading renders `غير متاح`, never a
 plausible-looking `0`. `refresh()` uses `Promise.allSettled`, so one dead
 endpoint degrades its own tile instead of blanking the page, and a `401`
-everywhere reports "backend locked", not "unreachable" ŌĆö the two send an
+everywhere reports "backend locked", not "unreachable" — the two send an
 operator down different paths. `mobile/test_terminal.py` pins all of this
 (asset wiring, the stamp, gate coverage, bilingual key parity, no `eval`, no
 absolute origins, and the unknown-is-not-safe rule).
 
 **News & gold** is the live news read. `advisor/news_engine.py` assembles a
-digest from keyless public sources ŌĆö the TradingView economic calendar
+digest from keyless public sources — the TradingView economic calendar
 (`advisor/calendar_feed.py`, which owns the release fetch and the mechanical
 surprise read) and the Google News RSS gold search (the same reader the advisor
 uses). It reuses, never re-implements: `news_window.blackout_event` /
@@ -706,7 +706,7 @@ labelled indirect, because only the dollar has a mechanical link to gold); the
 wording is "pressure" / "support", never "will fall"; and the caveat says the
 news effect on system results is not measured, so no edge is claimed. The panel
 is fetched in `refresh()` **before** the "all endpoints dead" early return, so
-the news still renders when the backend is down ŌĆö it reads public feeds, not
+the news still renders when the backend is down — it reads public feeds, not
 the backend. `advisor/test_news_engine.py` and the `NewsPanelTest` class in
 `mobile/test_terminal.py` pin the window logic, the baseline honesty, the
 dollar-only gold read, and the route wiring, all offline.
@@ -726,14 +726,14 @@ can be changed on the device from the app's error screen.
 
 `.github/workflows/build-windows.yml` produces two artifacts:
 
-* `ASTRA-windows.zip` ŌĆö the Qt UI alone (needs a backend elsewhere).
-* `ASTRA-full-windows.zip` ŌĆö **the runnable desktop app**: `astra_desktop.exe`
+* `ASTRA-windows.zip` — the Qt UI alone (needs a backend elsewhere).
+* `ASTRA-full-windows.zip` — **the runnable desktop app**: `astra_desktop.exe`
   plus `aura_backend_host.exe`, a private embedded Python under
   `resources/python/`, the bridge, and the operator bot. Unzip, run
   `astra_desktop.exe`; the host finds `resources/` beside itself.
 
 `scripts/embed_python.py` downloads a python-build-standalone Windows build and
-lays it down as `resources/python/python.exe` (no Python on the target, no MSI ŌĆö
+lays it down as `resources/python/python.exe` (no Python on the target, no MSI —
 the bridge and bot are stdlib-only). `scripts/bundle.py` stages the bridge/bot
 and creates `config/`, `data/`, `logs/`.
 
@@ -750,7 +750,7 @@ before, so the old `.exe` was UI-only):
   became `ServiceState::0` (`C2589`/`C2062`); `ProcessSupervisor.cpp` now
   `#undef ERROR` after the include.
 
-Telegram bot: verified end-to-end against the live feed ŌĆö `/status`, `/health`,
+Telegram bot: verified end-to-end against the live feed — `/status`, `/health`,
 `/analysis`, `/bridge` all answer correctly (ONLINE/SHADOW/READY, symbol XAUUSD,
 source gold-api.com + Kraken PAXGUSD).
 
@@ -777,43 +777,43 @@ and the refresh button sat half off-screen. Two media queries fix it by measured
 numbers, not by eye: below 419px the controls drop to 40px wide (height stays
 44px, so the tap target does not shrink) and the wordmark steps to 22px; below
 359px the gaps tighten, the mark shrinks to 28px and the wordmark to 19px. The
-brand is the side that yields ŌĆö `.brand { min-width: 0 }` lets it shrink, its
+brand is the side that yields — `.brand { min-width: 0 }` lets it shrink, its
 subtitle ellipsizes, and `.controls { flex: none }` keeps the buttons whole.
 `html, body { overflow-x: hidden }` is a safety net, not the fix.
 
 The 10px micro-labels (and the bottom tab bar) step up to 11px below 480px;
 they are legible on a desktop panel but strain a phone held at arm's length.
 `mobile/test_serve_mobile.py::NarrowHeaderTest` pins all of this so it cannot
-silently regress ŌĆö the sizes were measured in a headless browser at 320/360/375/
+silently regress — the sizes were measured in a headless browser at 320/360/375/
 390/412/430px, in both directions (the app runs RTL in Arabic).
 
-## Model edge ŌĆö what is and is not signal
+## Model edge — what is and is not signal
 
 The decision model is **honestly measured and carries no demonstrated edge**:
-OOS (2025) Brier 0.2497, skill +0.0012 ŌĆö a coin flip ŌĆö with excellent
-calibration (ECE 0.0012). See `docs/FINAL_REPORT.md` ┬¦3 (RULE E).
+OOS (2025) Brier 0.2497, skill +0.0012 — a coin flip — with excellent
+calibration (ECE 0.0012). See `docs/FINAL_REPORT.md` §3 (RULE E).
 
 Two cheap hypotheses for the missing edge have been tested and **refuted**
 (both reproduce the published baseline exactly first):
 
 - **Calendar time is not signal.** `scripts/feature_lab.py` adds time-of-day /
   session / day-of-week features beside a random control. The time arm scored
-  +0.0011 ŌĆö indistinguishable from the random arm, and it worsened ECE.
+  +0.0011 — indistinguishable from the random arm, and it worsened ECE.
 - **Model capacity is not signal.** `scripts/nonlinearity_lab.py` runs a
-  gradient-boosted tree on the identical split. It scored +0.0009 ŌĆö no better
+  gradient-boosted tree on the identical split. It scored +0.0009 — no better
   than the linear logistic, and calibrated worse.
 - **Order flow is not signal (it hurts).** `scripts/volume_flow_lab.py` builds 8
   causal volume/spread/imbalance features from the raw Dukascopy feed (the
   shipped corpus stores OHLC shape only, so these are genuinely new inputs). It
-  scored **-0.0040** ŌĆö negative skill, below a coin flip ŌĆö while the random
+  scored **-0.0040** — negative skill, below a coin flip — while the random
   control left the baseline untouched. The fit overfits the flow dimensions.
 - **Cross-asset macro is not signal.** `scripts/crossasset_lab.py` joins DXY
   (Yahoo `DX-Y.NYB`) and the 10-year real yield (FRED `DFII10`) by last-value
-  carried forward. It scored +0.0006 ŌĆö no better than baseline, worse than the
+  carried forward. It scored +0.0006 — no better than baseline, worse than the
   random control. The dollar and real-rate backdrop adds nothing at M15.
-- **The horizon was not the problem ŌĆö and it exposes the real trap.**
+- **The horizon was not the problem — and it exposes the real trap.**
   `scripts/horizon_lab.py` sweeps horizons and looks promising: skill rises
-  monotonically, +0.0012 (15m) ŌåÆ +0.0033 (1h) ŌåÆ +0.0063 (2h) ŌåÆ +0.0085 (4h).
+  monotonically, +0.0012 (15m) → +0.0033 (1h) → +0.0063 (2h) → +0.0085 (4h).
   But `scripts/horizon_diagnostic.py` shows it is drift and overlap, not edge:
   the model's accuracy edge over the base rate is **+0.0000 at every horizon**
   (0.5172/0.517, 0.5320/0.532, 0.5430/0.543, 0.5537/0.554), and its skill is
@@ -823,8 +823,8 @@ Two cheap hypotheses for the missing edge have been tested and **refuted**
   against the base rate before it is believed.
 - **There is no ranking signal at all.** `scripts/discrimination_lab.py` reports
   threshold-free AUC (the drift-proof measure) with a permutation test. AUC is
-  ~0.50 at every horizon ŌĆö 0.5032 (15m, p=0.41), 0.4992 (1h, p=0.79), 0.5033
-  (2h, p=0.42) ŌĆö so the probabilities rank up- and down-moves no better than a
+  ~0.50 at every horizon — 0.5032 (15m, p=0.41), 0.4992 (1h, p=0.79), 0.5033
+  (2h, p=0.42) — so the probabilities rank up- and down-moves no better than a
   coin. At 4h AUC dips to 0.4885 (p=0.013): a faint *reversal* tilt, but it is
   on the wrong side of 0.5, does not survive multiple-comparison correction
   across four horizons and six labs, and its Brier is still worse than the base
@@ -836,7 +836,7 @@ the published run. Run them before proposing any new feature: if an idea beats
 the random-control arm, it is worth a C++ engine change + full corpus
 regeneration; otherwise it is not.
 
-Experiments so far: seven scripts ŌĆö `feature_lab.py` (calendar time),
+Experiments so far: seven scripts — `feature_lab.py` (calendar time),
 `nonlinearity_lab.py` (tree capacity), `volume_flow_lab.py` (order flow),
 `crossasset_lab.py` (DXY + real yield), `horizon_lab.py` + `horizon_diagnostic.py`
 (forecast horizon), `discrimination_lab.py` (AUC + permutation). Every one
@@ -846,18 +846,18 @@ The decisive lesson is the horizon diagnostic: a model can show *rising* Brier
 skill purely from market drift, with **zero** accuracy edge over the base rate.
 Always score against the base-rate forecast, not just the 0.5 reference.
 
-The remaining lever is **new information** the corpus does not contain ŌĆö real
+The remaining lever is **new information** the corpus does not contain — real
 order-book/tape imbalance, or a stationary target the drift cannot game. No
 transformation of the OHLC feed, and no horizon, will produce an edge.
 
-### The stationary target the drift cannot game (Phase 0 ŌĆö GO)
+### The stationary target the drift cannot game (Phase 0 — GO)
 
 `research/horizon_probe.py` takes the second half of that lesson seriously and
 switches the target from the *sign* of the next move to its *size*. Volatility
 clusters, and that is a law, not a regime: trailing volatility ranks forward
 volatility with OOS (2025) AUC **0.688** (1h), **0.729** (4h), **0.794** (1d),
-and holds in every calendar year (0.646ŌĆō0.729). The direction baselines in the
-same table sit on the base rate (0.49ŌĆō0.51) ŌĆö a coin flip, confirming the
+and holds in every calendar year (0.646–0.729). The direction baselines in the
+same table sit on the base rate (0.49–0.51) — a coin flip, confirming the
 sections above.
 
 The probe also nails the drift trap from the other side: the OOS up-move base
@@ -869,7 +869,7 @@ The product this justifies is a **"do not trade now" volatility filter** (honest
 never claims direction). It is Phase 1+; build it on `run_calibrated` with a
 "forward vol above median" label, and fold the news-quiet window into it.
 
-### The deployable volatility model (Phase 1 ŌĆö shipped in the bot)
+### The deployable volatility model (Phase 1 — shipped in the bot)
 
 `scripts/volatility_lab.py` trains the filter and `--export`s a self-contained
 JSON artifact (`bridge/telegram_bot/vol_model.json`). It reuses the published
@@ -888,7 +888,7 @@ OOS (2025), 4h horizon, multi-timeframe feature set
 | AUC | **0.743** | > 0.5 |
 | ECE | **0.0325** | < 0.05 |
 
-The M15-only arm scores AUC 0.575 ŌĆö **multi-timeframe is the winner**, so the
+The M15-only arm scores AUC 0.575 — **multi-timeframe is the winner**, so the
 artifact carries all five timeframes the bot actually fetches. The solver is
 pure-Python (stdlib-only, no numpy by design), which is why feature reduction
 was required to keep IRLS tractable.
@@ -898,29 +898,29 @@ was required to keep IRLS tractable.
 `AnalyticalFeatureEngine.cpp` defines them (sample stdev of log returns over the
 9-bar trigger window vs the 200-bar context; Wilder mean true range; clamped to
 [0,1]). **`test_volatility_parity.py` runs the real `aura_feature_dump` and
-asserts the Python values match to 1e-9 per timeframe** ŌĆö if the engine's
+asserts the Python values match to 1e-9 per timeframe** — if the engine's
 definitions change, that test fails. The model returns `None` (bot stays silent)
 rather than a number when fewer than five timeframes have data.
 
 The bot exposes `/vol` (a single reading) and the monitor thread emits one
 edge-triggered alert when the probability crosses the threshold, re-arming only
-after the market calms ŌĆö never a per-cycle repeat. The alert text states
+after the market calms — never a per-cycle repeat. The alert text states
 explicitly that it measures *size*, not direction.
 
-### The news-quiet window (Phase 2 ŌĆö folded into the filter)
+### The news-quiet window (Phase 2 — folded into the filter)
 
 `advisor/news_window.py` answers one question for the bot: is *now* a bad moment
-because a high-impact release is imminent or just printed? The logic is pure ŌĆö
+because a high-impact release is imminent or just printed? The logic is pure —
 it takes the normalized event list and a timestamp, returns a reason string or
-None ŌĆö so it is fully unit-testable and pays no network cost of its own.
+None — so it is fully unit-testable and pays no network cost of its own.
 `advisor/calendar_feed.py` owns the fetch.
 
-- `blackout_event` / `blackout_reason` ŌĆö ┬▒15 min around a high-impact event
+- `blackout_event` / `blackout_reason` — ±15 min around a high-impact event
   (`importance >= HIGH`). The message says "the market is usually violent", never
   that it *will* move.
-- `upcoming_event` ŌĆö a relevant event within 45 min, when the coast is clear now
+- `upcoming_event` — a relevant event within 45 min, when the coast is clear now
   but a release looms.
-- `recent_context` ŌĆö the level feature's "interpretation 1": when a price level
+- `recent_context` — the level feature's "interpretation 1": when a price level
   fires, the alert names the newest relevant release and reuses
   `calendar_feed.classify`, so the baseline (forecast or previous) is always
   named and gold direction is only asserted for a US event.
@@ -933,8 +933,8 @@ volatility-only rather than crashing when the advisor is absent.
 
 **The news surface is shared across all three faces.** `/news` on the bot and
 the **News & gold** panel on the web terminal both render
-`advisor/news_engine.digest` ŌĆö the window, the schedule, the just-released tape
-with its gold read, and the headlines ŌĆö so the bot and the page cannot disagree
+`advisor/news_engine.digest` — the window, the schedule, the just-released tape
+with its gold read, and the headlines — so the bot and the page cannot disagree
 about the same event. `NewsWatch` is the proactive half: it fires once when a
 blackout window opens on a *future* release (stop trading) and once when a
 release prints (here is the mechanical read), keyed by event identity and primed
@@ -943,7 +943,7 @@ monitor pays for one calendar fetch per cycle and passes the same event list to
 every consumer.
 
 **Honesty caveat (stated in code and on the page):** the news-quiet window is a
-*safety heuristic*, not a measured signal ŌĆö the corpus has no historical
+*safety heuristic*, not a measured signal — the corpus has no historical
 calendar, so unlike the volatility model its effect cannot be backtested. The
 `/vol` reading and its alerts say so.
 
@@ -967,18 +967,18 @@ two things, and only two:
   than housing/sentiment).
 - **Direction is not.** The mechanical read (actual vs forecast, dollars
   stronger => gold weaker) agreed with gold's sign 40-58% of the time across
-  horizons ŌĆö a coin, and at 5 min worse than one (p=1.000 at 15/30 min, p=0.272
+  horizons — a coin, and at 5 min worse than one (p=1.000 at 15/30 min, p=0.272
   at 60). The 60-minute pre-release drift is flat (mean -$0.40, std $1.06), so
   nothing leaks ahead either.
 
 So the plan never names a side. It brackets the pre-release price (a buy-stop
-above, a sell-stop below, stop = the measured median, target = 2├Ś, R:R = 2),
+above, a sell-stop below, stop = the measured median, target = 2×, R:R = 2),
 tells the trader to ignore the first 5-15 min of the reaction, to join whichever
 side breaks first, and to *cancel* the plan if nothing breaks inside the
 horizon. It carries the "direction is not predictable" line verbatim, and
-`test_news_forecast` asserts the push never says ŌĆ£will riseŌĆØ or ŌĆ£will fallŌĆØ.
+`test_news_forecast` asserts the push never says “will rise” or “will fall”.
 
-This is deliberately **read-only and advisory** ŌĆö like the rest of the news
+This is deliberately **read-only and advisory** — like the rest of the news
 surface, it announces a plan, it never places one, and it carries no execution
 authority. The `akoan` engine already tested the directional claim and found no
 edge; this module does not re-litigate that, it builds the part the data *does*
@@ -999,14 +999,14 @@ and window-sensitivity checks and still fails on sample size. Report:
 `docs/research/PLAN_B_HISTORICAL_NEWS.md`. The engine is untouched.
 
 **Plan C - one rule, fixed before looking.** `research/features_real/rule_test.py`
-takes the single rule the two studies implied ŌĆö *H4-aligned AND within 120 min
-after a release* ŌĆö and gates it, plus a permutation test the gate cannot give.
+takes the single rule the two studies implied — *H4-aligned AND within 120 min
+after a release* — and gates it, plus a permutation test the gate cannot give.
 Result: 282 trades (4.0% of the book), R/trade **+0.117**, permutation
 **p = 0.0067** (survives a 3-test Bonferroni correction), positive in-sample
 (+0.188) and out-of-sample (+0.046), robust to the window (positive 30-240 min).
 But it is flat in 3 of 6 years, and the gate still returns **REJECT** (Wilson
 lower bound below break-even on both halves). So: a **real, significant lead,
-not a proven edge** ŌĆö which earns a paper-trading trial, not live. Report:
+not a proven edge** — which earns a paper-trading trial, not live. Report:
 `docs/research/PLAN_C_PRESPECIFIED_RULE.md`.
 
 **Plan C, step 2 - the rule is now running on paper.** `bot/paper_trade.py` +
@@ -1024,46 +1024,46 @@ that schedule fired only twice in total while `astra-bot` fired reliably all
 day, so it was moved onto the bot workflow's five-minute cron and the standalone
 workflow was deleted (see the *Paper trial* section above).
 
-### akoan ŌĆö the news Ōåö statistics bridge (the caveat above, closed)
+### akoan — the news ↔ statistics bridge (the caveat above, closed)
 
 `akoan/` is an additive engine that turns the caveat above into a test. It
 builds the historical calendar the corpus never had, joins it causally to real
-trades, and reports whether the news explains the results ŌĆö with the honest
+trades, and reports whether the news explains the results — with the honest
 default of "no". It changes no existing engine and writes nothing the rest of
 the system reads.
 
-- `stats.py` ŌĆö the tests, stdlib-only: Wilson interval, Fisher exact, a
+- `stats.py` — the tests, stdlib-only: Wilson interval, Fisher exact, a
   label-shuffle permutation test, and Benjamini-Hochberg FDR control. The edge
-  it reports is always the gap from the **base rate**, never from 0.5 ŌĆö the
+  it reports is always the gap from the **base rate**, never from 0.5 — the
   lesson from `horizon_diagnostic.py`, where a 51.7% "accuracy" was gold's
   51.7% drift.
-- `events.py` ŌĆö an append-only event ledger (`run/akoan_events.jsonl`,
+- `events.py` — an append-only event ledger (`run/akoan_events.jsonl`,
   gitignored). Backfills the keyless TradingView calendar (`--backfill DAYS`;
   the feed reaches ~120 days) and self-accrues on every run. De-duplicated by
   `(at_utc, title, country)`, so a later revision of `actual` does not
   duplicate the row. `coverage()` states how thin the evidence is.
-- `state.py` ŌĆö the causal news state at one instant: blackout, recent release,
+- `state.py` — the causal news state at one instant: blackout, recent release,
   upcoming, and whether the trade leaned with or against the news read. Only
   events at or before the timestamp are consulted, so a later release can never
-  explain an earlier trade. Pure ŌĆö no clock, no network.
-- `link.py` ŌĆö joins `run/signal_trades.jsonl` with the news state. **Collapses
+  explain an earlier trade. Pure — no clock, no network.
+- `link.py` — joins `run/signal_trades.jsonl` with the news state. **Collapses
   the tracker's repeated appends**: a trade is one `(time, direction, entry,
   stop, target)`, however many polls re-appended it (without this, one idea
   counted ~200 times and every rate was fiction).
-- `engine.py` ŌĆö scans every dimension, applies FDR, and returns a verdict:
+- `engine.py` — scans every dimension, applies FDR, and returns a verdict:
   `NO_EDGE_MEASURED` / `INSUFFICIENT_DATA` / `EDGE_CANDIDATE`. A dimension with
   only one populated bucket is marked `comparable: false` and reported as
-  "┘ģž¦ ž©┘Ŗ┘å┘éž¦ž│" rather than shown as a rate with nothing to compare against.
-- `study.py` ŌĆö replays the *project's own* chain (`tracker/replay.py`) over the
+  "ما بينقاس" rather than shown as a rate with nothing to compare against.
+- `study.py` — replays the *project's own* chain (`tracker/replay.py`) over the
   committed M1 corpus resampled to M15, so the study trades are the trades the
   engine would take. This is what gives the analysis months of depth.
-- `run.py` / `report.py` ŌĆö CLI and the Arabic report (also JSON). The report
+- `run.py` / `report.py` — CLI and the Arabic report (also JSON). The report
   always names its baseline, its coverage, and its disclaimer.
 
 **The measured result (over the committed corpus):** 353 scored trades, base
-rate 34.8%. Every news dimension sits on the base rate ŌĆö `blackout` and
+rate 34.8%. Every news dimension sits on the base rate — `blackout` and
 `upcoming` have too few trades to compare, `recent_release` 36.4% vs 34.7%,
-`news_in_play` 36.7% vs 34.7% ŌĆö and **nothing survives BH-FDR correction**.
+`news_in_play` 36.7% vs 34.7% — and **nothing survives BH-FDR correction**.
 Verdict: `NO_EDGE_MEASURED`. So the news-quiet window stays a safety heuristic,
 now with evidence behind the claim rather than only an argument.
 
@@ -1075,7 +1075,7 @@ reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
 **Where it surfaces.** Two places, both reading the same engine:
 
 - **The phone's News tab** (`mobile/`, `/akoan.json`). The mobile server runs
-  `study.study()` and returns a compact body ŌĆö verdict, baseline, one bucket per
+  `study.study()` and returns a compact body — verdict, baseline, one bucket per
   dimension, coverage. Cached 10 min behind a compute lock, because the replay
   is heavy and every phone polls. The cache is **warmed in a background thread
   at startup** (`warm_akoan_cache`), so the first phone to open the tab reads a
@@ -1083,7 +1083,7 @@ reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
   panel's text is built in JS, so `applyLang` calls `rerenderAkoan()` to rebuild
   it from the last reading on a language switch (an `[data-i18n]` sweep cannot
   reach generated nodes). Because the read can still be slow, the panel shows
-  elapsed seconds past 20 s (`akoan_slow`) rather than a frozen "loadingŌĆ”", and
+  elapsed seconds past 20 s (`akoan_slow`) rather than a frozen "loading…", and
   the app bounds every request with `AbortController` (`FETCH_TIMEOUT_MS`,
   `AKOAN_TIMEOUT_MS` for this one) so no panel can hang forever.
 - **A weekly Telegram digest** (`bot/weekly_akoan.py`, workflow
@@ -1091,7 +1091,7 @@ reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
   moves slowly and a daily message would be noise. ISO-week state in the
   Actions cache makes a repeated cron slot idempotent. The ledger is accrued
   first, then cached back, so the record only grows. The workflow was added on a
-  Wednesday and so showed zero runs until its first Monday (`2026-10-20`) ŌĆö a
+  Wednesday and so showed zero runs until its first Monday (`2026-10-20`) — a
   schedule that has not reached its first slot is not a broken schedule. Verify
   one by hand with `gh workflow run astra-weekly-akoan.yml -f dry_run=true`.
 
@@ -1099,7 +1099,7 @@ reproduces (`akoan/study.py --json`), so the numbers cannot drift silently.
 both once made the phone's News tab answer "engine unavailable" in production
 while every CI job stayed green (they all run against the source tree):
 
-1. `Dockerfile` must `COPY akoan /app/akoan` ŌĆö a route can import a package the
+1. `Dockerfile` must `COPY akoan /app/akoan` — a route can import a package the
    image never copied and no source-tree test can see it.
 2. `run/akoan_events.jsonl` is gitignored and absent in a fresh container, so
    `events.load()` falls back to the committed seed `akoan/events_seed.jsonl`.
@@ -1121,12 +1121,12 @@ keep them honest and in sync:
 
 - **The app states its own limits.** The analytics panel is titled "Market
   state" and carries two permanent honesty badges: *Direction edge: none
-  measured (OOS 2025, AUC Ōēł 0.50)* ŌĆö matching the research finding above ŌĆö and
-  *Volatility edge: measured (OOS 2025, AUC Ōēł 0.74, predicts size not
+  measured (OOS 2025, AUC ≈ 0.50)* — matching the research finding above — and
+  *Volatility edge: measured (OOS 2025, AUC ≈ 0.74, predicts size not
   direction)*. Confidence is shown only when the backend produced a
   *calibrated* probability; otherwise it reads `n/a` rather than inventing a
   number from an uncalibrated score. Do not reintroduce predictive language
-  ("signal", "buy/sell") ŌĆö that would assert an edge the corpus does not
+  ("signal", "buy/sell") — that would assert an edge the corpus does not
   support.
 - **Bilingual by design (EN/AR, RTL).** All user-facing strings live in the
   `STRINGS` table in `mobile/i18n.js` and are applied via `data-i18n`
@@ -1147,9 +1147,9 @@ Playwright is absent.
 ### The tab bar (five primary tabs plus a More sheet)
 
 Nine views will not fit one phone-width row at a readable size (~594px vs
-375ŌĆō430px), and a two-row bar ate roughly 80px of the bottom of every screen.
-So the bar carries the five views that make up the daily read ŌĆö Status, State,
-Chart, Vol, News ŌĆö plus a **More** button, six cells in one row. The four
+375–430px), and a two-row bar ate roughly 80px of the bottom of every screen.
+So the bar carries the five views that make up the daily read — Status, State,
+Chart, Vol, News — plus a **More** button, six cells in one row. The four
 secondary views (Signals, AI, Data, Bridge) open in a `.tabs-more` sheet that
 sits flush on top of the bar.
 
@@ -1176,13 +1176,13 @@ tracking that separates capitals breaks the joins between Arabic letters.
 The "Vol" tab shows the same calibrated reading the bot reports. `serve_mobile.py`
 exposes `/vol.json`, which imports the bot's `volatility.py` from
 `bridge/telegram_bot`, fetches M5/M15/H1/H4/D1 candles from the bridge, and
-scores the loaded artifact ŌĆö the *same* artifact and *same* code, so the phone
+scores the loaded artifact — the *same* artifact and *same* code, so the phone
 and the bot cannot disagree by construction. The result is cached (~20 s) so the
 15 s app refresh does not re-hit the bridge five times each cycle.
 
 The route is best-effort: an unreachable bridge, a missing model, or too few
 closed bars yields `{"available": false, "reason": ...}` and the panel reads
-"reading unavailable" ŌĆö it never fabricates a number. The threshold tick on the
+"reading unavailable" — it never fabricates a number. The threshold tick on the
 meter is the model's own `alert_threshold`; the panel states plainly that this
 measures *size*, not direction, and is a safety filter rather than a trade
 signal.
@@ -1194,7 +1194,7 @@ The "Journal" tab (`tab_tracker`) lists the tracked ideas newest-first, with a
 device's local day; the summary strip shows closed count, the W/L record, net R
 and net **$**, plus where a still-open idea stands *right now* (live R, from the
 ticker price `lastPrice`). The dollar figure is the **minimum position** (1 oz =
-$1 per $1/oz move), never an implied account return ŌĆö same baseline as the bot.
+$1 per $1/oz move), never an implied account return — same baseline as the bot.
 
 `bot/daily_report.py` sends the same view to Telegram once a day
 (`.github/workflows/astra-daily.yml`, cron `0 20 * * *`, UTC). It reads
@@ -1207,7 +1207,7 @@ the tracker; neither can invent a result.
 ### APK build
 
 `android/build.sh` needs only a JDK and SDK build-tools (no Gradle). Build with
-build-tools **35** on a modern JDK ŌĆö build-tools 34's `d8` throws an NPE on
+build-tools **35** on a modern JDK — build-tools 34's `d8` throws an NPE on
 JDK 21:
 
 ```sh
@@ -1218,7 +1218,7 @@ JAVA_HOME=/path/to/jdk ANDROID_HOME=/path/to/sdk BT_VER=35.0.0 \
 The server URL is baked in but changeable on-device from the error screen. The
 CI workflow `build-android.yml` builds it on every `mobile/**` or `android/**`
 push, signed with a cached keystore, and publishes it to the rolling `android`
-release ŌĆö which is what the web footer's `/astra.apk` link redirects to.
+release — which is what the web footer's `/astra.apk` link redirects to.
 
 ### Live price provenance (gold-api vs Kraken PAXG)
 
@@ -1228,7 +1228,7 @@ Two upstreams, and only one of them can serve candles for free:
   is the exact spot XAUUSD and the source of truth for the tick read.
 * **Candles** - Kraken `PAXGUSD`. gold-api's own `/ohlc` and `/history` endpoints
   return `401 No x-api-key header` without a key, and the free tier caps them at
-  10 requests/hour with a finest `groupBy` of `day` ŌĆö no M15, so it cannot feed
+  10 requests/hour with a finest `groupBy` of `day` — no M15, so it cannot feed
   the M1..D1 engine. PAXGUSD stays the candle source.
 
 Because PAXG carries its own premium/discount (~0.1%, several dollars at $4200),
@@ -1237,7 +1237,7 @@ the anchor leg. Do not anchor on the newest closed bar: it closed up to a full
 interval ago and would drag the current price to a stale level. Verified live,
 the bridge close then tracks spot to within about a dollar.
 
-Yahoo `GC=F` is not a substitute ŌĆö it is COMEX futures and runs ~$29 above spot.
+Yahoo `GC=F` is not a substitute — it is COMEX futures and runs ~$29 above spot.
 
 ### "No signals / market shows UNKNOWN"
 
@@ -1246,10 +1246,10 @@ Two separate causes, both diagnosed by inspecting the live API:
 1. **No directional candidate.** `SignalEngine::generate` requires two of three
    votes to agree (structure bias, regime trend, RSI vs `rsiLongThreshold`/
    `rsiShortThreshold`). When they disagree the bar yields `direction=NONE` and
-   no decision ŌĆö the honest outcome, not a fault.
+   no decision — the honest outcome, not a fault.
 2. **UNKNOWN context on a no-trade bar.** Historically `DecisionPipeline::
    onClosedBar` returned early without recording `lastContext_`, so the
-   frontend rendered `regime`/`h4_bias`/`volatility_state` as UNKNOWN ŌĆö which
+   frontend rendered `regime`/`h4_bias`/`volatility_state` as UNKNOWN — which
    looks identical to "not analysing". Fixed by publishing the evaluated
    context on every closed bar, including no-trade ones.
 
@@ -1262,7 +1262,7 @@ Diagnose from the host, not the UI: `/api/v1/context/latest` (regime/structure),
 ### Building the backend in a sandbox
 
 `build/CMakeCache.txt` pins `CMAKE_COMMAND=/usr/bin/cmake`, which does not exist
-here ŌĆö a stale `build/` will fail with `gmake: /usr/bin/cmake: No such file or
+here — a stale `build/` will fail with `gmake: /usr/bin/cmake: No such file or
 directory`. Install cmake with `pip install cmake` (it lands in
 `~/.local/bin`, which is not on PATH), configure a fresh tree
 (`cmake -S . -B build2 -DCMAKE_BUILD_TYPE=Release`), build, then copy
@@ -1277,7 +1277,7 @@ manual-only `deploy-fly.yml`), which holds the token as a host secret. Killing
 the local bot removes the conflict; the remote instance then polls cleanly on
 its own.
 
-The local stack never runs the bot by default ŌĆö `start_stack.sh` requires both
+The local stack never runs the bot by default — `start_stack.sh` requires both
 `ASTRA_ENABLE_BOT=1` and a non-empty `TELEGRAM_BOT_TOKEN`. `watch_stack.sh`
 calls `start_stack.sh` with the inherited environment, so to keep the bot off
 permanently, launch the watchdog with the token unset
@@ -1331,27 +1331,27 @@ than quoting a position that cannot be traded. Money figures use the minimum
 Two always-on pieces, and they are independent:
 
 * **The bot** runs on GitHub Actions (`.github/workflows/astra-bot.yml`) and
-  reads candles straight from the upstream via `LiveMt5Client` ŌĆö it does **not**
+  reads candles straight from the upstream via `LiveMt5Client` — it does **not**
   touch the Render server, so it is always on with nothing to keep warm. Do not
   add a Render dependency to `bot/scan_once.py`; that would couple the never-
   sleeping half to the one that naps.
 * **The phone app and the interactive bot** both live on the Render service,
   and Render's free plan spins a service down after ~15 minutes idle. The bot
-  is not a separate process to keep warm ŌĆö the backend launches it whenever
-  `TELEGRAM_BOT_TOKEN` is set ŌĆö so keeping the service awake keeps the bot
+  is not a separate process to keep warm — the backend launches it whenever
+  `TELEGRAM_BOT_TOKEN` is set — so keeping the service awake keeps the bot
   answering too.
 * **Cron cannot keep it awake.** GitHub's cron is best-effort: on this repo a
-  5-minute schedule has landed 20ŌĆō75 minutes apart, longer than the sleep
+  5-minute schedule has landed 20–75 minutes apart, longer than the sleep
   window. `astra-keepalive` therefore runs for ~5h17m (under the 6-hour job
   limit), pinging every 5 minutes, and re-arms itself with a
   `workflow_dispatch` (needs `actions: write`) so each run starts the next.
-  It is dispatch-only ŌĆö a cron on the same workflow would queue behind the
+  It is dispatch-only — a cron on the same workflow would queue behind the
   running chain and then start a redundant second one. `astra-chain-guard`
   (hourly cron) is the safety net: it re-dispatches the keepalive when no
   run is in progress, so a dropped re-arm heals within the hour.
 
 `render.yaml` says `plan: starter` (paid, never sleeps), but the live service
-is on the free plan ŌĆö hence the warm chain. One always-on service still fits
+is on the free plan — hence the warm chain. One always-on service still fits
 Render's free allowance (750 instance-hours; a month is ~730). If the service
 is ever upgraded the chain is harmless and can stay. The health path is
 `/api/v1/health`; the bare `/health` and `/api/health` both 404.
@@ -1367,12 +1367,12 @@ mapped `/advisor` to 8792 via `--advisor-port`.
 
 Two keys to remember:
 * It **always starts**, even with no key. With no key it answers
-  `configured: false` and a note, and the app shows "not configured" ŌĆö never an
+  `configured: false` and a note, and the app shows "not configured" — never an
   error. So an empty `GROQ_API_KEY` is a valid state, not a failure.
 * To make it speak, set `GROQ_API_KEY` (provider default `groq`, model
   `openai/gpt-oss-120b`) on the **host** (Render dashboard; the blueprint marks
   it `sync: false`). `.env` holds a working key for local runs but is gitignored
-  ŌĆö never commit it, the repo is public.
+  — never commit it, the repo is public.
 
 ### The economic calendar and the Arabic trade plan
 
@@ -1410,7 +1410,7 @@ NEUTRAL if it moved less than `ASTRA_ADVISOR_NEUTRAL_BAND` percent. The misses
 become a short Arabic `lessons_block()` injected into the next prompt ("do not
 repeat this call without a new reason"), and the running scoreboard is returned
 as `review` and shown in the app. `ASTRA_ADVISOR_LESSONS=0` disables the
-injection. This never touches the validated ledger ŌĆö it only reads and writes
+injection. This never touches the validated ledger — it only reads and writes
 the advisor's own files, and every number is best-effort.
 
 ### Alert before a high-impact release
@@ -1430,7 +1430,7 @@ and previous, never a released value. `advisor/calendar_feed.py` reads the
 keyless TradingView calendar instead, which carries `actual`, and turns a
 release into a directional read:
 
-  * actual vs forecast ŌĆö falling back to previous, and saying which it used;
+  * actual vs forecast — falling back to previous, and saying which it used;
   * higher-is-stronger, with the inversion for jobless claims and the
     unemployment rate (a high print there is currency-*negative*);
   * USD for US events, EUR for EU; and for a US event only, the usual gold
@@ -1439,7 +1439,7 @@ release into a directional read:
     the dollar.
 
 `bot/news_result.py` runs on the `astra-result` cron (every 15 minutes, state
-cached) and sends one Arabic message per released, market-relevant event ŌĆö
+cached) and sends one Arabic message per released, market-relevant event —
 high-impact, or a medium whose indicator is known to move gold (ADP, CPI, PPI,
 NFP, claims...). Dedup key `country:title:at_utc` in
 `run/news_result_state.json`. A release with no baseline at all says so instead
@@ -1457,13 +1457,13 @@ nudges the advisor for one fresh call (`/v1/advisor?refresh=1`, so the loop is
 fed even when the app is never opened), then reads `/v1/review` and sends
 `self_review.format_review()` to Telegram: hit rate overall and per stance, the
 recent misses with their lesson. `--no-poke` skips the nudge; `--dry-run`
-prints. If the advisor is unreachable it says so and exits non-zero ŌĆö it never
+prints. If the advisor is unreachable it says so and exits non-zero — it never
 invents numbers. `ASTRA_REVIEW_URL` overrides the endpoint (an unset Actions
 `vars.` arrives empty and is treated as unset).
 
 `bot/miss_alert.py` (the `astra-miss` cron, every 15 minutes) is the instant
 version: it reads the same endpoint, and for each scored call the advisor has
-not already been alerted on it sends one short Arabic message ŌĆö a hit
+not already been alerted on it sends one short Arabic message — a hit
 (`format_hit`) or a miss with its lesson (`format_miss`). `--misses-only` keeps
 it to the mistakes. Dedup rides in `run/miss_alert_state.json`; the first run
 primes silently, so a lost cache never blasts the back-catalogue. This is why
@@ -1488,9 +1488,9 @@ nearer side and the distance left. It fires once per bar, so it cannot spam;
 `bot/watchdog.py` (the `astra-watchdog` cron, hourly) is a dead-man's switch
 over the failures the trading jobs cannot report on their own: the keepalive
 chain died (`check_keepalive`, no `astra-keepalive` run in progress and the last
-one older than `ASTRA_KEEPALIVE_MAX_AGE_MIN`, 400 min ŌĆö the real liveness
+one older than `ASTRA_KEEPALIVE_MAX_AGE_MIN`, 400 min — the real liveness
 signal), the scanner stalled (`check_bot`, last successful `astra-bot` run older
-than `ASTRA_BOT_MAX_AGE_MIN`, 360 min ŌĆö a deliberately loose secondary signal,
+than `ASTRA_BOT_MAX_AGE_MIN`, 360 min — a deliberately loose secondary signal,
 because the scanner rides GitHub's best-effort cron, which this repo has seen
 stall for up to 4.6 hours), the web server is down (`check_server`, no 200 from
 `/api/v1/health`), the engine serves empty (`check_engine`), the **interactive
@@ -1500,22 +1500,22 @@ GitHub disables the scheduled workflows outright. It alerts on the transition
 into trouble, re-alerts every `ASTRA_WATCHDOG_REALERT_HOURS` (6) while the
 trouble lasts, and confirms recovery. `decide()` is pure over (verdict, state,
 now); the state rides in the Actions cache. An unreachable GitHub API never
-cries wolf ŌĆö the check returns "unavailable" and stays quiet. So does a 404 (an
+cries wolf — the check returns "unavailable" and stays quiet. So does a 404 (an
 older deploy without the route) or a missing heartbeat (a host with no token):
 only a *stale* beat, or a real 200-but-empty engine, is trouble.
 
 `scan_once.staleness()` guards the other silent failure: a bar older than
 `ASTRA_STALE_AFTER_MIN` (45) means the feed is quiet or the market is closed
-(gold shuts Fri 22:00 ŌĆō Sun 23:00 UTC). When stale, the scan sends no ideas, no
+(gold shuts Fri 22:00 – Sun 23:00 UTC). When stale, the scan sends no ideas, no
 results and no approach warnings; it says so once per episode
 (`format_stale`) and confirms when it resumes (`format_resumed`). The bar
 timestamp is the candle's *open*, so a just-closed M15 bar already reads up to
-15 minutes old ŌĆö the threshold has to clear that before it means anything.
+15 minutes old — the threshold has to clear that before it means anything.
 
 ### Where the edge is: the digest's breakdown
 
 `replay.summarize` carries `by_regime` and `by_direction` hit rates plus
-`max_loss_streak` (the longest run of consecutive losses, in resolution order ŌĆö
+`max_loss_streak` (the longest run of consecutive losses, in resolution order —
 the pain a win rate hides). A bucket states a rate only once it holds
 `MIN_BUCKET` (8) scored trades; below that it shows the raw win/loss split, so a
 lucky two-trade streak never reads as a strategy. `scan_once.digest_text` prints
@@ -1527,7 +1527,7 @@ hiding inside the overall rate.
 `mobile/app.js` never calls `new Notification()` for its own alerts: Android
 Chrome throws on the constructor, so the alert silently did nothing on the
 phone. `showNotification()` posts the message to the service worker, whose
-`message` handler calls `self.registration.showNotification` ŌĆö the one path
+`message` handler calls `self.registration.showNotification` — the one path
 that works on both desktop and Android, and it survives the page being
 backgrounded. The worker also has a `push` handler and a `notificationclick`
 handler that focuses the app. The page falls back to the constructor only where
@@ -1544,15 +1544,15 @@ device's subscription and `astra_bot.py` mirrors every broadcast to it through
 had the `push` handler that shows the notification.
 
 Everything about it is free. The VAPID key pair is generated locally with
-`webpush.generate_keys()` ŌĆö no account, no service, no billing. Only the browser
+`webpush.generate_keys()` — no account, no service, no billing. Only the browser
 vendor's own push endpoint (FCM/APNs/Mozilla) is involved, and it is free too.
 
 It is **off by default and degrades cleanly**, exactly like the advisor without
 `GROQ_API_KEY`:
 
-- no VAPID keys ŌåÆ `/push.json` says `available:false`; `syncPush()` is a no-op
+- no VAPID keys → `/push.json` says `available:false`; `syncPush()` is a no-op
   and the in-app alerts stay the only channel.
-- no `pywebpush` ŌåÆ same `available:false`. The library is the one third-party
+- no `pywebpush` → same `available:false`. The library is the one third-party
   runtime dependency in the tree; the module imports it lazily, so its absence
   never stops the service from starting.
 
@@ -1577,12 +1577,12 @@ advisor and the paid-tool layer were covered, so a broken alert could ship green
 
 ### News for free: keyless RSS, no provider quota
 
-The advisor grounds its read in real headlines via **Google News RSS** ŌĆö no API
+The advisor grounds its read in real headlines via **Google News RSS** — no API
 key, no quota, no billing. `fetch_news()` parses `news.google.com/rss/search`
 for `gold price XAUUSD when:1d`, and `recent_news()` caches the result for
 `ASTRA_ADVISOR_NEWS_TTL` (900s) because the feed barely moves. Headlines land in
 the snapshot as `news`, `news_available`; the model sets `news_used` and the app
-shows it ("ž¦ž│ž¬ž«ž»┘ģ ž¦┘äžŻž«ž©ž¦ž▒"). Knobs: `ASTRA_ADVISOR_NEWS=0` disables it,
+shows it ("استخدم الأخبار"). Knobs: `ASTRA_ADVISOR_NEWS=0` disables it,
 `ASTRA_ADVISOR_NEWS_QUERY` / `_LIMIT` / `_TTL` tune it, `ASTRA_ADVISOR_NEWS_URL`
 repoints it. Every fetch is best-effort: a dead feed yields no headlines and the
 advisor honestly reports `news_used: false` rather than inventing news. (Kitco
@@ -1591,7 +1591,7 @@ and FXStreet RSS both 404/403 from a datacenter IP; Google News does not.)
 ### Research: the feature store and the promotion gate
 
 `tracker/features.py` turns each replayed trade into a flat context row (regime,
-session, weekday, RSI, ATR scale, H4 agreement) with **no lookahead** ŌĆö every
+session, weekday, RSI, ATR scale, H4 agreement) with **no lookahead** — every
 feature is computed from bars up to the entry bar only. `tracker/validation_gate.py`
 is the one standard a change must clear before it may touch the engine: the
 **Wilson 95% lower bound** of the win rate must clear break-even on **both** the
@@ -1610,7 +1610,7 @@ are positive R on both halves but below the Wilson bar. No session/weekday/
 direction/regime filter has an edge alone. Full write-up:
 `docs/research/PLAN_A_FEATURE_STORE_AND_GATE.md`.
 
-### Quality gate (lint ┬Ę types ┬Ę coverage)
+### Quality gate (lint · types · coverage)
 
 CI's `quality` job runs three checks on the Python side. Reproduce them locally
 after installing `requirements-dev.txt`:
@@ -1625,7 +1625,7 @@ python3 -m coverage report --fail-under=75
 
 Scope decisions worth keeping:
 
-* **mypy covers the shipped surface only** ŌĆö `bot tracker akoan advisor bridge
+* **mypy covers the shipped surface only** — `bot tracker akoan advisor bridge
   mobile src`. `research/` is exploratory analysis, not shipped code; typing it
   would be noise. The gate was not free: it surfaced real Optional bugs (a
   `Tree.predict` that indexed an unset feature, `X = None` fields that should be
@@ -1678,7 +1678,7 @@ git config --local credential.helper \
 ```
 
 An `x-access-token@` literal in the remote URL is a secret at rest in a plain
-file; keep it out. (`upstream` stays `pushurl = no_push` ŌĆö never push there.)
+file; keep it out. (`upstream` stays `pushurl = no_push` — never push there.)
 
 ### The APK build fails closed on a bad baked URL
 
