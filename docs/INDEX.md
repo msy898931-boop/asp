@@ -25,6 +25,7 @@ If you are new, read these four, in order:
 | Audit | `docs/ASSESSMENT_2026-10-19.md` | Independent assessment (88.5); names the live Telegram bot |
 | Audit | `docs/ASSESSMENT_2026-10-20.md` | Independent assessment (90.0) on `feat/scaled-targets`; supersedes the 2026-10-19 counts and adds the worth estimate |
 | Audit | `docs/ASSESSMENT_2026-10-21.md` | Independent assessment (90.0) on `main` (`458d884`); 1230 tests, coverage 85%, and the engine reached the deploy branch |
+| Audit | `docs/ASSESSMENT_2026-10-21_v1.0.md` | **Latest** — the v1.0.0 release assessment (**93.5**), measured on `1da233e` after the legal, release and mojibake PRs landed; supersedes the morning 90.0 |
 | Legal | `docs/PRIVACY.md` | Privacy policy: what is stored (a chat id and a push endpoint, only on opt-in), and how to remove it |
 | Legal | `docs/TERMS.md` | Terms of service: decision support in shadow mode; AI win-rates are estimates, not measurements |
 | Product | `docs/SELLING.md` | Pricing and what the tool honestly does |
