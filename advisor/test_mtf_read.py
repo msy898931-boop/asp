@@ -132,6 +132,33 @@ class CardTest(unittest.TestCase):
         self.assertIsNone(result["card"])
         self.assertIn("H4", result["reason"])
 
+    def test_structural_opposition_can_be_recorded_instead_of_vetoing(self):
+        # With the veto off, the same opposing H4 no longer suppresses the card:
+        # the direction is emitted and the opposition is carried as a warning.
+        saved = mtf_read.STRUCTURAL_VETO
+        mtf_read.STRUCTURAL_VETO = False
+        try:
+            bars_by_tf = _all_tfs(step=0.5)
+            bars_by_tf[mtf_read.STRUCTURAL_TF] = _series(120, step=-0.5)
+            result = build(bars_by_tf)
+        finally:
+            mtf_read.STRUCTURAL_VETO = saved
+        self.assertEqual(result["verdict"], "LONG")
+        card = result["card"]
+        self.assertIsNotNone(card)
+        self.assertIn("H4", card["structural_warning"])
+        # The card is still stamped unvalidated, warning or not.
+        self.assertFalse(result["validated"])
+
+    def test_the_warning_is_rendered_in_the_card_text(self):
+        card = {"direction": "LONG", "entry": 2000.0, "stop": 1990.0,
+                "target": 2020.0, "targets": [2010.0, 2020.0], "rr": 2.0,
+                "agreement": "3/5", "structural_warning": "H4 opposes"}
+        result = {"available": True, "card": card, "timeframes": {}}
+        text = mtf_read.format_card(result)
+        self.assertIn("H4", text)
+        self.assertIn("يعارض", text)
+
     def test_no_majority_stands_aside(self):
         bars_by_tf = {
             "M5": _series(120, step=0.5),

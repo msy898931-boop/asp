@@ -328,6 +328,13 @@ class PromptTests(unittest.TestCase):
             with self.subTest(piece=piece):
                 self.assertIn(piece, ai_engine._SYSTEM_PROMPT)
 
+    def test_the_prompt_tells_the_model_higher_frames_do_not_veto(self):
+        # The whole complaint this fixes: the daily/weekly context was treated
+        # as a veto, so the model returned NEUTRAL. The prompt must say the
+        # higher frames inform the bias and a missing frame is not a refusal.
+        self.assertIn("do not veto", ai_engine._SYSTEM_PROMPT)
+        self.assertIn("missing_timeframes", ai_engine._SYSTEM_PROMPT)
+
     def test_the_prompt_view_keeps_every_frame(self):
         snapshot = {
             "symbol": "XAUUSD", "price": 2000.0,
@@ -337,6 +344,45 @@ class PromptTests(unittest.TestCase):
         }
         view = ai_engine._prompt_view(snapshot)
         self.assertEqual(set(view["timeframes"]), {"M1", "MN1"})
+
+
+class TimeframeSelectionTests(unittest.TestCase):
+    def _resolve(self, value):
+        saved = os.environ.get("ASTRA_ENGINE_TIMEFRAMES")
+        if value is None:
+            os.environ.pop("ASTRA_ENGINE_TIMEFRAMES", None)
+        else:
+            os.environ["ASTRA_ENGINE_TIMEFRAMES"] = value
+        try:
+            return ai_engine._resolve_timeframes()
+        finally:
+            if saved is None:
+                os.environ.pop("ASTRA_ENGINE_TIMEFRAMES", None)
+            else:
+                os.environ["ASTRA_ENGINE_TIMEFRAMES"] = saved
+
+    def test_default_is_every_frame(self):
+        self.assertEqual(self._resolve(None), ai_engine.ALL_TIMEFRAMES)
+
+    def test_an_allow_list_narrows_the_frames_in_canonical_order(self):
+        got = self._resolve("H4,M5,M15")
+        self.assertEqual(got, ("M5", "M15", "H4"))
+
+    def test_unknown_labels_are_dropped(self):
+        self.assertEqual(self._resolve("M5,BOGUS,H1"), ("M5", "H1"))
+
+    def test_a_typo_falls_back_to_every_frame(self):
+        # A list with nothing recognisable must not blind the engine.
+        self.assertEqual(self._resolve("NOPE,XX"), ai_engine.ALL_TIMEFRAMES)
+
+    def test_the_engine_block_reports_the_prompted_frames(self):
+        snapshot = {"symbol": "XAUUSD", "price": 2000.0,
+                    "timeframes": {"M15": {"atr": 2.0}},
+                    "missing_timeframes": [], "rule_card": None}
+        parsed = ai_engine.parse_engine(reply(trades=[]))
+        out = ai_engine.assemble(snapshot, parsed)
+        self.assertEqual(out["engine"]["timeframes_prompted"],
+                         list(ai_engine.TIMEFRAMES))
 
 
 if __name__ == "__main__":

@@ -47,9 +47,29 @@ SYMBOL = ai_advisor.SYMBOL
 BRIDGE_BASE = ai_advisor.BRIDGE_BASE
 API_BASE = ai_advisor.API_BASE
 
-# Every frame the bridge can serve. The engine reasons across the lot; the
-# lower frames time the entry, the higher frames set the bias.
+# Every frame the bridge can serve, coarsest last. The engine reasons across
+# the lot; the lower frames time the entry, the higher frames set the bias.
 ALL_TIMEFRAMES = ("M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN1")
+
+
+def _resolve_timeframes() -> tuple[str, ...]:
+    """The frames the engine hands the model, from ``ASTRA_ENGINE_TIMEFRAMES``.
+
+    Default: every frame. A comma-separated allow-list narrows it, keeping the
+    canonical order, so an operator who finds the daily/weekly context noisy can
+    run the engine on the lower frames alone without editing code. Unknown
+    labels are dropped rather than trusted; an empty result falls back to the
+    full list, because a typo must not silently blind the engine.
+    """
+    raw = os.environ.get("ASTRA_ENGINE_TIMEFRAMES", "").strip()
+    if not raw:
+        return ALL_TIMEFRAMES
+    wanted = {tok.strip().upper() for tok in raw.split(",") if tok.strip()}
+    chosen = tuple(tf for tf in ALL_TIMEFRAMES if tf in wanted)
+    return chosen or ALL_TIMEFRAMES
+
+
+TIMEFRAMES = _resolve_timeframes()
 BARS_PER_TF = int(os.environ.get("ASTRA_ENGINE_BARS", "220"))
 # A frame with fewer closed bars than this cannot carry a read.
 MIN_BARS = 30
@@ -66,7 +86,7 @@ FAR_ATR = float(os.environ.get("ASTRA_ENGINE_FAR_ATR", "6"))
 
 _SYSTEM_PROMPT = (
     "You are a gold (XAUUSD) trading analyst. You are given a factual snapshot "
-    "produced by a rule engine: a read for every timeframe (M1..MN1) with the "
+    "produced by a rule engine: a read for every available timeframe with the "
     "last close, EMAs, RSI, ATR and structure bias, a rule-based trade card as "
     "an anchor, and the day's headlines and high-impact events.\n"
     "Language: every human-readable field in Arabic. JSON keys and the "
@@ -84,8 +104,22 @@ _SYSTEM_PROMPT = (
     "final target before its stop. It is an estimate, not a measured number: "
     "state the reasoning behind it in win_rate_note. Do not copy the engine's "
     "score.\n"
-    "- If the timeframes disagree or no coherent trade exists, return an empty "
-    "trades list and say why in market_read. Do not force a trade.\n"
+    "- Read the timeframes by role: the lower frames (M1..M15) time the entry, "
+    "the middle frames (M30, H1) carry the intraday trend, and the higher "
+    "frames (H4, D1, W1, MN1) set the bias and the room to move. The higher "
+    "frames INFORM the direction; they do not veto it. A setup that runs with "
+    "the higher-frame bias is stronger, and one that runs against it is lower "
+    "conviction — say which it is in the rationale, but still give the trade "
+    "when the lower and middle frames agree on a coherent plan.\n"
+    "- A timeframe listed under missing_timeframes, or absent entirely, is not "
+    "a reason to refuse: reason from the frames you were given and note the gap "
+    "in market_read at most in passing. Never withhold every trade only because "
+    "a higher frame is missing.\n"
+    "- Prefer a trade when a coherent plan exists. Return an empty trades list "
+    "only when the frames genuinely conflict on direction and no plan can be "
+    "anchored, or when no coherent trade exists; say why in market_read. Do not "
+    "force a trade that the numbers do not support, but do not default to "
+    "NEUTRAL out of caution either.\n"
     "- This is analysis for a research tool, not advice. Do not promise "
     "returns.\n"
     "Reply with JSON only, keys: market_read (two or three Arabic sentences "
@@ -105,7 +139,7 @@ def fetch_all_bars() -> dict:
     list and drops any frame too short to carry a read.
     """
     out: dict = {}
-    for tf in ALL_TIMEFRAMES:
+    for tf in TIMEFRAMES:
         url = "%s/v1/candles?tf=%s&limit=%d" % (BRIDGE_BASE, tf, BARS_PER_TF)
         payload = ai_advisor._get_json(url)
         if not isinstance(payload, dict):
@@ -138,7 +172,7 @@ def build_snapshot() -> dict:
         snapshot["price"] = tick["payload"].get("last")
 
     bars_by_tf = fetch_all_bars()
-    for tf in ALL_TIMEFRAMES:
+    for tf in TIMEFRAMES:
         bars = bars_by_tf.get(tf)
         if not bars:
             snapshot["missing_timeframes"].append(tf)
@@ -359,6 +393,7 @@ def assemble(snapshot: dict, parsed: dict) -> dict:
         if price is not None:
             trade["distance_from_price"] = round(trade["entry"] - price, 2)
     parsed["engine"] = {
+        "timeframes_prompted": list(TIMEFRAMES),
         "timeframes_read": sorted(snapshot["timeframes"]),
         "timeframes_missing": snapshot["missing_timeframes"],
         "rule_card": card,
