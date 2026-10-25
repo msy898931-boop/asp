@@ -37,12 +37,18 @@ class Entitlements:
     def __init__(self, path: Path, upgrade_url: str = "",
                  free_levels: int = DEFAULT_FREE_LEVELS,
                  pro_levels: int = DEFAULT_PRO_LEVELS,
-                 admin_chats: Optional[List[str]] = None) -> None:
+                 admin_chats: Optional[List[str]] = None,
+                 accounts_store=None) -> None:
         self.path = path
         self.upgrade_url = upgrade_url.strip()
         self.free_levels = free_levels
         self.pro_levels = pro_levels
         self._admins = {str(c).strip() for c in (admin_chats or []) if str(c).strip()}
+        # Optional link to the mobile account store. When present, a chat id
+        # bound to a valid, unexpired account is Pro — so a key bought on the
+        # web grants the same tier in the bot, and expiry is enforced in one
+        # place. Absent, the store is not consulted and nothing changes.
+        self._accounts = accounts_store
         self._lock = threading.Lock()
         self._tiers: Dict[str, str] = {}
         self._load()
@@ -74,6 +80,13 @@ class Entitlements:
         chat_id = str(chat_id)
         if chat_id in self._admins:
             return TIER_PRO
+        # A valid, unexpired account bound to this chat is Pro regardless of
+        # the manual store below — the account is the source of truth for a
+        # purchased key, and its expiry is what turns the tier off.
+        if self._accounts is not None:
+            account = self._accounts.find_by_chat(chat_id)
+            if account is not None:
+                return TIER_PRO
         if not self.selling:
             # Not on sale yet: do not withhold anything from anyone.
             return TIER_PRO
@@ -133,4 +146,39 @@ def from_env(state_dir: Path) -> Entitlements:
         free_levels=_int("ASTRA_FREE_LEVELS", DEFAULT_FREE_LEVELS),
         pro_levels=_int("ASTRA_PRO_LEVELS", DEFAULT_PRO_LEVELS),
         admin_chats=admins,
+        accounts_store=_accounts_store_from_env(),
     )
+
+
+def _accounts_store_from_env():
+    """The mobile account store, when ASTRA_ACCOUNTS is on; else None.
+
+    The store lives in `mobile/`, which is a sibling of this package. It is
+    imported lazily and defensively: if the path is not importable (the bot
+    running on its own), the feature simply stays off rather than breaking the
+    bot at startup.
+    """
+    flag = os.environ.get("ASTRA_ACCOUNTS", "").strip().lower()
+    if flag not in ("1", "true", "yes", "on"):
+        return None
+    try:
+        import accounts
+    except ImportError:
+        here = Path(__file__).resolve()
+        for parent in here.parents:
+            candidate = parent / "mobile"
+            if (candidate / "accounts.py").is_file():
+                sys.path.insert(0, str(candidate))
+                try:
+                    import accounts
+                except ImportError:
+                    return None
+                break
+        else:
+            return None
+    try:
+        return accounts.store()
+    except (OSError, ValueError) as exc:  # pragma: no cover - host-specific
+        print(f"[warn] accounts enabled but store unavailable: {exc}",
+              file=sys.stderr)
+        return None

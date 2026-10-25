@@ -96,6 +96,56 @@ fresh chat sending `/plan` should read `free` and show the upgrade line.
 Optional tuning (defaults shown): `ASTRA_FREE_LEVELS=2`,
 `ASTRA_PRO_LEVELS=50`, `ASTRA_PRO_CHATS=` (comma-separated always-Pro ids).
 
+## 3b. Multi-user accounts (recommended once you have more than one buyer)
+
+The single `ASTRA_ACCESS_TOKEN` is fine for one operator, but it cannot be
+revoked or expire, and every visitor shares it. For real customers, switch on
+per-user accounts:
+
+```sh
+# Render dashboard → Environment
+ASTRA_ACCOUNTS=1
+ASTRA_ACCOUNTS_FILE=/root/.astra/accounts.json   # on the persistent disk
+```
+
+Then mint one key per paying customer. The key is shown **once**; only a salted
+hash is stored, so it cannot be recovered — re-issue if lost:
+
+```sh
+python3 mobile/accounts.py create --email buyer@example.com --days 30
+# created acc_ab12cd  email=buyer@example.com  tier=pro  expires=2026-11-24
+#
+#   key (shown once — copy it now, it cannot be recovered):
+#   astra_acc_ab12cd.K7f2...Qo5A
+```
+
+Send that key to the buyer. They open the app at
+`https://your-service/?k=astra_acc_ab12cd.K7f2...Qo5A` once; the app stores a
+cookie and never asks again. Manage accounts with:
+
+| Command | What it does |
+| --- | --- |
+| `python3 mobile/accounts.py list` | every account, its tier, status, days left |
+| `python3 mobile/accounts.py extend --id acc_ab12cd --days 30` | renew |
+| `python3 mobile/accounts.py revoke --id acc_ab12cd` | cut access now |
+| `python3 mobile/accounts.py restore --id acc_ab12cd` | undo a revoke |
+| `python3 mobile/accounts.py link --id acc_ab12cd --chat-id 123456` | bind to a Telegram chat |
+
+The running server picks these up **without a restart**: it reloads the store
+whenever the file changes on disk, so a `revoke` cuts access on the next
+request and a `restore` gives it back just as fast. (It watches the file's
+content, not its timestamp, so two edits in the same second are not missed.)
+
+Binding a chat id makes the **bot** honour the same tier: a valid, unexpired
+account turns that chat Pro automatically, and revoking it or letting it expire
+turns it back to free — one place to manage, both surfaces follow. The static
+`ASTRA_ACCESS_TOKEN` keeps working as a master key, so the operator is never
+locked out. Accounts are off unless `ASTRA_ACCOUNTS` is truthy; leave it unset
+and nothing changes.
+
+Verify: `curl https://your-service/me.json?k=YOUR_KEY` returns
+`{"mode":"account","tier":"pro","days_left":30,...}`.
+
 ## 4. Activate each purchase
 
 Stripe emails you the payment with the buyer's chat id in the custom field. Turn
@@ -104,6 +154,9 @@ their access on either way:
 - **From an admin chat** (an id in `ASTRA_PRO_CHATS`):
   `/grant <chat_id> pro`
 - **By config:** append the id to `ASTRA_PRO_CHATS` and redeploy.
+- **With accounts on (§3b):** `python3 mobile/accounts.py create --email ...
+  --chat-id <chat_id> --days 30` — one key that opens the app *and* the bot, and
+  that expires on its own.
 
 Buyers confirm with `/plan` (reads `pro`) and can set more price levels.
 

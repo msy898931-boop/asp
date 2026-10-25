@@ -22,6 +22,7 @@ Run: python3 mobile/serve_mobile.py --port 12000
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import hmac
 import json
@@ -66,6 +67,12 @@ _CONTENT_TYPES = {
     ".woff2": "font/woff2",
 }
 
+# The only extensions the static shell may serve. Anything else — most of all
+# the server's own .py source and its .pyc — is a 404 even when it sits inside
+# HERE. The shell is a fixed, known set of assets, so an allowlist costs
+# nothing and closes the "read the source over HTTP" path entirely.
+_SERVE_EXTS = frozenset(_CONTENT_TYPES)
+
 _PROXY_TIMEOUT = 6.0
 
 # The AI engine answers from cache almost always, but a cold read does a
@@ -81,16 +88,48 @@ _ENGINE_PROXY_TIMEOUT = float(os.environ.get("ASTRA_ENGINE_TIMEOUT", "30"))
 ACCESS_TOKEN = os.environ.get("ASTRA_ACCESS_TOKEN", "").strip()
 _COOKIE_NAME = "astra_key"
 
+# Multi-user accounts (per-user keys with expiry) live in a sibling module.
+# They are additive and off by default: with ASTRA_ACCOUNTS unset, nothing
+# here runs and the static token above is the whole story. When accounts are
+# on, the static token still works as a master key (so the operator is never
+# locked out of their own deployment), and any valid account key is accepted.
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+import accounts  # noqa: E402
+
+
+def _accounts_on() -> bool:
+    return accounts.enabled()
+
+
+def _account_for(given: str):
+    """Resolve a presented key to a valid account, or None.
+
+    Only consulted when accounts are enabled. A wrong, expired or revoked key
+    returns None exactly like the static-token path, so the caller cannot tell
+    the cases apart.
+    """
+    if not _accounts_on() or not given:
+        return None
+    return accounts.store().authenticate(given)
+
 
 def _token_matches(given: str) -> bool:
-    """Constant-time compare, so a wrong token leaks no timing signal."""
-    if not ACCESS_TOKEN:
+    """Constant-time compare, so a wrong token leaks no timing signal.
+
+    Accepts the static operator token, and — when accounts are enabled — any
+    valid per-user account key.
+    """
+    if not ACCESS_TOKEN and not _accounts_on():
         return True
-    return hmac.compare_digest(given or "", ACCESS_TOKEN)
+    given = given or ""
+    if ACCESS_TOKEN and hmac.compare_digest(given, ACCESS_TOKEN):
+        return True
+    return _account_for(given) is not None
 
 
 def _auth_required() -> bool:
-    return bool(ACCESS_TOKEN)
+    return bool(ACCESS_TOKEN) or _accounts_on()
 
 
 def _forwarded_proto_https(handler) -> bool:
@@ -117,6 +156,87 @@ _GATE_MAX_FAILURES = int(os.environ.get("ASTRA_GATE_MAX_FAILURES", "10"))
 _GATE_WINDOW_S = float(os.environ.get("ASTRA_GATE_WINDOW_S", "300"))
 _GATE_LOCKOUT_S = float(os.environ.get("ASTRA_GATE_LOCKOUT_S", "900"))
 _GATE_MAX_TRACKED = 4096
+
+# Whether X-Forwarded-For may be believed when attributing a failed guess.
+# Default **off**: the header is attacker-controlled, and trusting it by
+# default turns the rate limiter into a no-op (rotate the header, guess
+# forever). Set ASTRA_TRUST_FORWARDED_FOR=1 only when the service really sits
+# behind a proxy that overwrites the header (Render, Fly). Even then only the
+# rightmost hop is used.
+_TRUST_FORWARDED_FOR = os.environ.get(
+    "ASTRA_TRUST_FORWARDED_FOR", "").strip().lower() in ("1", "true", "yes", "on")
+
+# Per-connection read timeout, in seconds. A client that opens a socket and then
+# sends its request one byte at a time (or never finishes the header block)
+# otherwise parks a thread forever: ThreadingHTTPServer spawns a thread per
+# connection and, with no timeout, a few hundred half-open sockets are enough to
+# exhaust memory. The timeout is generous enough for a slow phone on cell data
+# and short enough that a slowloris never accumulates.
+_SOCKET_TIMEOUT_S = float(os.environ.get("ASTRA_SOCKET_TIMEOUT_S", "30"))
+
+# Hard ceiling on concurrent request threads. The timeout above already bounds
+# how long any one thread can live, so this is a second, cheaper backstop: even
+# a flood that keeps every socket alive under the timeout cannot spawn threads
+# without limit.
+_MAX_CONCURRENCY = int(os.environ.get("ASTRA_MAX_CONCURRENCY", "64"))
+
+# Content-Security-Policy for the shell. The app is a standalone PWA whose own
+# data is all same-origin, so the only off-origin resource is Google Fonts.
+# Every directive is a real restriction rather than a default: scripts are
+# limited to self (the three pre-paint boot blocks are admitted by hash, not by
+# 'unsafe-inline'), the app can never be framed, and object/base are pinned.
+#
+# `connect-src` still allows any https host because the Pro upgrade button's
+# destination comes from ASTRA_UPGRADE_URL (an operator-set checkout link) and
+# the APK download falls back to a GitHub release URL; both are operator
+# choices, not client input. Tighten this to the exact hosts you use.
+#
+# The hashes cover the one inline <script> in each of index.html, terminal.html
+# and pricing.html. They are recomputed from the shipped files at import time
+# (see `_inline_script_hashes`) rather than hard-coded, so editing a boot block
+# can never silently disable it — and a missing or unreadable shell degrades to
+# a self-only policy instead of a broken page.
+_CSP_TEMPLATE = (
+    "default-src 'self'; "
+    "script-src 'self'{hashes}; "
+    "style-src 'self' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self' https:; "
+    "manifest-src 'self'; "
+    "worker-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+# Pages that carry an inline pre-paint boot script.
+_INLINE_BOOT_PAGES = ("index.html", "terminal.html", "pricing.html")
+
+
+def _inline_script_hashes() -> str:
+    """CSP source expressions ('sha256-...') for every inline boot block.
+
+    Read from the shipped HTML so the policy tracks the files. A read failure
+    yields no hash: the inline block would then be blocked, which is a visible
+    regression rather than a silent hole, and the test suite asserts the hashes
+    match so it cannot ship that way.
+    """
+    out = []
+    for name in _INLINE_BOOT_PAGES:
+        try:
+            with open(os.path.join(HERE, name), "r", encoding="utf-8") as fh:
+                html = fh.read()
+        except OSError:
+            continue
+        for block in re.findall(r"<script>(.*?)</script>", html, re.S):
+            digest = hashlib.sha256(block.encode("utf-8")).digest()
+            out.append("'sha256-" + base64.b64encode(digest).decode() + "'")
+    return (" " + " ".join(out)) if out else ""
+
+
+_CSP = _CSP_TEMPLATE.format(hashes=_inline_script_hashes())
 
 
 class _RateLimiter:
@@ -633,6 +753,51 @@ def warm_akoan_cache() -> None:
 
 
 
+class _BoundedServer(ThreadingHTTPServer):
+    """A threading server that cannot be exhausted by idle connections.
+
+    Two guards, both needed:
+
+    * ``timeout`` — the socket read timeout, applied to every connection. It is
+      what makes a slowloris (open a socket, then dribble) fail instead of
+      parking a thread forever.
+    * ``_slots`` — a semaphore capping concurrent request threads. The timeout
+      bounds how long one thread lives; this bounds how many can exist at once.
+      A caller over the cap waits briefly for a slot and is refused with a 503
+      rather than spawning without limit.
+
+    ``daemon_threads`` stays on so an in-flight request never blocks shutdown.
+    """
+
+    def __init__(self, addr, handler, *, timeout: float = 30.0,
+                 max_concurrency: int = 64):
+        super().__init__(addr, handler)
+        self.timeout = timeout
+        self._slots = threading.Semaphore(max(1, max_concurrency))
+        self.daemon_threads = True
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(timeout=self.timeout):
+            # Saturated: shed the connection instead of queueing it forever.
+            self.shutdown_request(request)
+            return
+        # Bound how long a single connection may take to send its request.
+        try:
+            request.settimeout(self.timeout)
+            super().process_request(request, client_address)
+        except Exception:
+            # The worker thread never started, so nothing will release the slot.
+            self._slots.release()
+            self.shutdown_request(request)
+            raise
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "AstraMobile/1.0"
 
@@ -646,6 +811,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):  # quieter logs
         sys.stderr.write("[mobile] %s\n" % (fmt % args))
+
+    def handle_one_request(self):
+        """Answer one request, treating a vanished client as normal.
+
+        A phone that backgrounds the app or loses signal closes the socket
+        mid-response; the write then raises BrokenPipeError (or the read
+        ConnectionResetError). That is expected on a mobile client, not a
+        server fault, so it is logged as one line rather than a traceback.
+        """
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+            self.log_message("client disconnected mid-request (%s)", self.path)
 
     # -- routing ------------------------------------------------------------
 
@@ -671,6 +850,8 @@ class Handler(BaseHTTPRequestHandler):
             self._unlock()
         elif path == "/upgrade.json":
             self._upgrade_json()
+        elif path == "/me.json":
+            self._me_json()
         elif path == "/version.json":
             self._version_json()
         elif path == "/bot.json":
@@ -740,13 +921,22 @@ class Handler(BaseHTTPRequestHandler):
     def _client_key(self) -> str:
         """The address a failed guess is attributed to.
 
-        X-Forwarded-For is read first (leftmost hop) because Render and Fly
-        terminate TLS in front of this server: without it every request would
-        carry the proxy's address and one attacker would lock out everyone.
+        X-Forwarded-For is read **only** when the operator says a trusted proxy
+        sets it (`ASTRA_TRUST_FORWARDED_FOR=1`), and then only the **rightmost**
+        hop. XFF is client-supplied and trivially spoofed: trusting the leftmost
+        value lets an attacker rotate one header per request and never trip the
+        gate, which is exactly the brute-force oracle the limiter exists to
+        close. With no trusted proxy the socket peer address is the truth, and
+        a spoofed header is ignored.
+
+        The rightmost hop, not the leftmost, because a well-behaved proxy
+        *appends* the address it saw; everything to its left is whatever the
+        client sent. The leftmost value is the most spoofable, not the least.
         """
-        fwd = self.headers.get("X-Forwarded-For", "")
-        if fwd:
-            return fwd.split(",", 1)[0].strip()
+        if _TRUST_FORWARDED_FOR:
+            fwd = self.headers.get("X-Forwarded-For", "")
+            if fwd:
+                return fwd.split(",")[-1].strip()
         return self.client_address[0] if self.client_address else "unknown"
 
     def _presented_key(self) -> str:
@@ -851,8 +1041,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(302)
         self.send_header("Location", "/")
         secure = "; Secure" if _forwarded_proto_https(self) else ""
+        # Store the key that was actually presented, not ACCESS_TOKEN: with
+        # accounts enabled the presented key may be a per-user account key, and
+        # baking in the static token would silently upgrade every visitor to
+        # the master key.
+        presented = _parse_query(self.path).get("k", "")
         self.send_header("Set-Cookie",
-                         f"{_COOKIE_NAME}={ACCESS_TOKEN}; Path=/; Max-Age=31536000; "
+                         f"{_COOKIE_NAME}={presented}; Path=/; Max-Age=31536000; "
                          f"HttpOnly; SameSite=Lax{secure}")
         self.end_headers()
 
@@ -860,11 +1055,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def _static(self, path: str) -> None:
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
-        target = os.path.normpath(os.path.join(HERE, rel))
-        if not target.startswith(HERE) or not os.path.isfile(target):
+        # A request path is attacker-controlled: it can carry "..", a NUL, or a
+        # name like "serve_mobile.py". Two independent guards, because either
+        # alone has a hole:
+        #   1. realpath containment, not a string prefix — "mobile" is a prefix
+        #      of "mobile-secret", so startswith() would serve a sibling dir;
+        #   2. an extension allowlist, so even a file that *is* inside the
+        #      shell directory (the server's own .py, its .pyc, a stray .md)
+        #      is never handed out.
+        target = os.path.realpath(os.path.join(HERE, rel))
+        root = os.path.realpath(HERE)
+        if not target.startswith(root + os.sep) or not os.path.isfile(target):
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
         ext = os.path.splitext(target)[1].lower()
+        if ext not in _SERVE_EXTS:
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+            return
         with open(target, "rb") as fh:
             body = fh.read()
         if ext in (".html", ".htm"):
@@ -882,6 +1089,36 @@ class Handler(BaseHTTPRequestHandler):
         """
         url = os.environ.get("ASTRA_UPGRADE_URL", "").strip()
         body = json.dumps({"url": url}).encode("utf-8")
+        self._send(200, body, "application/json; charset=utf-8")
+
+    def _me_json(self) -> None:
+        """What the current visitor is entitled to, and when it runs out.
+
+        Reached only after the gate, so the caller is already authorized. With
+        accounts off this reports the operator's own static-token identity
+        ("master", never expiring) rather than 404 — the app can then show a
+        consistent panel whether or not accounts are in use. The account id is
+        a random opaque token, not personal data; the email is deliberately not
+        echoed back.
+        """
+        presented = self._presented_key()
+        account = _account_for(presented) if presented else None
+        if account is not None:
+            payload = {
+                "mode": "account",
+                "id": account.id,
+                "tier": account.tier,
+                "expires_at": (int(account.expires_at)
+                               if account.expires_at is not None else None),
+                "days_left": account.days_left(),
+            }
+        elif ACCESS_TOKEN and hmac.compare_digest(presented or "", ACCESS_TOKEN):
+            payload = {"mode": "master", "id": "", "tier": "pro",
+                       "expires_at": None, "days_left": None}
+        else:
+            payload = {"mode": "open", "id": "", "tier": "pro",
+                       "expires_at": None, "days_left": None}
+        body = json.dumps(payload, sort_keys=True).encode("utf-8")
         self._send(200, body, "application/json; charset=utf-8")
 
     # -- deployed version ---------------------------------------------------
@@ -1052,6 +1289,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
+        # Defense in depth: the shell is a standalone app, never an iframe, and
+        # the access key can appear in the URL on a first visit, so it must not
+        # leak to any other origin through the Referer header.
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        # Defense in depth against any XSS that gets past the escaping: even if
+        # an injected script reached the page, it could not load a remote
+        # payload, exfiltrate to an attacker host, or rewrite the base URL.
+        self.send_header("Content-Security-Policy", _CSP)
         if retry_after:
             # RFC 6585: tells a rate-limited caller how long to wait, so a
             # well-behaved client backs off instead of hammering the gate.
@@ -1096,10 +1342,14 @@ def main(argv=None) -> int:
     Handler.engine_base = f"http://127.0.0.1:{args.engine_port}"
     Handler.apk_path = os.path.abspath(args.apk)
 
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server = _BoundedServer((args.host, args.port), Handler,
+                            timeout=_SOCKET_TIMEOUT_S,
+                            max_concurrency=_MAX_CONCURRENCY)
     server.daemon_threads = True
     print(f"[OK] ASTRA mobile app on http://{args.host}:{args.port} "
           f"(api -> {Handler.api_base})", flush=True)
+    print(f"[OK] hardening: {_SOCKET_TIMEOUT_S:g}s socket timeout, "
+          f"max {_MAX_CONCURRENCY} concurrent requests", flush=True)
     print("[OK] access control: "
           + ("on (key required)" if ACCESS_TOKEN else "off (open)"), flush=True)
     # Warm the heavy akoan study in the background so the first phone that

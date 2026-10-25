@@ -53,8 +53,16 @@ for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
   python3 -m unittest discover -s "$d" -p "test_*.py"
 done
 python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
-# 1232 tests total (161/44/50/59/203/227/180 + 308)
+# 1300 tests total (161/44/50/59/203/289/186 + 308)
 ```
+
+The mobile suite used to be one file. It is now three, so the file stays under
+the size the project holds to (the assertions are unchanged): the volatility
+and route tests in `mobile/test_serve_mobile.py`, the gate/rate-limit/account
+tests in `mobile/test_gate.py`, the source-reading shell tests in
+`mobile/test_shell_contract.py`, and the shared loopback-server harness
+(stub bridges, `_serve`/`_stop`, `client_js`) in `mobile/mobile_test_kit.py`.
+CI runs the first three explicitly.
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style
 churn) — see `ruff.toml`. It must stay clean:
@@ -163,6 +171,28 @@ server fills from `ASTRA_UPGRADE_URL`. An admin grants Pro with
 `/grant <chat_id> pro`; users read their id with `/myid`. See RUNBOOK §11 for
 the mechanics and docs/SELLING.md for the Stripe product/custom-field copy.
 
+**Per-user accounts (multi-user gate).** Beyond the single shared token,
+`mobile/accounts.py` issues one key per buyer with an expiry, so access can be
+revoked and does not depend on one shared secret. It is **off unless
+`ASTRA_ACCOUNTS` is truthy**; when on, the phone app requires a per-user key on
+every gated route and the static `ASTRA_ACCESS_TOKEN` still works as a master
+key, so the operator is never locked out. A key looks like
+`astra_acc_<id>.<base64url-secret>`: the id carries an `_`, and the secret may
+too, so the split is on the dot, never `split("_", 2)` — that mis-parse was a
+real bug. Only an HMAC of the secret is stored; the plaintext is shown once at
+creation and never persisted, so a lost key is re-issued, not recovered.
+`days_left()` rounds **up**, so a fresh 30-day key reads "30", not "29". Link a
+key to a Telegram chat (`accounts.py link --chat-id`) and the bot's
+`entitlements.py` honours the same tier automatically — one place to manage,
+both surfaces follow. Manage with `accounts.py create|list|extend|revoke|restore|link`.
+The running server reloads the store whenever the file's content changes (a
+SHA-256 of the bytes, not the mtime — two edits inside one clock tick share an
+mtime), so a `revoke` bites on the next request with no restart; that
+cross-process reload is what `mobile/test_accounts.py::CrossProcessReloadTest`
+pins.
+The store path is `ASTRA_ACCOUNTS_FILE` (default `<ASTRA_RUN_DIR>/accounts.json`,
+on the persistent disk). `mobile/test_gate.py` covers the gate and accounts.
+
 `mobile/performance.html` is the **transparency page** — the honest numbers the
 project already publishes in `docs/FINAL_REPORT.md`, shown to the buyer: OOS
 Brier skill ≈ +0.0012, directional accuracy 51.7%, ECE 0.0015, AUC ≈ 0.50, plus
@@ -214,6 +244,13 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   establishes the cookie itself, and `sw.js` refuses to cache `/unlock?k=` or
   any 401. When adding a new server reader, send the cookie or exempt the route.
 - The backend build is self-contained; the MT5 bridge is loopback-only by design.
+- **The research corpus is on Git-LFS, additively.** `.gitattributes` routes the
+  ~70 MB of corpus/candle files through the LFS filter, but the blobs already in
+  history are untouched — no commit was rewritten. A clone without `git-lfs`
+  installed gets the files unchanged (git ignores an unknown filter), so CI and
+  the deploy images are unaffected. Moving the *existing* history into LFS needs
+  `git lfs migrate import` + a force-push, which is deliberately left as a
+  documented one-time decision in `docs/GIT_LFS.md`, not done here.
 - `HttpClient` in `src/foundation/` deliberately refuses non-loopback hosts, so
   it cannot reach Telegram's HTTPS API — that is why the bot is Python, not C++.
 - Telemetry-style posture: everything is shadow-mode; nothing carries execution
@@ -436,6 +473,22 @@ so a clone can move to a new deployment by setting two variables:
 - `ASTRA_GATE_MAX_FAILURES` / `ASTRA_GATE_WINDOW_S` / `ASTRA_GATE_LOCKOUT_S` —
   optional. Tune the gate's per-address failure limit (defaults 10 / 300 s /
   900 s). Only wrong keys are counted; a correct key clears the record.
+- `ASTRA_TRUST_FORWARDED_FOR` — optional, default **off**. Set to `1` only when
+  the service really sits behind a proxy that overwrites `X-Forwarded-For`
+  (Render and Fly both do; both deploy files set it). When off, the header is
+  ignored and a failed guess is attributed to the socket peer address — because
+  the header is client-supplied, trusting it by default would let an attacker
+  rotate one header per request and never trip the rate limit. When on, only the
+  rightmost hop is used (the leftmost is whatever the client sent).
+- `ASTRA_SOCKET_TIMEOUT_S` — optional, default `30`. How long a single
+  connection may take to send its request before the server drops it. This is
+  what stops a slowloris (open a socket, then dribble bytes): with no timeout
+  each half-open socket pins a thread forever, and `ThreadingHTTPServer` spawns
+  one thread per connection, so a few hundred idle sockets exhaust the process.
+- `ASTRA_MAX_CONCURRENCY` — optional, default `64`. Hard ceiling on concurrent
+  request threads. A caller over the cap waits briefly for a slot and is then
+  shed rather than spawning threads without limit. The timeout above already
+  bounds any one thread's life; this bounds how many can exist at once.
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — optional. Enable Web Push (see
   *Web Push* below). Both are base64url, unpadded; generate them locally for
   free with `python3 -c "import webpush; print(webpush.generate_keys())"`. Unset
@@ -543,7 +596,7 @@ step. `app.js` holds the shared state and the network helpers and must stay firs
 Each script repeats `"use strict"` (a separate classic script would otherwise be
 sloppy). A script ships correctly only if it is loaded by the page, precached in
 `sw.js` and stamped by `serve_mobile.py`; `ClientScriptContractTest` in
-`mobile/test_serve_mobile.py` pins all three, and the source-reading tests read
+`mobile/test_shell_contract.py` pins all three, and the source-reading tests read
 the ten as one string so a symbol may move file without breaking an assertion.
 
 The bar is one row on a phone: five primary tabs (`status`, `signal`, `chart`,
@@ -561,7 +614,7 @@ redirects to a clean `/`, so the key does not linger in the address bar, history
 or `Referer`. The key is compared with `hmac.compare_digest` so a wrong guess
 leaks no timing signal. The gate is dormant until the variable is set, mirroring
 `ASTRA_UPGRADE_URL`: development, CI and the current deployment behave exactly
-as before. `mobile/test_serve_mobile.py::AccessControlTest` locks all of this.
+as before. `mobile/test_gate.py::AccessControlTest` locks all of this.
 
 The live Render deployment currently runs the gate **on**: the phone app answers
 `401` until unlocked and `/api/v1/health` stays `200`. The same key is set as the
@@ -597,6 +650,42 @@ The limiter is in-process and bounded (`_GATE_MAX_TRACKED`, pruned), so a
 restart forgets it and a flood of distinct addresses cannot grow it without
 limit. `GateRateLimitTest` and `RateLimiterUnitTest` lock the rules; the unit
 test injects a clock so nothing sleeps.
+
+The service is the one process on the public internet, so it must not be
+pinnable by sockets. `ThreadingHTTPServer` spawns a thread per connection and,
+by default, waits on each forever — so an unauthenticated caller could open
+hundreds of connections, send a partial request line and never finish, and the
+process would accumulate threads until it died (a slowloris). Two guards close
+this, both in `_BoundedServer` (`mobile/serve_mobile.py`):
+
+* `ASTRA_SOCKET_TIMEOUT_S` (default 30) bounds how long any one connection may
+  take to deliver its request; past it the socket is closed and the thread ends.
+* `ASTRA_MAX_CONCURRENCY` (default 64) is a hard ceiling on live request
+  threads. A caller over the cap waits briefly for a slot, then is shed rather
+  than spawning threads without bound. The slot is released in a `finally`, and
+  a connection shed before its thread starts never holds one.
+
+`DosHardeningTest` proves both: a half-open socket is closed promptly rather
+than parked, and a normal request still gets `200` while the cap is under
+pressure.
+
+Every response also carries a `Content-Security-Policy` (see `_CSP`). The shell
+is a standalone PWA whose own data is same-origin; the only off-origin resource
+is Google Fonts. Scripts are limited to `'self'` plus the sha256 hash of each
+page's inline pre-paint boot block — never `'unsafe-inline'`. The hashes are
+recomputed from the shipped HTML at import (`_inline_script_hashes`) so editing
+a boot block cannot silently disable it, and `CspTest` asserts the served
+headers match. This is the backstop for an XSS that ever got past the escaping:
+an injected script still could not fetch a remote payload, exfiltrate to an
+attacker host, or rewrite the base URL.
+
+The policy has one consequence for the DOM tests: Playwright's
+`page.wait_for_function` wraps its argument in `new Function()`, which a
+`script-src` without `'unsafe-eval'` blocks, so the call raises `EvalError` under
+the shipped CSP. `test_dom_data.py`'s `_wait` polls with `page.evaluate` instead
+— that runs the expression directly, which the policy permits — so do not
+"simplify" it back to `wait_for_function`. Prefer `locator.wait_for()` for a
+plain element wait; it is also unaffected.
 
 Exercising the AI engine without a provider key: point the advisor at a local
 OpenAI-compatible stub and drive the real bridge. The engine reuses
@@ -783,7 +872,7 @@ subtitle ellipsizes, and `.controls { flex: none }` keeps the buttons whole.
 
 The 10px micro-labels (and the bottom tab bar) step up to 11px below 480px;
 they are legible on a desktop panel but strain a phone held at arm's length.
-`mobile/test_serve_mobile.py::NarrowHeaderTest` pins all of this so it cannot
+`mobile/test_shell_contract.py::NarrowHeaderTest` pins all of this so it cannot
 silently regress — the sizes were measured in a headless browser at 320/360/375/
 390/412/430px, in both directions (the app runs RTL in Arabic).
 

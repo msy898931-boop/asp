@@ -1,0 +1,25 @@
+# Git-LFS for the research corpus and the raw price data.
+#
+# These paths hold the large, never-hand-edited artifacts: the ~49 MB
+# real_corpus gzip, the news ledger, and the per-year XAUUSD M1 candles. They
+# are the reason a fresh clone is heavy. Marking them here routes *future*
+# versions through Git-LFS so the repository stops growing with every
+# regeneration.
+#
+# This file is additive and changes nothing on its own: the blobs already in
+# history stay exactly where they are, and a clone without `git-lfs` installed
+# receives them unchanged (git ignores an unknown filter). Nothing in the repo
+# is rewritten and no commit is removed.
+#
+# The one-time size win — moving the existing ~70 MB out of history — needs a
+# history rewrite (`git lfs migrate import`), which changes every commit id and
+# requires a force-push. That is deliberately NOT done here; see
+# docs/GIT_LFS.md for the exact command and what it costs.
+#
+# Install the client once per machine so the filter is honoured:
+#   git lfs install
+research/features_real/corpus/*.json.gz   filter=lfs diff=lfs merge=lfs -text
+research/features_real/news_ledger.jsonl.gz filter=lfs diff=lfs merge=lfs -text
+research/data/xauusd_m1/*.csv             filter=lfs diff=lfs merge=lfs -text
+research/data/xauusd_m1/*.csv.gz          filter=lfs diff=lfs merge=lfs -text
+research/data/xauusd_m1/ask/*.csv.gz      filter=lfs diff=lfs merge=lfs -text
