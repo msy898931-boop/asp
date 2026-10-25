@@ -312,6 +312,19 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   quota, unreachable) instead of a blank panel. The panel is read-only and
   changes nothing else in the app: a dead engine leaves every other tab green.
   Run it once with `python3 advisor/ai_engine.py --once`; serve it with `--port`.
+  **Higher frames inform, they do not veto.** The prompt weighs the frames by
+  role — M1..M15 time the entry, M30/H1 carry the intraday trend, H4..MN1 set
+  the bias — and explicitly tells the model that a higher-frame disagreement
+  lowers conviction (state it in the rationale) but must not suppress a trade
+  the lower/middle frames agree on, and that a missing or short frame
+  (`missing_timeframes`, e.g. MN1 under `MIN_BARS`) is not grounds to refuse.
+  Before this, the model treated the daily/weekly conflict as a veto and
+  returned NEUTRAL with zero trades on nearly every read. `ASTRA_ENGINE_TIMEFRAMES`
+  (empty = all nine) narrows which frames are prompted; the reply reports
+  `engine.timeframes_prompted` beside `timeframes_read`/`timeframes_missing`.
+  The model-free card has the same rule in `mtf_read.py`: H4 opposition makes it
+  stand aside unless `ASTRA_MTF_STRUCTURAL_VETO=0`, in which case the card is
+  emitted with `card.structural_warning` set and shown in the Arabic text.
 - **Quota.** The Groq free tier allows ~200k tokens/day and one advisory costs
   ~1.4k (a ~1k-token prompt plus the reply), so the opinion can only refresh
   ~140 times a day. `CACHE_TTL` (default 600s) is set to fit inside that budget;

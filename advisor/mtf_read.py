@@ -31,6 +31,7 @@ carries ``validated: false``.
 from __future__ import annotations
 
 import math
+import os
 from typing import Dict, List, Optional, Sequence
 
 # Timeframes read, coarsest last. M15 operational, H4 structural.
@@ -71,6 +72,20 @@ LADDER_BY_AGREEMENT = {
 
 RSI_LONG = 52.0
 RSI_SHORT = 48.0
+
+
+def _env_flag(name: str, default: str = "1") -> bool:
+    """A boolean env flag; anything but an explicit off value counts as on."""
+    return os.environ.get(name, default).strip().lower() not in ("0", "false", "no", "")
+
+
+# The structural frame (H4) is the authority by default: when the lower frames
+# agree but H4 opposes, the read stands aside. That is the honest default — a
+# counter-trend setup is genuinely lower quality. An operator who wants the
+# lower-timeframe agreement to produce a card anyway (with the opposition
+# recorded as a note) can set ASTRA_MTF_STRUCTURAL_VETO=0. The card is still
+# unvalidated either way; only the standing-aside rule changes.
+STRUCTURAL_VETO = _env_flag("ASTRA_MTF_STRUCTURAL_VETO")
 
 
 def _closes(bars: Sequence[dict]) -> List[float]:
@@ -335,9 +350,15 @@ def build(bars_by_tf: Dict[str, Sequence[dict]]) -> Dict:
         direction = "SHORT"
 
     # The structural timeframe is the authority: if it opposes, stand aside.
+    # With the veto off, the opposition is recorded instead and the card is
+    # built anyway, so a counter-trend setup still surfaces with its warning.
+    structural_note = None
     if direction is not None and structural is not None and structural not in (direction, "NEUTRAL"):
-        direction = None
-        result["reason"] = "H4 structure opposes the lower-timeframe agreement"
+        if STRUCTURAL_VETO:
+            direction = None
+            result["reason"] = "H4 structure opposes the lower-timeframe agreement"
+        else:
+            structural_note = "H4 structure opposes the lower-timeframe agreement"
     elif direction is None:
         result["reason"] = "no majority across timeframes"
 
@@ -349,6 +370,8 @@ def build(bars_by_tf: Dict[str, Sequence[dict]]) -> Dict:
         result["reason"] = "direction found but the card could not be grounded in bars"
         return result
 
+    if structural_note:
+        card["structural_warning"] = structural_note
     result["verdict"] = direction
     result["card"] = card
     return result
@@ -408,6 +431,8 @@ def format_card(result: Dict) -> str:
             lines.append("الأهداف (%d): %s" % (
                 len(targets), " ← ".join(str(t) for t in targets)))
     lines.append("R:R = %s" % card["rr"])
+    if card.get("structural_warning"):
+        lines.append("⚠ الإطار البنيوي H4 يعارض الاتجاه — ثقة أقل.")
     tf_bits = []
     for tf, read in result["timeframes"].items():
         arrow = {"LONG": "▲", "SHORT": "▼", "NEUTRAL": "–"}[read["direction"]]

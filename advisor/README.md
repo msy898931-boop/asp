@@ -97,6 +97,32 @@ GROQ_API_KEY=gsk_... python3 advisor/ai_engine.py --port 8794
 Started by `scripts/start_stack.sh` only when `ASTRA_ENABLE_ENGINE=1`; opt out
 with `ASTRA_DISABLE_ENGINE=1`.
 
+**Timeframe roles, and why the daily/weekly no longer suppress a trade.** The
+engine reads every frame it is given and asks the model to weigh them by role:
+the lower frames (M1..M15) time the entry, the middle frames (M30, H1) carry the
+intraday trend, and the higher frames (H4, D1, W1, MN1) set the bias and the
+room to move. The higher frames **inform** the direction; they do not veto it. A
+setup running against the higher-frame bias is lower conviction — the model is
+asked to say so in the rationale — but the trade is still given when the lower
+and middle frames agree on a coherent plan. A frame that is missing or too short
+(MN1 usually has fewer than `MIN_BARS`) is likewise not a reason to refuse.
+Earlier the prompt let the model treat a higher-frame disagreement as grounds to
+return NEUTRAL, which is why it so often returned no trades.
+
+- `ASTRA_ENGINE_TIMEFRAMES` narrows which frames are handed to the model. Empty
+  (the default) means all nine; set `M5,M15,M30,H1,H4` to drop the daily/weekly
+  context entirely. Order is always canonical; unknown labels are dropped and a
+  list with nothing recognisable falls back to all nine.
+- The reply reports `engine.timeframes_prompted` beside `timeframes_read` and
+  `timeframes_missing`, so it is always visible which frames were sent.
+
+The **rule-based card** (`mtf_read.py`) has its own version of the same rule: it
+stands aside when the structural frame (H4) opposes the lower-timeframe
+agreement. That is the honest default. Set `ASTRA_MTF_STRUCTURAL_VETO=0` to let
+the card through anyway, with the opposition recorded as
+`card.structural_warning` and shown in the Arabic card text, instead of
+suppressing it.
+
 | Route | Meaning |
 | --- | --- |
 | `GET /v1/engine` | Current engine read (cached). `?refresh=1` forces a new one. |
