@@ -679,6 +679,14 @@ headers match. This is the backstop for an XSS that ever got past the escaping:
 an injected script still could not fetch a remote payload, exfiltrate to an
 attacker host, or rewrite the base URL.
 
+The policy has one consequence for the DOM tests: Playwright's
+`page.wait_for_function` wraps its argument in `new Function()`, which a
+`script-src` without `'unsafe-eval'` blocks, so the call raises `EvalError` under
+the shipped CSP. `test_dom_data.py`'s `_wait` polls with `page.evaluate` instead
+— that runs the expression directly, which the policy permits — so do not
+"simplify" it back to `wait_for_function`. Prefer `locator.wait_for()` for a
+plain element wait; it is also unaffected.
+
 Exercising the AI engine without a provider key: point the advisor at a local
 OpenAI-compatible stub and drive the real bridge. The engine reuses
 `ai_advisor` for both the key and the call, so two env vars are enough —

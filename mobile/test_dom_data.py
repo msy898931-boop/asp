@@ -24,6 +24,7 @@ import json
 import os
 import sys
 import threading
+import time
 import unittest
 import urllib.parse
 from http.server import ThreadingHTTPServer
@@ -209,7 +210,20 @@ class SeededDomTest(unittest.TestCase):
         return page, errors
 
     def _wait(self, page, expr, timeout=5000):
-        page.wait_for_function(expr, timeout=timeout)
+        # `page.wait_for_function` wraps the expression in `new Function()`,
+        # which a strict `script-src` (no `'unsafe-eval'`) blocks — so the
+        # shipped CSP makes it unusable. Poll with `evaluate` instead: it runs
+        # the expression directly, which the policy permits.
+        deadline = time.monotonic() + timeout / 1000.0
+        while True:
+            try:
+                if page.evaluate("() => !!(%s)" % expr):
+                    return
+            except Exception:  # noqa: BLE001 - a mid-navigation page error must not abort the wait
+                pass
+            if time.monotonic() >= deadline:
+                raise AssertionError("timed out waiting for: %s" % expr)
+            time.sleep(0.05)
 
     # -- the status panel --------------------------------------------------
 

@@ -162,7 +162,7 @@ def _accounts_store_from_env():
     if flag not in ("1", "true", "yes", "on"):
         return None
     try:
-        import accounts  # type: ignore
+        import accounts
     except ImportError:
         here = Path(__file__).resolve()
         for parent in here.parents:
@@ -170,7 +170,7 @@ def _accounts_store_from_env():
             if (candidate / "accounts.py").is_file():
                 sys.path.insert(0, str(candidate))
                 try:
-                    import accounts  # type: ignore
+                    import accounts
                 except ImportError:
                     return None
                 break
