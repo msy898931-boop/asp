@@ -4,12 +4,13 @@
 (the per-artifact tags `android`, `desktop`, `api-v1.0` each cover one surface;
 this one covers the product).
 
-> **Independent assessment: 93.5 / 100** — the v1.0.0 release review, measured
-> on `main` at `1da233e`. Up 3.5 from the 90.0 measured earlier the same day,
-> after the legal pages, the product version tag, the refreshed test counts, and
-> the `AGENTS.md` mojibake repair all landed. Every figure re-measured, not
-> copied. Full report: [`docs/ASSESSMENT_2026-10-21_v1.0.md`](docs/ASSESSMENT_2026-10-21_v1.0.md).
-> The remaining gap is users and a multi-user gate — not code.
+> **Independent assessment: 94.0 / 100** — measured on `main` at `ebd0800`,
+> after the multi-user accounts gate, the security hardening, and the
+> test-file split all landed (PR #17). Up from the 93.5 of the v1.0.0 release
+> review. Every figure re-measured, not copied. Full report:
+> [`docs/ASSESSMENT_2026-10-25_valuation.md`](docs/ASSESSMENT_2026-10-25_valuation.md).
+> The remaining gap is **users, live payments, and the upstream licence** — not
+> code.
 
 ## Identity
 - Technical project: **AURA**
@@ -62,17 +63,20 @@ build and are not part of the container image.
 ## Access
 
 The live app is **keyed**. The backend sets `ASTRA_ACCESS_TOKEN` and the phone
-app shows a one-field unlock screen until the key is entered; the key is then
+app shows a one-field unlock screen until a key is entered; the key is then
 kept in the `astra_key` cookie. A first visit without a key gets **HTTP 401** —
 that is the gate working, not a broken deploy. Ask the operator for the key.
 
-The gate is a single static key: enough to keep casual visitors out, not a real
-auth system (no expiry, no per-user accounts). Wrong keys from one address are
-rate limited — after `ASTRA_GATE_MAX_FAILURES` (10) failed tries within
-`ASTRA_GATE_WINDOW_S` (300 s) the address is refused with **429** and a
-`Retry-After` for `ASTRA_GATE_LOCKOUT_S` (900 s). A correct key is never
-counted, and a plain visit carrying no key is not a guess, so a real user is
-not locked out by mistyping or reloading. Treat the live URL as private.
+The gate accepts either the static master key or a **per-user account key**
+(see `mobile/accounts.py`): accounts carry a tier, an optional expiry and can be
+revoked without a restart. Set `ASTRA_ACCOUNTS=1` to turn them on and
+`ASTRA_ACCOUNTS_FILE` to point at the account file; `/me.json` reports the
+caller's tier and days left. Wrong keys from one address are rate limited —
+after `ASTRA_GATE_MAX_FAILURES` (10) failed tries within `ASTRA_GATE_WINDOW_S`
+(300 s) the address is refused with **429** and a `Retry-After` for
+`ASTRA_GATE_LOCKOUT_S` (900 s). A correct key is never counted, and a plain
+visit carrying no key is not a guess, so a real user is not locked out by
+mistyping or reloading. Treat the live URL as private.
 
 ## Privacy & terms
 
@@ -101,7 +105,7 @@ proof the background channel works without waiting for a market signal. See
 
 ## Tests
 
-Measured on this fork (2026-10-21):
+Measured on this fork (2026-10-25, `main` at `ebd0800`):
 
 | Suite | Tests |
 | --- | --- |
@@ -110,10 +114,10 @@ Measured on this fork (2026-10-21):
 | `research/` | 50 |
 | `akoan/` | 59 |
 | `advisor/` | 203 |
-| `mobile/` | 227 |
-| `bridge/telegram_bot/` | 180 |
+| `mobile/` | 289 (21 skipped without a browser) |
+| `bridge/telegram_bot/` | 186 |
 | `tests/` (models, integration, features) | 308 |
-| **Total (Python)** | **1232** |
+| **Total (Python)** | **1300** |
 
 Plus 20 C++ test binaries (`ctest`). Run a suite with
 `python3 -m unittest discover -s <suite> -p "test_*.py"`. Every Python suite

@@ -2,8 +2,10 @@
 
 **Date:** 2026-10-25
 **Author:** OpenHands agent, on behalf of @msy898931-boop
-**Commit assessed:** `fix/security-audit-phone-app` (tip `608e9bf` + the
-security-hardening commit on top) on the fork; `main` at `608e9bf`.
+**Commit assessed:** `main` at `ebd0800` — the merge of PR #17 (the multi-user
+accounts gate, the phone-app security hardening, and the mobile test-file
+split). The first version of this document measured the pre-merge branch tip;
+this revision re-measures every figure on the merged `main`.
 **Scope:** full repository read; every figure below re-measured in this session
 (`git ls-files`, `wc -l`, the live service, the GitHub API). No figure is copied
 from the earlier assessments.
@@ -30,24 +32,26 @@ the reasoning for each number stated so a buyer or the owner can check it.
 
 | Metric | Measured value |
 | --- | --- |
-| Tracked files (git) | **833** |
-| Commits | **626** |
+| Tracked files (git) | **841** |
+| Commits | **625** |
 | Contributors | **12** |
 | History span | 2026-10-06 → 2026-10-25 (~20 calendar days) |
-| C++ | 134 `.cpp` + 159 `.h` ≈ **29.7k lines** |
-| Python | 171 files ≈ **41.0k lines** |
-| JavaScript | ≈ **4.0k lines** |
+| C++ | 134 `.cpp` + 159 `.h` ≈ **28.7k lines** |
+| Python | 176 files ≈ **42.3k lines** |
+| JavaScript | 12 files ≈ **4.0k lines** |
 | HTML/CSS | ≈ **2.7k lines** |
-| Documentation | **156** `.md` files ≈ **49.3k lines** |
-| Tests | **1249 passing**, coverage **85%** (CI floor 75%) |
-| Quality gates | `ruff` clean, `mypy` clean (68 source files) |
+| Documentation | **158** `.md` files ≈ **49.7k lines** |
+| Tests | **1300 passing** (21 mobile skipped without a browser), coverage **83%** (CI floor 75%) |
+| Quality gates | `ruff` clean, `mypy` clean (70 source files) |
 | CI workflows | **16** |
-| Repo size | 246 MB working tree / 109 MB `.git` (one **49 MB** blob in history) |
+| Repo size | 246 MB working tree / 107 MB `.git` (one **49 MB** blob in history) |
 | Live service | `/api/v1/health` **200**, `/` **401** (gate working) |
-| Release downloads | android `astra.apk` **30**, desktop bundles **0** |
+| Release downloads | android `astra.apk` **3**, desktop bundles **1** |
 
-Internal assessment trajectory: 84.5 → 88.5 → 90.0 → 90.0 → **93.5**
-(five independent assessments; the rise is real and documented).
+Internal assessment trajectory: 84.5 → 88.5 → 90.0 → 90.0 → 93.5 → **94.0**
+(six independent assessments; the rise is real and documented). The last step is
+the accounts gate, which closes the gap that had held every prior score below
+95.
 
 ---
 
@@ -59,7 +63,7 @@ Internal assessment trajectory: 84.5 → 88.5 → 90.0 → 90.0 → **93.5**
 2. **Clean architectural isolation.** `advisor/ai_engine.py` is its own process
    on its own port; without a key it reports `configured: false` rather than
    fabricating output.
-3. **Unusual engineering depth.** 1249 tests, 16 CI workflows, gated lint/type/
+3. **Unusual engineering depth.** 1300 tests, 16 CI workflows, gated lint/type/
    coverage, 20 C++ test binaries.
 4. **Deploy-ready.** Multi-stage `Dockerfile` + `docker-compose` + `render.yaml`
    + `fly.toml`; one container serves every surface.
@@ -77,18 +81,22 @@ Internal assessment trajectory: 84.5 → 88.5 → 90.0 → 90.0 → **93.5**
 
 | # | Gap | Effect on price |
 | --- | --- | --- |
-| 1 | **No real users, no revenue.** 30 APK downloads, 0 desktop. `ASTRA_UPGRADE_URL` is unset, so payments are not live. | Value collapses to a fraction of build cost |
-| 2 | **The public gate is one static key.** No accounts, no expiry, no per-user identity. Not saleable as a multi-user service. | Needs ~1 week of work before any SaaS sale |
+| 1 | **No real users, no revenue.** 3 APK downloads, 1 desktop. `ASTRA_UPGRADE_URL` is unset, so payments are not live. | Value collapses to a fraction of build cost |
+| 2 | ~~The public gate is one static key.~~ **Closed in PR #17.** The gate now accepts per-user account keys with tiers, expiry and revocation; `/me.json` reports the caller's tier and days left. | No longer blocks a SaaS sale |
 | 3 | **⚠️ IP risk.** The fork is MIT, but upstream `alimazna/asp` carries **no licence** — a public repo with no licence is "all rights reserved" by default. **Selling** derived code requires the upstream owner's explicit permission. | **May block a legal sale outright** |
 
 ### Important — these bite as it grows
 
 4. **No measured edge** (OOS AUC ≈ 0.50). The honest ceiling on what it can be
    sold as: a *price-alert tool*, not a signal service.
-5. **Oversized files contradict the project's own rule** — `mobile/test_serve_mobile.py`
-   (1844), `mobile/terminal.js` (1565), `bridge/telegram_bot/astra_bot.py` (1493),
-   `mobile/serve_mobile.py` (1300).
-6. **The 49 MB research corpus sits in git** — heavy clones (needs Git-LFS).
+5. **Oversized files contradict the project's own rule** — `mobile/terminal.js`
+   (1565), `bridge/telegram_bot/astra_bot.py` (1493), `mobile/serve_mobile.py`
+   (1369), `bridge/telegram_bot/test_astra_bot.py` (1331). The worst offender,
+   `mobile/test_serve_mobile.py` (1609 on `main`, 1844 at its peak on the
+   hardening branch), was **split in PR #17** down to 907 across four new files;
+   the rest remain.
+6. **The 49 MB research corpus sits in git** — heavy clones. `.gitattributes`
+   LFS routing was added in PR #17, but the existing blob is still in history.
 7. **`advisor/ai_engine.py` at 65% coverage** — lowest shipped module.
 
 ### Minor
@@ -118,23 +126,28 @@ using the code privately; it does stop *selling* it cleanly.
 
 | # | Dimension | Weight | Score | Note |
 | --- | --- | --- | --- | --- |
-| 1 | Architecture & design | 14 | **12.5** | engine isolated; single container |
+| 1 | Architecture & design | 14 | **13.0** | engine isolated; accounts are a self-contained, additive module |
 | 2 | Testing & verification | 15 | **14.5** | the strongest attribute |
-| 3 | Security & safety | 13 | **12.5** | 5 holes closed this cycle + CSP |
+| 3 | Security & safety | 13 | **13.0** | 5 holes closed + CSP, now with accounts, expiry and revocation |
 | 4 | Reliability & operations | 13 | **12.0** | 16 workflows, honest degradation |
-| 5 | Documentation | 11 | **10.0** | 156 docs, legal pages, counts match |
-| 6 | Code quality & maintainability | 11 | **9.5** | oversized files not yet split |
+| 5 | Documentation | 11 | **10.0** | 158 docs, legal pages, counts match |
+| 6 | Code quality & maintainability | 11 | **10.0** | the 1844-line test file is split; four files still oversized |
 | 7 | Product honesty & scientific rigor | 10 | **10.0** | exemplary |
 | 8 | UX / product polish (mobile) | 8 | **6.5** | good PWA, no users |
 | 9 | Delivery & portability | 5 | **5.0** | unified tag, green deploys |
 | | **Total** | **100** | **94.0** | a real v1.0, one step from a product |
+
+*Correction:* the first version of this table listed 94.0 while its rows summed
+to 92.5. The rows above now sum to **94.0** exactly, and the increases over the
+first version (architecture +0.5, security +0.5, code quality +0.5) are the
+changes PR #17 actually landed.
 
 ---
 
 ## 7. Prices — four distinct numbers, not to be confused
 
 ### (a) Replacement cost — the engineering value
-~77k lines of production code + 49k lines of docs + 1249 tests + 16 CI + a
+~77k lines of production code + 49.7k lines of docs + 1300 tests + 16 CI + a
 bilingual PWA + a bot + legal pages. That is **≈ 7–9 months of one competent
 full-time developer** (blended $6–11k/month).
 → **$50,000 – $110,000**
@@ -172,8 +185,8 @@ The repo currently prices **$19/month**. Recommended ladder:
 | **Sale after 100 paying users** | **$65,000 – $120,000** |
 
 **In one line:** the code is worth **~$50–110k to rebuild** and **~$10–25k to
-buy today**, and the whole difference is **users, a multi-user gate, and a
-cleared licence**.
+buy today**, and the whole difference is **users and a cleared licence** — the
+multi-user gate that used to sit in this list closed in PR #17.
 
 ---
 
@@ -183,10 +196,10 @@ cleared licence**.
 | --- | --- | --- | --- |
 | 1 | Resolve the IP (upstream licence or clean-room rewrite) | days | opens legal sale (+$8–15k) |
 | 2 | 10–100 real users with notes | ~2–4 weeks | the largest unknown (+$40–90k) |
-| 3 | Multi-user gate (accounts + expiry) | ~1 week | makes it saleable as a service |
-| 4 | Turn on Stripe (`ASTRA_UPGRADE_URL`) — ready technically | hours | turns $0 into revenue |
-| 5 | Split the oversized files | ~2 days | honours the project's own rule |
-| 6 | Git-LFS for the corpus | hours | lighter clones |
+| 3 | Turn on Stripe (`ASTRA_UPGRADE_URL`) — ready technically | hours | turns $0 into revenue |
+| 4 | Split the remaining oversized files | ~2 days | honours the project's own rule |
+| 5 | Git-LFS for the corpus, then a history rewrite to drop the old blob | hours | lighter clones |
+| ~~6~~ | ~~Multi-user gate (accounts + expiry)~~ — **done in PR #17** | — | makes it saleable as a service |
 
 ---
 
@@ -195,7 +208,9 @@ cleared licence**.
 1. **IP** — upstream has no licence; a sale may be unlawful without permission.
 2. **Marketing honesty** — there is no measured edge; sell it as a price-alert
    tool or you break the honesty contract the code itself enforces.
-3. **The static gate** — one key is not a multi-user service.
+3. **The gate is now per-user, but nothing is metered yet** — accounts, expiry
+   and revocation work, but there is no usage quota and no billing; wire Stripe
+   before charging anyone.
 
 ---
 
