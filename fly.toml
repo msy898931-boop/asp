@@ -25,6 +25,12 @@ primary_region = "fra"
   # is ignored (it is client-spoofable) and every visitor shares the proxy's
   # address in the rate-limit bookkeeping.
   ASTRA_TRUST_FORWARDED_FOR = "1"
+  # Multi-user accounts (per-user keys with expiry). Empty keeps the single
+  # ASTRA_ACCESS_TOKEN model; "1" requires a per-user key on every gated route,
+  # with the static token still valid as a master key. The store defaults to
+  # <ASTRA_RUN_DIR>/accounts.json; point it at a Fly volume to persist it.
+  ASTRA_ACCOUNTS = ""
+  ASTRA_ACCOUNTS_FILE = "/data/accounts.json"
 
 [http_service]
   internal_port = 8080

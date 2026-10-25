@@ -73,7 +73,10 @@ jobs:
         run: python3 mobile/check_shell.py
 
       - name: Test the phone server's volatility route
-        run: python3 mobile/test_serve_mobile.py
+        run: |
+          python3 mobile/test_serve_mobile.py
+          python3 mobile/test_gate.py
+          python3 mobile/test_shell_contract.py
 
       - name: Test Web Push (store, routes, real encryption round trip)
         run: python3 mobile/test_webpush.py

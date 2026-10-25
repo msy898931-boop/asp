@@ -152,5 +152,61 @@ class LevelLike:
         self.direction = direction
 
 
+class AccountsLinkTest(unittest.TestCase):
+    """A paying user's chat id is Pro through the mobile account store.
+
+    The store is the real one from `mobile/accounts.py`, driven against a temp
+    file — no mock — so the bot honours exactly the tier and expiry the web
+    gate does.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        mobile = Path(__file__).resolve().parents[2] / "mobile"
+        sys.path.insert(0, str(mobile))
+        import accounts
+        self.accounts = accounts
+        self.store = accounts.AccountStore(self.dir / "accounts.json")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _ent(self, selling: bool = True) -> Entitlements:
+        return Entitlements(
+            self.dir / "entitlements.json",
+            upgrade_url="https://buy.stripe.com/x" if selling else "",
+            accounts_store=self.store,
+        )
+
+    def test_linked_chat_is_pro(self) -> None:
+        self.store.create(email="a@b.c", chat_id="555", ttl_days=30)
+        self.assertEqual(self._ent().tier("555"), "pro")
+
+    def test_unlinked_chat_is_free_when_selling(self) -> None:
+        self.assertEqual(self._ent().tier("999"), TIER_FREE)
+
+    def test_revoked_account_loses_pro(self) -> None:
+        created = self.store.create(email="a@b.c", chat_id="555")
+        self.assertEqual(self._ent().tier("555"), "pro")
+        self.store.revoke(created.account.id)
+        self.assertEqual(self._ent().tier("555"), TIER_FREE)
+
+    def test_expired_account_loses_pro(self) -> None:
+        created = self.store.create(email="a@b.c", chat_id="555", ttl_days=1)
+        self.store.extend(created.account.id, -100)
+        self.assertEqual(self._ent().tier("555"), TIER_FREE)
+
+    def test_admin_still_wins_over_any_account(self) -> None:
+        ent = Entitlements(self.dir / "e.json",
+                           upgrade_url="https://x", admin_chats=["777"],
+                           accounts_store=self.store)
+        self.assertEqual(ent.tier("777"), "pro")
+
+    def test_no_store_means_old_behaviour(self) -> None:
+        # Without a store the class must behave exactly as before.
+        self.assertEqual(self._ent().tier("555"), TIER_FREE)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

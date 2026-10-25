@@ -88,16 +88,48 @@ _ENGINE_PROXY_TIMEOUT = float(os.environ.get("ASTRA_ENGINE_TIMEOUT", "30"))
 ACCESS_TOKEN = os.environ.get("ASTRA_ACCESS_TOKEN", "").strip()
 _COOKIE_NAME = "astra_key"
 
+# Multi-user accounts (per-user keys with expiry) live in a sibling module.
+# They are additive and off by default: with ASTRA_ACCOUNTS unset, nothing
+# here runs and the static token above is the whole story. When accounts are
+# on, the static token still works as a master key (so the operator is never
+# locked out of their own deployment), and any valid account key is accepted.
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+import accounts  # noqa: E402
+
+
+def _accounts_on() -> bool:
+    return accounts.enabled()
+
+
+def _account_for(given: str):
+    """Resolve a presented key to a valid account, or None.
+
+    Only consulted when accounts are enabled. A wrong, expired or revoked key
+    returns None exactly like the static-token path, so the caller cannot tell
+    the cases apart.
+    """
+    if not _accounts_on() or not given:
+        return None
+    return accounts.store().authenticate(given)
+
 
 def _token_matches(given: str) -> bool:
-    """Constant-time compare, so a wrong token leaks no timing signal."""
-    if not ACCESS_TOKEN:
+    """Constant-time compare, so a wrong token leaks no timing signal.
+
+    Accepts the static operator token, and — when accounts are enabled — any
+    valid per-user account key.
+    """
+    if not ACCESS_TOKEN and not _accounts_on():
         return True
-    return hmac.compare_digest(given or "", ACCESS_TOKEN)
+    given = given or ""
+    if ACCESS_TOKEN and hmac.compare_digest(given, ACCESS_TOKEN):
+        return True
+    return _account_for(given) is not None
 
 
 def _auth_required() -> bool:
-    return bool(ACCESS_TOKEN)
+    return bool(ACCESS_TOKEN) or _accounts_on()
 
 
 def _forwarded_proto_https(handler) -> bool:
@@ -818,6 +850,8 @@ class Handler(BaseHTTPRequestHandler):
             self._unlock()
         elif path == "/upgrade.json":
             self._upgrade_json()
+        elif path == "/me.json":
+            self._me_json()
         elif path == "/version.json":
             self._version_json()
         elif path == "/bot.json":
@@ -1007,8 +1041,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(302)
         self.send_header("Location", "/")
         secure = "; Secure" if _forwarded_proto_https(self) else ""
+        # Store the key that was actually presented, not ACCESS_TOKEN: with
+        # accounts enabled the presented key may be a per-user account key, and
+        # baking in the static token would silently upgrade every visitor to
+        # the master key.
+        presented = _parse_query(self.path).get("k", "")
         self.send_header("Set-Cookie",
-                         f"{_COOKIE_NAME}={ACCESS_TOKEN}; Path=/; Max-Age=31536000; "
+                         f"{_COOKIE_NAME}={presented}; Path=/; Max-Age=31536000; "
                          f"HttpOnly; SameSite=Lax{secure}")
         self.end_headers()
 
@@ -1050,6 +1089,36 @@ class Handler(BaseHTTPRequestHandler):
         """
         url = os.environ.get("ASTRA_UPGRADE_URL", "").strip()
         body = json.dumps({"url": url}).encode("utf-8")
+        self._send(200, body, "application/json; charset=utf-8")
+
+    def _me_json(self) -> None:
+        """What the current visitor is entitled to, and when it runs out.
+
+        Reached only after the gate, so the caller is already authorized. With
+        accounts off this reports the operator's own static-token identity
+        ("master", never expiring) rather than 404 — the app can then show a
+        consistent panel whether or not accounts are in use. The account id is
+        a random opaque token, not personal data; the email is deliberately not
+        echoed back.
+        """
+        presented = self._presented_key()
+        account = _account_for(presented) if presented else None
+        if account is not None:
+            payload = {
+                "mode": "account",
+                "id": account.id,
+                "tier": account.tier,
+                "expires_at": (int(account.expires_at)
+                               if account.expires_at is not None else None),
+                "days_left": account.days_left(),
+            }
+        elif ACCESS_TOKEN and hmac.compare_digest(presented or "", ACCESS_TOKEN):
+            payload = {"mode": "master", "id": "", "tier": "pro",
+                       "expires_at": None, "days_left": None}
+        else:
+            payload = {"mode": "open", "id": "", "tier": "pro",
+                       "expires_at": None, "days_left": None}
+        body = json.dumps(payload, sort_keys=True).encode("utf-8")
         self._send(200, body, "application/json; charset=utf-8")
 
     # -- deployed version ---------------------------------------------------
