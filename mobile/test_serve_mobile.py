@@ -254,6 +254,82 @@ class RouteTest(unittest.TestCase):
         self.assertIn("probability", body)
 
 
+class StaticFileSecurityTest(unittest.TestCase):
+    """The shell is a fixed asset set; a request path must not escape it.
+
+    Two real holes were closed: the server's own Python source was served over
+    HTTP, and the containment check used a string prefix, so a sibling
+    directory whose name starts with "mobile" was reachable with "..".
+    """
+
+    def setUp(self):
+        sm.ACCESS_TOKEN = ""  # the shell is reachable without a key
+        sm._GATE_LIMITER.reset()
+        self.app = _serve(sm.Handler)
+        self.port = self.app.server_address[1]
+
+    def tearDown(self):
+        _stop(self.app)
+
+    def _get(self, raw_path):
+        url = "http://127.0.0.1:%d%s" % (self.port, raw_path)
+        req = urllib.request.Request(url)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status, resp.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read()
+
+    def test_index_is_served(self):
+        status, body = self._get("/")
+        self.assertEqual(status, 200)
+        self.assertIn(b"ASTRA", body)
+
+    def test_a_real_asset_is_served(self):
+        status, _ = self._get("/styles.css")
+        self.assertEqual(status, 200)
+
+    def test_security_headers_are_present(self):
+        url = "http://127.0.0.1:%d/styles.css" % self.port
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            headers = dict(resp.headers)
+        self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(headers.get("Referrer-Policy"), "no-referrer")
+
+    def test_server_source_is_not_served(self):
+        # The server's own source, and its compiled cache, must be a 404.
+        for path in ("/serve_mobile.py", "/webpush.py",
+                     "/__pycache__/serve_mobile.cpython-313.pyc"):
+            status, _ = self._get(path)
+            self.assertEqual(status, 404, "%s must not be served" % path)
+
+    def test_non_asset_extensions_are_not_served(self):
+        status, _ = self._get("/README.md")
+        self.assertEqual(status, 404)
+
+    def test_dot_dot_does_not_escape_the_shell(self):
+        for path in ("/../VERSION", "/../README.md", "/../mobile/VERSION"):
+            status, _ = self._get(path)
+            self.assertEqual(status, 404, "%s must not be served" % path)
+
+    def test_sibling_directory_with_a_shared_prefix_is_not_reachable(self):
+        # "mobile" is a prefix of "mobile-secret": a naive startswith() check
+        # would let this through. It must be a 404.
+        import tempfile
+        outside = tempfile.mkdtemp(prefix="mobile-secret-")
+        try:
+            with open(os.path.join(outside, "leak.txt"), "w") as fh:
+                fh.write("TOPSECRET")
+            rel = os.path.relpath(os.path.join(outside, "leak.txt"), sm.HERE)
+            status, body = self._get("/" + rel)
+            self.assertEqual(status, 404)
+            self.assertNotIn(b"TOPSECRET", body)
+        finally:
+            import shutil
+            shutil.rmtree(outside, ignore_errors=True)
+
+
 class VersionRouteTest(unittest.TestCase):
     """The version route is how 'is my fix live?' is answered with one curl."""
 
@@ -1041,18 +1117,62 @@ class GateRateLimitTest(unittest.TestCase):
         status, _ = self._status("/version.json?k=wrong")
         self.assertEqual(status, 401)
 
-    def test_forwarded_for_keeps_clients_apart(self):
-        # Behind Render/Fly every request arrives from the proxy, so the client
-        # address must come from X-Forwarded-For — otherwise one attacker would
-        # lock out every user.
-        attacker = {"X-Forwarded-For": "203.0.113.9"}
-        for i in range(sm._GATE_MAX_FAILURES):
-            self._status("/version.json?k=wrong%d" % i, headers=attacker)
-        status, _ = self._status("/version.json?k=x", headers=attacker)
-        self.assertEqual(status, 429)
-        status, _ = self._status("/version.json?k=x",
-                                 headers={"X-Forwarded-For": "198.51.100.4"})
-        self.assertEqual(status, 401)
+    def test_forwarded_for_keeps_clients_apart_when_trusted(self):
+        # Behind Render/Fly every request arrives from the proxy, so — when the
+        # operator declares the proxy trusted — the client address comes from
+        # X-Forwarded-For, otherwise one attacker would lock out every user.
+        saved = sm._TRUST_FORWARDED_FOR
+        sm._TRUST_FORWARDED_FOR = True
+        sm._GATE_LIMITER.reset()
+        try:
+            attacker = {"X-Forwarded-For": "203.0.113.9"}
+            for i in range(sm._GATE_MAX_FAILURES):
+                self._status("/version.json?k=wrong%d" % i, headers=attacker)
+            status, _ = self._status("/version.json?k=x", headers=attacker)
+            self.assertEqual(status, 429)
+            status, _ = self._status("/version.json?k=x",
+                                     headers={"X-Forwarded-For": "198.51.100.4"})
+            self.assertEqual(status, 401)
+        finally:
+            sm._TRUST_FORWARDED_FOR = saved
+
+    def test_forwarded_for_is_ignored_by_default(self):
+        # XFF is client-supplied. With no trusted proxy declared, a rotated
+        # header must NOT buy fresh guesses: the peer address is used and the
+        # limiter still trips.
+        saved = sm._TRUST_FORWARDED_FOR
+        sm._TRUST_FORWARDED_FOR = False
+        sm._GATE_LIMITER.reset()
+        try:
+            codes = []
+            for i in range(sm._GATE_MAX_FAILURES + 2):
+                codes.append(self._status(
+                    "/version.json?k=wrong%d" % i,
+                    headers={"X-Forwarded-For": "10.0.0.%d" % i})[0])
+            self.assertIn(429, codes)
+            self.assertEqual(codes[-1], 429)
+        finally:
+            sm._TRUST_FORWARDED_FOR = saved
+
+    def test_only_the_rightmost_forwarded_hop_is_used(self):
+        # A well-behaved proxy appends the address it saw; the leftmost value is
+        # whatever the client sent. Attributing on the rightmost hop means a
+        # spoofed left side cannot rotate the identity.
+        saved = sm._TRUST_FORWARDED_FOR
+        sm._TRUST_FORWARDED_FOR = True
+        sm._GATE_LIMITER.reset()
+        try:
+            real = "203.0.113.77"
+            for i in range(sm._GATE_MAX_FAILURES):
+                self._status("/version.json?k=wrong%d" % i,
+                             headers={"X-Forwarded-For": "1.2.3.%d, %s" % (i, real)})
+            # Same real hop, new spoofed prefix: still locked out.
+            status, _ = self._status(
+                "/version.json?k=x",
+                headers={"X-Forwarded-For": "9.9.9.9, %s" % real})
+            self.assertEqual(status, 429)
+        finally:
+            sm._TRUST_FORWARDED_FOR = saved
 
 
 class RefreshGuardTest(unittest.TestCase):

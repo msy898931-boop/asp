@@ -66,6 +66,12 @@ _CONTENT_TYPES = {
     ".woff2": "font/woff2",
 }
 
+# The only extensions the static shell may serve. Anything else — most of all
+# the server's own .py source and its .pyc — is a 404 even when it sits inside
+# HERE. The shell is a fixed, known set of assets, so an allowlist costs
+# nothing and closes the "read the source over HTTP" path entirely.
+_SERVE_EXTS = frozenset(_CONTENT_TYPES)
+
 _PROXY_TIMEOUT = 6.0
 
 # The AI engine answers from cache almost always, but a cold read does a
@@ -117,6 +123,15 @@ _GATE_MAX_FAILURES = int(os.environ.get("ASTRA_GATE_MAX_FAILURES", "10"))
 _GATE_WINDOW_S = float(os.environ.get("ASTRA_GATE_WINDOW_S", "300"))
 _GATE_LOCKOUT_S = float(os.environ.get("ASTRA_GATE_LOCKOUT_S", "900"))
 _GATE_MAX_TRACKED = 4096
+
+# Whether X-Forwarded-For may be believed when attributing a failed guess.
+# Default **off**: the header is attacker-controlled, and trusting it by
+# default turns the rate limiter into a no-op (rotate the header, guess
+# forever). Set ASTRA_TRUST_FORWARDED_FOR=1 only when the service really sits
+# behind a proxy that overwrites the header (Render, Fly). Even then only the
+# rightmost hop is used.
+_TRUST_FORWARDED_FOR = os.environ.get(
+    "ASTRA_TRUST_FORWARDED_FOR", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 class _RateLimiter:
@@ -740,13 +755,22 @@ class Handler(BaseHTTPRequestHandler):
     def _client_key(self) -> str:
         """The address a failed guess is attributed to.
 
-        X-Forwarded-For is read first (leftmost hop) because Render and Fly
-        terminate TLS in front of this server: without it every request would
-        carry the proxy's address and one attacker would lock out everyone.
+        X-Forwarded-For is read **only** when the operator says a trusted proxy
+        sets it (`ASTRA_TRUST_FORWARDED_FOR=1`), and then only the **rightmost**
+        hop. XFF is client-supplied and trivially spoofed: trusting the leftmost
+        value lets an attacker rotate one header per request and never trip the
+        gate, which is exactly the brute-force oracle the limiter exists to
+        close. With no trusted proxy the socket peer address is the truth, and
+        a spoofed header is ignored.
+
+        The rightmost hop, not the leftmost, because a well-behaved proxy
+        *appends* the address it saw; everything to its left is whatever the
+        client sent. The leftmost value is the most spoofable, not the least.
         """
-        fwd = self.headers.get("X-Forwarded-For", "")
-        if fwd:
-            return fwd.split(",", 1)[0].strip()
+        if _TRUST_FORWARDED_FOR:
+            fwd = self.headers.get("X-Forwarded-For", "")
+            if fwd:
+                return fwd.split(",")[-1].strip()
         return self.client_address[0] if self.client_address else "unknown"
 
     def _presented_key(self) -> str:
@@ -860,11 +884,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def _static(self, path: str) -> None:
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
-        target = os.path.normpath(os.path.join(HERE, rel))
-        if not target.startswith(HERE) or not os.path.isfile(target):
+        # A request path is attacker-controlled: it can carry "..", a NUL, or a
+        # name like "serve_mobile.py". Two independent guards, because either
+        # alone has a hole:
+        #   1. realpath containment, not a string prefix — "mobile" is a prefix
+        #      of "mobile-secret", so startswith() would serve a sibling dir;
+        #   2. an extension allowlist, so even a file that *is* inside the
+        #      shell directory (the server's own .py, its .pyc, a stray .md)
+        #      is never handed out.
+        target = os.path.realpath(os.path.join(HERE, rel))
+        root = os.path.realpath(HERE)
+        if not target.startswith(root + os.sep) or not os.path.isfile(target):
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
         ext = os.path.splitext(target)[1].lower()
+        if ext not in _SERVE_EXTS:
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+            return
         with open(target, "rb") as fh:
             body = fh.read()
         if ext in (".html", ".htm"):
@@ -1052,6 +1088,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
+        # Defense in depth: the shell is a standalone app, never an iframe, and
+        # the access key can appear in the URL on a first visit, so it must not
+        # leak to any other origin through the Referer header.
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         if retry_after:
             # RFC 6585: tells a rate-limited caller how long to wait, so a
             # well-behaved client backs off instead of hammering the gate.

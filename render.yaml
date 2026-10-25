@@ -42,6 +42,11 @@ services:
         value: "2"
       - key: ASTRA_PRO_LEVELS
         value: "50"
+      - key: ASTRA_TRUST_FORWARDED_FOR
+        value: "1"           # Render overwrites X-Forwarded-For, so the gate may
+                             # attribute a failed guess to the real client. Without
+                             # this the header is ignored and every visitor shares
+                             # the proxy's address in the rate-limit bookkeeping.
     disk:
       name: astra-state
       mountPath: /root/.astra

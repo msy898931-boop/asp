@@ -436,6 +436,13 @@ so a clone can move to a new deployment by setting two variables:
 - `ASTRA_GATE_MAX_FAILURES` / `ASTRA_GATE_WINDOW_S` / `ASTRA_GATE_LOCKOUT_S` —
   optional. Tune the gate's per-address failure limit (defaults 10 / 300 s /
   900 s). Only wrong keys are counted; a correct key clears the record.
+- `ASTRA_TRUST_FORWARDED_FOR` — optional, default **off**. Set to `1` only when
+  the service really sits behind a proxy that overwrites `X-Forwarded-For`
+  (Render and Fly both do; both deploy files set it). When off, the header is
+  ignored and a failed guess is attributed to the socket peer address — because
+  the header is client-supplied, trusting it by default would let an attacker
+  rotate one header per request and never trip the rate limit. When on, only the
+  rightmost hop is used (the leftmost is whatever the client sent).
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — optional. Enable Web Push (see
   *Web Push* below). Both are base64url, unpadded; generate them locally for
   free with `python3 -c "import webpush; print(webpush.generate_keys())"`. Unset
