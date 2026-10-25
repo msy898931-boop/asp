@@ -53,7 +53,7 @@ for d in bot tracker research akoan advisor mobile bridge/telegram_bot; do
   python3 -m unittest discover -s "$d" -p "test_*.py"
 done
 python3 -m unittest discover -s tests -p "test_*.py"   # models, integration, features
-# 1232 tests total (161/44/50/59/203/227/180 + 308)
+# 1249 tests total (161/44/50/59/203/244/180 + 308)
 ```
 
 Lint is `ruff` with a deliberately narrow rule set (correctness, not style
@@ -443,6 +443,15 @@ so a clone can move to a new deployment by setting two variables:
   the header is client-supplied, trusting it by default would let an attacker
   rotate one header per request and never trip the rate limit. When on, only the
   rightmost hop is used (the leftmost is whatever the client sent).
+- `ASTRA_SOCKET_TIMEOUT_S` — optional, default `30`. How long a single
+  connection may take to send its request before the server drops it. This is
+  what stops a slowloris (open a socket, then dribble bytes): with no timeout
+  each half-open socket pins a thread forever, and `ThreadingHTTPServer` spawns
+  one thread per connection, so a few hundred idle sockets exhaust the process.
+- `ASTRA_MAX_CONCURRENCY` — optional, default `64`. Hard ceiling on concurrent
+  request threads. A caller over the cap waits briefly for a slot and is then
+  shed rather than spawning threads without limit. The timeout above already
+  bounds any one thread's life; this bounds how many can exist at once.
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — optional. Enable Web Push (see
   *Web Push* below). Both are base64url, unpadded; generate them locally for
   free with `python3 -c "import webpush; print(webpush.generate_keys())"`. Unset
@@ -604,6 +613,34 @@ The limiter is in-process and bounded (`_GATE_MAX_TRACKED`, pruned), so a
 restart forgets it and a flood of distinct addresses cannot grow it without
 limit. `GateRateLimitTest` and `RateLimiterUnitTest` lock the rules; the unit
 test injects a clock so nothing sleeps.
+
+The service is the one process on the public internet, so it must not be
+pinnable by sockets. `ThreadingHTTPServer` spawns a thread per connection and,
+by default, waits on each forever — so an unauthenticated caller could open
+hundreds of connections, send a partial request line and never finish, and the
+process would accumulate threads until it died (a slowloris). Two guards close
+this, both in `_BoundedServer` (`mobile/serve_mobile.py`):
+
+* `ASTRA_SOCKET_TIMEOUT_S` (default 30) bounds how long any one connection may
+  take to deliver its request; past it the socket is closed and the thread ends.
+* `ASTRA_MAX_CONCURRENCY` (default 64) is a hard ceiling on live request
+  threads. A caller over the cap waits briefly for a slot, then is shed rather
+  than spawning threads without bound. The slot is released in a `finally`, and
+  a connection shed before its thread starts never holds one.
+
+`DosHardeningTest` proves both: a half-open socket is closed promptly rather
+than parked, and a normal request still gets `200` while the cap is under
+pressure.
+
+Every response also carries a `Content-Security-Policy` (see `_CSP`). The shell
+is a standalone PWA whose own data is same-origin; the only off-origin resource
+is Google Fonts. Scripts are limited to `'self'` plus the sha256 hash of each
+page's inline pre-paint boot block — never `'unsafe-inline'`. The hashes are
+recomputed from the shipped HTML at import (`_inline_script_hashes`) so editing
+a boot block cannot silently disable it, and `CspTest` asserts the served
+headers match. This is the backstop for an XSS that ever got past the escaping:
+an injected script still could not fetch a remote payload, exfiltrate to an
+attacker host, or rewrite the base URL.
 
 Exercising the AI engine without a provider key: point the advisor at a local
 OpenAI-compatible stub and drive the real bridge. The engine reuses

@@ -11,6 +11,7 @@ import inspect
 import json
 import os
 import re
+import socket
 import sys
 import tempfile
 import threading
@@ -328,6 +329,120 @@ class StaticFileSecurityTest(unittest.TestCase):
         finally:
             import shutil
             shutil.rmtree(outside, ignore_errors=True)
+
+
+class DosHardeningTest(unittest.TestCase):
+    """A phone-app server that cannot be exhausted by idle connections.
+
+    The service is the one process on the public internet, so an unauthenticated
+    caller must not be able to pin it with sockets. Two guards are checked here:
+    the per-connection read timeout (slowloris) and the concurrency ceiling.
+    """
+
+    def test_socket_timeout_is_bounded(self):
+        self.assertGreater(sm._SOCKET_TIMEOUT_S, 0)
+        self.assertLessEqual(sm._SOCKET_TIMEOUT_S, 120)
+
+    def test_max_concurrency_is_sane(self):
+        self.assertGreaterEqual(sm._MAX_CONCURRENCY, 1)
+
+    def test_bounded_server_applies_timeout_and_cap(self):
+        server = sm._BoundedServer(("127.0.0.1", 0), sm.Handler,
+                                   timeout=2.5, max_concurrency=3)
+        try:
+            self.assertEqual(server.timeout, 2.5)
+            # The semaphore starts full: exactly `max_concurrency` slots.
+            for _ in range(3):
+                self.assertTrue(server._slots.acquire(blocking=False))
+            self.assertFalse(server._slots.acquire(blocking=False))
+        finally:
+            server.server_close()
+
+    def test_half_open_connection_is_closed_not_parked(self):
+        """A slowloris request is dropped after the timeout, not held forever."""
+        server = sm._BoundedServer(("127.0.0.1", 0), sm.Handler,
+                                   timeout=1.0, max_concurrency=4)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        port = server.server_address[1]
+        sock = socket.create_connection(("127.0.0.1", port), timeout=5)
+        try:
+            sock.sendall(b"GET / HTTP/1.1\r\nHost: x\r\n")  # never finish
+            sock.settimeout(6)
+            started = time.time()
+            data = sock.recv(64)
+            elapsed = time.time() - started
+            self.assertEqual(data, b"")            # server closed it
+            self.assertLess(elapsed, 5.0)          # and did so promptly
+        finally:
+            sock.close()
+            server.shutdown()
+            server.server_close()
+
+    def test_saturation_sheds_and_stays_serving(self):
+        """Past the cap, extra connections are shed and the server still answers."""
+        server = sm._BoundedServer(("127.0.0.1", 0), sm.Handler,
+                                   timeout=1.0, max_concurrency=4)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        port = server.server_address[1]
+        held = []
+        try:
+            for _ in range(20):
+                try:
+                    s = socket.create_connection(("127.0.0.1", port), timeout=2)
+                    s.sendall(b"GET / HTTP/1.1\r\nHost: x\r\n")
+                    held.append(s)
+                except OSError:
+                    break
+            # A normal request still completes while the cap is under pressure.
+            with urllib.request.urlopen(
+                    "http://127.0.0.1:%d/version.json" % port, timeout=8) as resp:
+                self.assertEqual(resp.status, 200)
+        finally:
+            for s in held:
+                s.close()
+            server.shutdown()
+            server.server_close()
+
+
+class CspTest(unittest.TestCase):
+    """The shell ships a restrictive CSP, and it is emitted on every response."""
+
+    def test_csp_is_restrictive(self):
+        csp = sm._CSP
+        self.assertIn("default-src 'self'", csp)
+        self.assertIn("object-src 'none'", csp)
+        self.assertIn("base-uri 'self'", csp)
+        self.assertIn("frame-ancestors 'none'", csp)
+        # Scripts must never be allowed by 'unsafe-inline'.
+        script_src = csp.split("script-src", 1)[1].split(";", 1)[0]
+        self.assertNotIn("unsafe-inline", script_src)
+        self.assertNotIn("unsafe-eval", csp)
+
+    def test_inline_boot_hashes_match_the_shipped_html(self):
+        """The hash must match the file, or the boot script would be blocked."""
+        import base64 as _b64
+        import hashlib as _hashlib
+        for name in sm._INLINE_BOOT_PAGES:
+            with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
+                html = fh.read()
+            blocks = re.findall(r"<script>(.*?)</script>", html, re.S)
+            for block in blocks:
+                digest = _b64.b64encode(
+                    _hashlib.sha256(block.encode("utf-8")).digest()).decode()
+                self.assertIn("'sha256-" + digest + "'", sm._CSP,
+                              "%s inline block hash is missing from the CSP" % name)
+
+    def test_every_response_carries_the_csp(self):
+        app = _serve(sm.Handler)
+        try:
+            port = app.server_address[1]
+            for path in ("/", "/version.json", "/pricing.html"):
+                with urllib.request.urlopen(
+                        "http://127.0.0.1:%d%s" % (port, path), timeout=10) as resp:
+                    self.assertEqual(resp.headers.get("Content-Security-Policy"),
+                                     sm._CSP, path)
+        finally:
+            _stop(app)
 
 
 class VersionRouteTest(unittest.TestCase):

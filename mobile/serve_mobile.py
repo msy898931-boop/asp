@@ -22,6 +22,7 @@ Run: python3 mobile/serve_mobile.py --port 12000
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import hmac
 import json
@@ -132,6 +133,78 @@ _GATE_MAX_TRACKED = 4096
 # rightmost hop is used.
 _TRUST_FORWARDED_FOR = os.environ.get(
     "ASTRA_TRUST_FORWARDED_FOR", "").strip().lower() in ("1", "true", "yes", "on")
+
+# Per-connection read timeout, in seconds. A client that opens a socket and then
+# sends its request one byte at a time (or never finishes the header block)
+# otherwise parks a thread forever: ThreadingHTTPServer spawns a thread per
+# connection and, with no timeout, a few hundred half-open sockets are enough to
+# exhaust memory. The timeout is generous enough for a slow phone on cell data
+# and short enough that a slowloris never accumulates.
+_SOCKET_TIMEOUT_S = float(os.environ.get("ASTRA_SOCKET_TIMEOUT_S", "30"))
+
+# Hard ceiling on concurrent request threads. The timeout above already bounds
+# how long any one thread can live, so this is a second, cheaper backstop: even
+# a flood that keeps every socket alive under the timeout cannot spawn threads
+# without limit.
+_MAX_CONCURRENCY = int(os.environ.get("ASTRA_MAX_CONCURRENCY", "64"))
+
+# Content-Security-Policy for the shell. The app is a standalone PWA whose own
+# data is all same-origin, so the only off-origin resource is Google Fonts.
+# Every directive is a real restriction rather than a default: scripts are
+# limited to self (the three pre-paint boot blocks are admitted by hash, not by
+# 'unsafe-inline'), the app can never be framed, and object/base are pinned.
+#
+# `connect-src` still allows any https host because the Pro upgrade button's
+# destination comes from ASTRA_UPGRADE_URL (an operator-set checkout link) and
+# the APK download falls back to a GitHub release URL; both are operator
+# choices, not client input. Tighten this to the exact hosts you use.
+#
+# The hashes cover the one inline <script> in each of index.html, terminal.html
+# and pricing.html. They are recomputed from the shipped files at import time
+# (see `_inline_script_hashes`) rather than hard-coded, so editing a boot block
+# can never silently disable it — and a missing or unreadable shell degrades to
+# a self-only policy instead of a broken page.
+_CSP_TEMPLATE = (
+    "default-src 'self'; "
+    "script-src 'self'{hashes}; "
+    "style-src 'self' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self' https:; "
+    "manifest-src 'self'; "
+    "worker-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+# Pages that carry an inline pre-paint boot script.
+_INLINE_BOOT_PAGES = ("index.html", "terminal.html", "pricing.html")
+
+
+def _inline_script_hashes() -> str:
+    """CSP source expressions ('sha256-...') for every inline boot block.
+
+    Read from the shipped HTML so the policy tracks the files. A read failure
+    yields no hash: the inline block would then be blocked, which is a visible
+    regression rather than a silent hole, and the test suite asserts the hashes
+    match so it cannot ship that way.
+    """
+    out = []
+    for name in _INLINE_BOOT_PAGES:
+        try:
+            with open(os.path.join(HERE, name), "r", encoding="utf-8") as fh:
+                html = fh.read()
+        except OSError:
+            continue
+        for block in re.findall(r"<script>(.*?)</script>", html, re.S):
+            digest = hashlib.sha256(block.encode("utf-8")).digest()
+            out.append("'sha256-" + base64.b64encode(digest).decode() + "'")
+    return (" " + " ".join(out)) if out else ""
+
+
+_CSP = _CSP_TEMPLATE.format(hashes=_inline_script_hashes())
 
 
 class _RateLimiter:
@@ -648,6 +721,51 @@ def warm_akoan_cache() -> None:
 
 
 
+class _BoundedServer(ThreadingHTTPServer):
+    """A threading server that cannot be exhausted by idle connections.
+
+    Two guards, both needed:
+
+    * ``timeout`` — the socket read timeout, applied to every connection. It is
+      what makes a slowloris (open a socket, then dribble) fail instead of
+      parking a thread forever.
+    * ``_slots`` — a semaphore capping concurrent request threads. The timeout
+      bounds how long one thread lives; this bounds how many can exist at once.
+      A caller over the cap waits briefly for a slot and is refused with a 503
+      rather than spawning without limit.
+
+    ``daemon_threads`` stays on so an in-flight request never blocks shutdown.
+    """
+
+    def __init__(self, addr, handler, *, timeout: float = 30.0,
+                 max_concurrency: int = 64):
+        super().__init__(addr, handler)
+        self.timeout = timeout
+        self._slots = threading.Semaphore(max(1, max_concurrency))
+        self.daemon_threads = True
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(timeout=self.timeout):
+            # Saturated: shed the connection instead of queueing it forever.
+            self.shutdown_request(request)
+            return
+        # Bound how long a single connection may take to send its request.
+        try:
+            request.settimeout(self.timeout)
+            super().process_request(request, client_address)
+        except Exception:
+            # The worker thread never started, so nothing will release the slot.
+            self._slots.release()
+            self.shutdown_request(request)
+            raise
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "AstraMobile/1.0"
 
@@ -661,6 +779,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):  # quieter logs
         sys.stderr.write("[mobile] %s\n" % (fmt % args))
+
+    def handle_one_request(self):
+        """Answer one request, treating a vanished client as normal.
+
+        A phone that backgrounds the app or loses signal closes the socket
+        mid-response; the write then raises BrokenPipeError (or the read
+        ConnectionResetError). That is expected on a mobile client, not a
+        server fault, so it is logged as one line rather than a traceback.
+        """
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+            self.log_message("client disconnected mid-request (%s)", self.path)
 
     # -- routing ------------------------------------------------------------
 
@@ -1093,6 +1225,10 @@ class Handler(BaseHTTPRequestHandler):
         # leak to any other origin through the Referer header.
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        # Defense in depth against any XSS that gets past the escaping: even if
+        # an injected script reached the page, it could not load a remote
+        # payload, exfiltrate to an attacker host, or rewrite the base URL.
+        self.send_header("Content-Security-Policy", _CSP)
         if retry_after:
             # RFC 6585: tells a rate-limited caller how long to wait, so a
             # well-behaved client backs off instead of hammering the gate.
@@ -1137,10 +1273,14 @@ def main(argv=None) -> int:
     Handler.engine_base = f"http://127.0.0.1:{args.engine_port}"
     Handler.apk_path = os.path.abspath(args.apk)
 
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server = _BoundedServer((args.host, args.port), Handler,
+                            timeout=_SOCKET_TIMEOUT_S,
+                            max_concurrency=_MAX_CONCURRENCY)
     server.daemon_threads = True
     print(f"[OK] ASTRA mobile app on http://{args.host}:{args.port} "
           f"(api -> {Handler.api_base})", flush=True)
+    print(f"[OK] hardening: {_SOCKET_TIMEOUT_S:g}s socket timeout, "
+          f"max {_MAX_CONCURRENCY} concurrent requests", flush=True)
     print("[OK] access control: "
           + ("on (key required)" if ACCESS_TOKEN else "off (open)"), flush=True)
     # Warm the heavy akoan study in the background so the first phone that
