@@ -345,6 +345,24 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   The model-free card has the same rule in `mtf_read.py`: H4 opposition makes it
   stand aside unless `ASTRA_MTF_STRUCTURAL_VETO=0`, in which case the card is
   emitted with `card.structural_warning` set and shown in the Arabic text.
+  **The playbook is where the win-rate comes from.** The model's `win_rate` is a
+  claim (`win_rate_validated: false`); the measured number lives in
+  `advisor/playbook.py`, a catalogue of named trading schools — trend following,
+  counter-trend fade, post-release momentum, release+trend confluence,
+  regime-filtered trend — each written as an explicit rule over facts the engine
+  already has (H4 alignment, the M15 regime proxy, and whether a high-impact
+  release fired within two hours). Each school quotes the record the project's
+  research measured by replaying the real Dukascopy M15 book (2021-2025, 7084
+  resolved trades) through `tracker/replay.py` and scoring it with
+  `tracker/validation_gate.py`; the numbers are copied verbatim from
+  `research/features_real/{study,rule}_report.txt`. Every engine trade is
+  labelled with its school and that school's measured record under
+  `trade.playbook` (with `measured` and a plain `note`); the whole catalogue is
+  on the reply under `engine.playbook`, and `engine.playbook_clears_gate` counts
+  the schools that cleared the promotion gate (**currently 0** — the honest
+  state of the research, stated on every trade rather than hidden). The label is
+  description, not endorsement: a school that does not clear the gate is
+  reported as such. `python3 advisor/playbook.py` prints the catalogue.
 - **Quota.** The Groq free tier allows ~200k tokens/day and one advisory costs
   ~1.4k (a ~1k-token prompt plus the reply), so the opinion can only refresh
   ~140 times a day. `CACHE_TTL` (default 600s) is set to fit inside that budget;

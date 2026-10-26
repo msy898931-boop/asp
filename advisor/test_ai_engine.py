@@ -241,7 +241,8 @@ class BuildTests(unittest.TestCase):
         self.assertTrue(result["configured"])
         self.assertEqual(len(result["analysis"]["trades"]), 1)
         self.assertFalse(result["validated"])
-        self.assertIn("estimates", result["note"])
+        self.assertIn("estimate", result["note"])
+        self.assertIn("measured", result["note"])
 
     def test_the_prompt_carries_every_frame_and_the_news(self):
         captured = {}
@@ -383,6 +384,128 @@ class TimeframeSelectionTests(unittest.TestCase):
         out = ai_engine.assemble(snapshot, parsed)
         self.assertEqual(out["engine"]["timeframes_prompted"],
                          list(ai_engine.TIMEFRAMES))
+
+
+class PlaybookWiringTests(unittest.TestCase):
+    def _snapshot(self, h4_dir, m15=None, events=None):
+        # ema_fast > ema_slow with structure +1 is a TRENDING_UP proxy read.
+        default_m15 = {"atr": 2.0, "rsi": 60.0, "structure": 1,
+                       "ema_fast": 2002.0, "ema_slow": 2000.0}
+        return {
+            "symbol": "XAUUSD", "price": 2000.0,
+            "timeframes": {
+                "M15": m15 if m15 is not None else default_m15,
+                "H4": {"direction": h4_dir, "atr": 8.0},
+            },
+            "missing_timeframes": [], "rule_card": None,
+            "events": events or [],
+        }
+
+    def _trade(self, direction="LONG"):
+        return {"direction": direction, "entry": 2000.0, "stop": 1990.0,
+                "targets": [2010.0, 2020.0], "win_rate": 0.5}
+
+    def test_an_aligned_trade_is_labelled_trend_following(self):
+        parsed = {"trades": [self._trade()], "rejected": []}
+        out = ai_engine.assemble(self._snapshot("LONG"), parsed)
+        label = out["trades"][0]["playbook"]
+        # H4 alignment is the more specific condition, so it outranks the
+        # regime school when both fire.
+        self.assertEqual(label["school"], "trend_following")
+        self.assertEqual(label["measured"]["n"], 3210)
+        self.assertFalse(label["measured"]["clears_gate"])
+        self.assertIn("does NOT clear the gate", label["note"])
+
+    def test_a_flat_read_labels_trend_following_not_regime(self):
+        # No EMA separation: the regime school cannot fire, so the aligned
+        # trend school is the label.
+        flat = {"atr": 2.0, "rsi": 55.0, "structure": 0,
+                "ema_fast": 2000.1, "ema_slow": 2000.0}
+        parsed = {"trades": [self._trade()], "rejected": []}
+        out = ai_engine.assemble(self._snapshot("LONG", m15=flat), parsed)
+        self.assertEqual(out["trades"][0]["playbook"]["school"], "trend_following")
+
+    def test_a_regime_only_trade_is_labelled_regime(self):
+        # Trending read, no H4 direction at all: the regime school is the
+        # most specific rule that can still fire.
+        parsed = {"trades": [self._trade()], "rejected": []}
+        snapshot = self._snapshot("LONG")
+        snapshot["timeframes"]["H4"] = {"atr": 8.0}
+        out = ai_engine.assemble(snapshot, parsed)
+        self.assertEqual(out["trades"][0]["playbook"]["school"], "trend_regime")
+
+    def test_an_opposing_trade_is_labelled_counter_trend(self):
+        parsed = {"trades": [self._trade()], "rejected": []}
+        out = ai_engine.assemble(self._snapshot("SHORT"), parsed)
+        self.assertEqual(out["trades"][0]["playbook"]["school"], "counter_trend")
+
+    def test_a_recent_release_narrows_to_the_confluence_school(self):
+        events = [{"title": "NFP", "in_hours": -0.5}]
+        parsed = {"trades": [self._trade()], "rejected": []}
+        out = ai_engine.assemble(self._snapshot("LONG", events=events), parsed)
+        self.assertEqual(out["trades"][0]["playbook"]["school"],
+                         "news_trend_confluence")
+
+    def test_an_old_release_does_not_set_recent_release(self):
+        events = [{"title": "NFP", "in_hours": -5.0}]
+        parsed = {"trades": [self._trade()], "rejected": []}
+        out = ai_engine.assemble(self._snapshot("LONG", events=events), parsed)
+        self.assertNotEqual(out["trades"][0]["playbook"]["school"],
+                            "news_trend_confluence")
+
+    def test_the_engine_block_carries_the_catalogue(self):
+        parsed = {"trades": [], "rejected": []}
+        out = ai_engine.assemble(self._snapshot("LONG"), parsed)
+        engine = out["engine"]
+        self.assertEqual(len(engine["playbook"]), len(ai_engine.playbook.SCHOOLS))
+        self.assertEqual(engine["playbook_clears_gate"], 0)
+
+    def test_the_prompt_view_includes_the_playbook(self):
+        snapshot = self._snapshot("LONG")
+        snapshot["news"] = []
+        view = ai_engine._prompt_view(snapshot)
+        self.assertIn("playbook", view)
+        self.assertEqual(len(view["playbook"]), len(ai_engine.playbook.SCHOOLS))
+
+    def test_a_trade_with_no_matching_school_is_labelled_plainly(self):
+        parsed = {"trades": [self._trade()], "rejected": []}
+        snapshot = self._snapshot("LONG")
+        # No H4 direction and a flat read: nothing can fire.
+        snapshot["timeframes"]["H4"] = {"atr": 8.0}
+        snapshot["timeframes"]["M15"] = {"atr": 2.0, "rsi": 50.0}
+        out = ai_engine.assemble(snapshot, parsed)
+        label = out["trades"][0]["playbook"]
+        self.assertIsNone(label["school"])
+        self.assertIn("no named school", label["note"])
+
+    def test_the_label_carries_an_arabic_name_and_measured_line(self):
+        parsed = {"trades": [self._trade()], "rejected": []}
+        out = ai_engine.assemble(self._snapshot("SHORT"), parsed)
+        label = out["trades"][0]["playbook"]
+        self.assertEqual(label["school_name_ar"], "معاكسة الاتجاه")
+        self.assertIn("n=1460", label["note_ar"])
+        self.assertIn("لم تجتز بوابة الترقية", label["note_ar"])
+
+    def test_the_log_records_the_school_beside_each_trade(self):
+        logged = {}
+        os.environ["GROQ_API_KEY"] = "test-key"
+        saved = (ai_advisor.call_model, ai_engine.append_log,
+                 ai_engine.build_snapshot)
+        ai_advisor.call_model = lambda prompt, key: json.dumps({
+            "bias": "LONG", "market_read": "up",
+            "trades": [self._trade()], "rejected": []})
+        ai_engine.append_log = lambda record: logged.update(record)
+        snap = self._snapshot("LONG")
+        snap["news"] = []
+        ai_engine.build_snapshot = lambda: snap
+        try:
+            ai_engine.Engine()._build()
+        finally:
+            (ai_advisor.call_model, ai_engine.append_log,
+             ai_engine.build_snapshot) = saved
+        self.assertIn("schools", logged)
+        self.assertEqual(len(logged["schools"]), 1)
+        self.assertIsInstance(logged["schools"][0], str)
 
 
 if __name__ == "__main__":

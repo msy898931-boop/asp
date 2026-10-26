@@ -556,7 +556,8 @@ class EnginePanelRenderTest(unittest.TestCase):
             i18n = fh.read()
         for key in ("tab_engine", "eng_title", "eng_warn", "eng_winrate",
                     "eng_winrate_est", "eng_no_trades", "eng_ok",
-                    "eng_unconfigured", "eng_unreachable", "eng_rejected"):
+                    "eng_unconfigured", "eng_unreachable", "eng_rejected",
+                    "eng_playbook", "eng_playbook_measured"):
             self.assertGreaterEqual(i18n.count(key + ":"), 2,
                                     "%s must be in en and ar" % key)
 
@@ -574,6 +575,13 @@ class EnginePanelRenderTest(unittest.TestCase):
         for key in ("eng_quota", "eng_quota_sub"):
             self.assertGreaterEqual(i18n.count(key + ":"), 2,
                                     "%s must be in en and ar" % key)
+
+    def test_a_trade_shows_its_playbook_school_and_measured_record(self):
+        # The model's win_rate is a claim; the school's record was measured on
+        # the real book, so it must be shown beside the trade, not hidden.
+        self.assertIn("t.playbook", self.src)
+        self.assertIn("eng_playbook_measured", self.src)
+        self.assertIn("school_name_ar", self.src)
 
 
 if __name__ == "__main__":

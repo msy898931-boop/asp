@@ -76,6 +76,20 @@ function engTradeCard(t, index) {
     note.textContent = t.rationale;
     card.appendChild(note);
   }
+  if (t.playbook && t.playbook.school) {
+    const pb = t.playbook;
+    const block = document.createElement("div");
+    block.className = "eng-playbook";
+    const m = pb.measured || {};
+    const name = pb.school_name_ar || pb.school_name || pb.school;
+    block.textContent = fmt(T("eng_playbook_measured"),
+                            { n: m.n, w: m.win_pct, r: m.r_per_trade });
+    const head = document.createElement("div");
+    head.className = "eng-playbook-school";
+    head.textContent = `${T("eng_playbook")}: ${name}`;
+    block.insertBefore(head, block.firstChild);
+    card.appendChild(block);
+  }
   if (t.anchor && t.anchor.anchored === false && t.anchor.note) {
     const warn = document.createElement("div");
     warn.className = "eng-anchor";
