@@ -423,10 +423,10 @@ class ArabicSurfaceTests(unittest.TestCase):
 
     def test_the_keyboard_stays_small(self):
         # The keyboard is for the day-to-day essentials only. It drifted to
-        # eleven buttons once, then to six; this pins the four that survived
+        # eleven buttons once, then to six; this pins the five that survived
         # so it cannot creep back.
         labels = [label for row in bot.REPLY_KEYBOARD for label in row]
-        self.assertLessEqual(len(labels), 4)
+        self.assertLessEqual(len(labels), 5)
         self.assertEqual(len(labels), len(set(labels)), "no duplicate buttons")
 
     def test_the_keyboard_keeps_the_engine_visible(self):
@@ -434,6 +434,12 @@ class ArabicSurfaceTests(unittest.TestCase):
         # the top row so it is the first thing a user sees.
         self.assertEqual(bot.REPLY_KEYBOARD[0][1], "🤖 محرّك التحليل")
         self.assertEqual(bot.BUTTON_COMMANDS["🤖 محرّك التحليل"], "/engine")
+
+    def test_the_keyboard_keeps_the_smc_engine_visible(self):
+        # The SMC engine sits beside the AI engine in the top row, so the
+        # operator can reach the SMC read with one tap.
+        self.assertEqual(bot.REPLY_KEYBOARD[0][2], "📐 محرّك SMC")
+        self.assertEqual(bot.BUTTON_COMMANDS["📐 محرّك SMC"], "/smc")
 
     def test_trimmed_buttons_still_work_when_typed(self):
         # Dropping a button must not drop the function: the Arabic phrase and
