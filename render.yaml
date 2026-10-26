@@ -31,12 +31,37 @@ services:
                              # is not region-locked, so this is the fallback when
                              # Groq/Gemini refuse to issue a key from your region.
       - key: ASTRA_ADVISOR_PROVIDER
-        value: ""            # groq (default), gemini or mistral. Must name the
+        value: "mistral"     # groq (default), gemini or mistral. Must name the
                              # provider whose *_API_KEY above is actually set.
+                             # Left empty it resolves to the empty string, not to
+                             # the "groq" default, and every model surface — the
+                             # advisor, the AI engine and the SMC engine — answers
+                             # "not configured" no matter which keys are present.
       - key: ASTRA_ENABLE_SMC
-        value: ""            # "1" turns the isolated SMC/ICT analysis engine on.
-                             # Empty/off by default; the engine stays dormant and
-                             # /smc answers "not available" until this is set.
+        value: "1"           # "1" turns the isolated SMC/ICT analysis engine on.
+                             # It computes its fact sheet from closed bars and
+                             # answers /smc; with ASTRA_SMC_ALERTS on, the bot
+                             # also pushes a fresh setup it is confident in.
+      - key: ASTRA_SMC_ALERTS
+        value: "1"           # "1" lets the bot push a fresh SMC/ICT setup
+                             # instead of waiting for /smc. Off ("0") keeps the
+                             # engine on but silent. The push is gated: at most
+                             # one engine read per ASTRA_SMC_ALERT_INTERVAL
+                             # (default 900s) and only for a plan the model
+                             # scored at or above ASTRA_SMC_ALERT_MIN_CONFIDENCE
+                             # (default 0.5), so it is a handful of reads a day,
+                             # not one per bar.
+      - key: ASTRA_SMC_ALERT_INTERVAL
+        value: "900"         # seconds between SMC engine reads (default 900).
+                             # 900 = at most 96 reads/day. Raise it to spend less
+                             # of the model's token quota; lower it to react
+                             # sooner. The engine caches for its own TTL, so a
+                             # value below that TTL only re-reads the cache.
+      - key: ASTRA_SMC_ALERT_MIN_CONFIDENCE
+        value: "0.5"         # lowest model confidence worth pushing (default
+                             # 0.5 = 50%). A plan the model left unscored is
+                             # never pushed: "sure" cannot be claimed without a
+                             # number. /smc still shows every plan.
       - key: VAPID_PUBLIC_KEY
         sync: false          # free, generated locally; both empty = Web Push off (in-app alerts only)
       - key: VAPID_PRIVATE_KEY

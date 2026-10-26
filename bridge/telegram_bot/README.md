@@ -52,6 +52,54 @@ estimate (`validated: false`); the reply labels the win-rate as such and closes
 with the shadow-mode line. Reading it can spend the model's token quota, so it
 is an explicit request and is never polled.
 
+`/smc` reads the **isolated SMC/ICT analysis engine**
+(`advisor/smc_engine.py`) on port 8795, opt-in with `ASTRA_ENABLE_SMC=1`. Unlike
+`/engine` and `/card`, the same read is also **pushed** — see below.
+
+## Push alerts
+
+Beyond commands, the monitor thread broadcasts state changes to every
+subscribed chat. Each watch is edge-triggered: it primes silently on the first
+reading, so starting the bot never dumps a backlog, and each event alerts at
+most once.
+
+| Alert | Source | Throttle |
+|-------|--------|----------|
+| Health transition | backend `/health` | on change |
+| MT5 bridge online/offline | bridge status | on change |
+| New recorded signal | backend analysis | on new timestamp |
+| Price level crossed | your `/level` entries | once per level |
+| Volatility crosses threshold | `volatility.py` | on re-arm |
+| News blackout opens / release prints | `NewsWatch` | once per event |
+| Pre-news prep plan | `ForecastWatch` | once per event, ~1h out |
+| New advisor trade card | `TradeCardWatch` | on a moved structure |
+| **New SMC/ICT setup** | `SmcWatch` | on a moved structure, at most once per `ASTRA_SMC_ALERT_INTERVAL` |
+
+### The SMC/ICT push (`SmcWatch`)
+
+`/smc` is on-demand; `SmcWatch` turns the same read into a push, so a setup the
+engine finds reaches you without polling for it. Two rules keep it quiet:
+
+- **Confidence floor** (`ASTRA_SMC_ALERT_MIN_CONFIDENCE`, default `0.5`). Only a
+  plan the model *scored* at or above the floor is pushed. A plan the model left
+  unscored is dropped rather than assumed confident — the honest default when
+  the number is missing. `/smc` still shows every plan, scored or not.
+- **Materiality** (`ASTRA_SMC_ALERT_MATERIAL`, default `0.5`). A plan is keyed on
+  direction + stop + targets, never the entry (which is the freshest close and
+  drifts by cents each bar). A same-direction re-read is only news when the
+  structure moved by at least this much of one risk. A change of *direction* is
+  exempt: a reversal is pushed at once.
+
+The engine read costs model tokens, so it is **not** polled on the ordinary
+cycle. `ASTRA_SMC_ALERT_INTERVAL` (default `900` seconds) sets the floor between
+reads: at most 96 reads/day at the default, and only the confident, moved ones
+become messages. Set `ASTRA_SMC_ALERTS=0` to keep the engine on but silent, or
+`--no-smc-alerts` on the command line. The three knobs have matching flags:
+`--smc-alert-interval`, `--smc-alert-min-confidence`, `--smc-alert-material`.
+
+The push is read-only and carries no execution authority, like every other
+alert here.
+
 ## Run
 
 ```bash
@@ -69,6 +117,12 @@ Flags (all optional; env vars are the defaults):
 | `--api` | `http://127.0.0.1:8790/api/v1` | backend API base |
 | `--interval` | `15` | backend poll interval (seconds) |
 | `--state` | `~/.astra/telegram_subscribers.json` | subscriber store |
+| `--no-card-alerts` | off | disable advisor trade-card pushes |
+| `--no-forecast-alerts` | off | disable the pre-news prep push |
+| `--no-smc-alerts` | off | disable SMC/ICT setup pushes |
+| `--smc-alert-interval` | `900` | seconds between SMC engine reads |
+| `--smc-alert-min-confidence` | `0.5` | lowest model confidence worth pushing |
+| `--smc-alert-material` | `0.5` | minimum structure move, in units of risk |
 
 The backend must be running first (`aura_backend_host --dev-system-python`).
 
