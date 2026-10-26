@@ -93,6 +93,38 @@ function smcPlanCard(p, index) {
   return card;
 }
 
+// The project's measured record for this engine, shown above the model's own
+// numbers. It is the one line in the panel that is a measurement rather than a
+// claim, so it sits apart and never wears the confidence's clothes.
+function smcMeasuredBlock(rec) {
+  if (!rec || rec.n == null) return null;
+  const block = document.createElement("div");
+  block.className = "eng-playbook";
+  const head = document.createElement("div");
+  head.className = "eng-playbook-school";
+  head.textContent = T("smc_measured");
+  block.appendChild(head);
+  const line = document.createElement("div");
+  line.className = "eng-playbook-measured";
+  line.textContent = fmt(T("smc_measured_line"),
+                         { n: rec.n, w: rec.win_pct, r: rec.r_per_trade });
+  block.appendChild(line);
+  if (rec.clears_gate === false) {
+    const gate = document.createElement("div");
+    gate.className = "eng-playbook-measured";
+    gate.textContent = T("smc_measured_gate");
+    block.appendChild(gate);
+  }
+  if (rec.control_win_pct != null) {
+    const ctrl = document.createElement("div");
+    ctrl.className = "eng-playbook-measured";
+    ctrl.textContent = fmt(T("smc_measured_control"),
+                           { c: rec.control_win_pct });
+    block.appendChild(ctrl);
+  }
+  return block;
+}
+
 // Reads the isolated SMC engine through the same-origin proxy. A failure here
 // is shown as "unreachable" and changes nothing else in the app: the engine
 // sits outside the validated system and must never affect the other panels.
@@ -127,6 +159,12 @@ async function loadSmc(force) {
     $("smc-read").textContent = analysis.market_read || "";
 
     const plans = analysis.plans || [];
+    const eng = analysis.engine || {};
+    // The measured record goes first, above the model's own numbers: it is the
+    // one line here that is a measurement, and it should be read before the
+    // claims, not after them.
+    const measured = smcMeasuredBlock(eng.measured_record);
+    if (measured) plansEl.appendChild(measured);
     if (!plans.length) {
       const empty = document.createElement("p");
       empty.className = "eng-empty";
@@ -136,7 +174,6 @@ async function loadSmc(force) {
       plans.forEach((p, i) => plansEl.appendChild(smcPlanCard(p, i + 1)));
     }
 
-    const eng = analysis.engine || {};
     const tf = (eng.timeframes_read || []).join(" ");
     const bits = [];
     if (e.model) bits.push(`${T("ai_model")}: ${e.model}`);

@@ -84,6 +84,50 @@ MIN_RR = float(os.environ.get("ASTRA_SMC_MIN_RR", "2.0"))
 LOG_PATH = os.environ.get(
     "ASTRA_SMC_LOG", os.path.join(ROOT, "run", "smc_engine_plans.jsonl"))
 
+# The engine's own measured record — the number a user should weigh the model's
+# confidence against. This is not produced here and not produced by the model:
+# it is the verdict of ``research/smc_zone_study.py``, which built plans
+# deterministically from this same fact sheet (no model in the loop), resolved
+# them over the real Dukascopy XAUUSD M15 book (2021-2025) with
+# ``advisor/smc_resolve.py``, and split in-sample/out-of-sample exactly as
+# ``tracker/validation_gate.py`` does. The numbers are pasted in verbatim, the
+# same contract ``advisor/playbook.py`` holds its schools to.
+#
+# The honest headline: the zones do **not** clear break-even on either half.
+# A symmetric 1R/1R control resolved at ~49%, so the resolver is not biased and
+# this is a real finding, not an accounting artefact. If the study is re-run and
+# the numbers move, update this block in the same commit — the tests pin the
+# shape (a cited, non-clearing record), not the values, precisely so the values
+# can be corrected without rewriting tests.
+MEASURED_RECORD: dict = {
+    "source": "research/reports/smc_zone_study.md",
+    "script": "research/smc_zone_study.py",
+    "scope": "deterministic zone plans, XAUUSD M15, 2021-2025 (OOS 2025)",
+    "n": 9845,
+    "win_pct": 23.2,
+    "wilson_low_pct": 22.3,
+    "break_even_pct": 27.9,
+    "r_per_trade": -0.088,
+    "oos_n": 1960,
+    "oos_win_pct": 24.4,
+    "oos_wilson_low_pct": 22.5,
+    "oos_break_even_pct": 26.4,
+    "control_win_pct": 49.3,
+    "clears_gate": False,
+    "why_not": ("the Wilson lower bound sits below break-even in-sample and "
+                "out-of-sample; the 2025 point estimate is faintly positive "
+                "but not distinguishable from a losing rate, and the "
+                "confluence filter does not change that"),
+    "note": ("A reading, not an edge. Shown so the model's confidence is never "
+             "mistaken for a measurement."),
+}
+
+
+def measured_record() -> dict:
+    """The engine's measured record, as a fresh dict a caller may embed."""
+    return dict(MEASURED_RECORD)
+
+
 # The SMC/ICT persona, adapted to this project's honesty contract. The user's
 # original prompt asked the model to "acknowledge" and to analyse charts; here
 # the model is one step in a pipeline, so the instructions are tightened: it
@@ -134,6 +178,11 @@ _SYSTEM_PROMPT = (
     "- confidence is YOUR OWN probability (0..1) that the plan reaches its "
     "final target before its stop. It is an estimate, not a measured number; "
     "say why in confidence_note. Do not copy a fact-sheet value.\n"
+    "- The snapshot carries engine_measured_record: the project's own verdict on "
+    "this fact sheet, measured on real gold data. It is a finding, not yours to "
+    "restate as your own confidence. If the record does not clear the gate, you "
+    "may still give the plan, but say plainly that the record is unflattering "
+    "and do not present your estimate as if it were the measurement.\n"
     "- Explicitly warn when a high-impact event (CPI, FOMC, NFP) is imminent "
     "or was flagged, because SMC structure can be invalidated by news.\n"
     "- A missing timeframe is not grounds to refuse; reason from the frames you "
@@ -185,6 +234,7 @@ def build_snapshot() -> dict:
         "news_available": False,
         "events": [],
         "events_available": False,
+        "measured_record": measured_record(),
     }
 
     tick = ai_advisor._get_json("%s/v1/tick?symbol=%s" % (BRIDGE_BASE, SYMBOL))
@@ -204,11 +254,18 @@ def build_snapshot() -> dict:
 
 
 def _prompt_view(snapshot: dict) -> dict:
-    """The snapshot as the model sees it: the fact sheet, price, news."""
+    """The snapshot as the model sees it: the fact sheet, price, news.
+
+    The engine's **measured record** rides along so the model can weigh its own
+    confidence against the number the project actually measured on this same
+    fact sheet. The persona is told the record is the project's finding and not
+    the model's to restate as its own.
+    """
     return {
         "symbol": snapshot["symbol"],
         "price": snapshot["price"],
         "smc_facts": snapshot["facts"],
+        "engine_measured_record": snapshot.get("measured_record"),
         "news": snapshot["news"],
         "events": snapshot["events"],
     }
@@ -461,6 +518,9 @@ def assemble(snapshot: dict, parsed: dict) -> dict:
         .get("missing_timeframes", []),
         "facts_note": (snapshot.get("facts") or {}).get("facts_note"),
         "confluence": (snapshot.get("facts") or {}).get("confluence"),
+        # The project's measured record for this school, kept clearly apart from
+        # the model's own confidence so a claim is never read as a measurement.
+        "measured_record": snapshot.get("measured_record"),
         "min_reward_risk": MIN_RR,
         "entry_anchor_required": _env_flag("ASTRA_SMC_REQUIRE_ANCHOR", "1"),
         "entry_anchor_tolerance_atr": ENTRY_ANCHOR_ATR,
