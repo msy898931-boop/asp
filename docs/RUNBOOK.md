@@ -260,6 +260,17 @@ ASTRA_UPGRADE_URL=https://buy.stripe.com/...   # a Stripe Payment Link
 Related knobs: `ASTRA_FREE_LEVELS` (default 2), `ASTRA_PRO_LEVELS` (default 50),
 `ASTRA_PRO_CHATS` (comma-separated chat ids that are always Pro).
 
+**Per-user accounts and metering.** For more than one buyer, `ASTRA_ACCOUNTS=1`
+switches on per-user keys with an expiry (`mobile/accounts.py`); the static
+`ASTRA_ACCESS_TOKEN` keeps working as a master key. To give a plan teeth,
+`ASTRA_METERING=1` adds a per-account **daily quota** over the model-backed
+routes (`/engine/`, `/advisor/`) — `ASTRA_FREE_DAILY` (20) and
+`ASTRA_PRO_DAILY` (500), where **0 means unlimited**. A spent quota is a `429`
+with a JSON body the app shows as "quota spent, resets at …", not "engine
+down". The meter **fails open** (a write failure allows the request) and never
+meters the master token. Manage counters with `python3 mobile/metering.py
+show|reset`. Details in docs/SELLING.md §3b–3c.
+
 A Stripe Payment Link needs no server code and no secret: create it in the
 Stripe dashboard, point it at the hosted `pricing.html`, and paste the URL into
 `ASTRA_UPGRADE_URL`. Payment Links can collect the buyer's Telegram chat id as a

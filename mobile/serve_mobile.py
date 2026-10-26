@@ -96,6 +96,19 @@ _COOKIE_NAME = "astra_key"
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import accounts  # noqa: E402
+import metering  # noqa: E402
+
+# The routes that cost real money are the model-backed ones: the AI analysis
+# engine and the advisor both spend provider tokens. Everything else (the shell,
+# candles, the local volatility/akoan math) is free to serve, so metering is
+# scoped to these prefixes — a free user loading the app does not burn their
+# daily analysis budget on static assets.
+_METERED_PREFIXES = ("/engine/", "/advisor/")
+
+
+def _metered_path(path: str) -> bool:
+    bare = path.split("?", 1)[0]
+    return any(bare.startswith(p) for p in _METERED_PREFIXES)
 
 
 def _accounts_on() -> bool:
@@ -846,6 +859,9 @@ class Handler(BaseHTTPRequestHandler):
         if denied is not None:
             self._unauthorized(denied)
             return
+        if self._meter_check() is not None:
+            self._metered_refusal()
+            return
         if path == "/unlock":
             self._unlock()
         elif path == "/upgrade.json":
@@ -983,6 +999,39 @@ class Handler(BaseHTTPRequestHandler):
             given = _parse_query(self.path).get("k", "")
         return _token_matches(given)
 
+    def _meter_check(self) -> int | None:
+        """Spend one request against the caller's account, or refuse with 429.
+
+        Returns None to allow. Metering is scoped to the model-backed routes
+        (`_metered_path`) and to real accounts: the master static token is the
+        operator, who is never metered, and with accounts or metering off this
+        is a no-op. The account is resolved from the same presented key the gate
+        just accepted, so a request that got here is already known to carry one.
+        """
+        if not metering.enabled() or not _metered_path(self.path):
+            return None
+        account = _account_for(self._presented_key())
+        if account is None:
+            # Master token, or metering on with no accounts: nothing to charge.
+            return None
+        decision = metering.store().spend(account.id, account.tier)
+        return None if decision.allowed else 429
+
+    def _metered_refusal(self) -> None:
+        """Tell the app plainly that the daily allowance is spent.
+
+        A 429 with a JSON body, not the unlock page: the caller *is* authorized,
+        they have simply used today's analysis budget, and the app shows a
+        distinct "quota spent, resets at ..." message rather than a lock.
+        """
+        account = _account_for(self._presented_key())
+        decision = (metering.store().peek(account.id, account.tier)
+                    if account is not None else None)
+        payload = {"error": "daily quota spent",
+                   "meter": decision.as_dict() if decision else None}
+        body = json.dumps(payload, sort_keys=True).encode("utf-8")
+        self._send(429, body, "application/json; charset=utf-8")
+
     def _unauthorized(self, status: int = 401) -> None:
         # Shown to a phone that opened the app without the key. Lead with the
         # /unlock form (it stores the cookie, so it is typed once); the bare
@@ -1111,13 +1160,15 @@ class Handler(BaseHTTPRequestHandler):
                 "expires_at": (int(account.expires_at)
                                if account.expires_at is not None else None),
                 "days_left": account.days_left(),
+                "meter": (metering.store().peek(account.id, account.tier).as_dict()
+                          if metering.enabled() else None),
             }
         elif ACCESS_TOKEN and hmac.compare_digest(presented or "", ACCESS_TOKEN):
             payload = {"mode": "master", "id": "", "tier": "pro",
-                       "expires_at": None, "days_left": None}
+                       "expires_at": None, "days_left": None, "meter": None}
         else:
             payload = {"mode": "open", "id": "", "tier": "pro",
-                       "expires_at": None, "days_left": None}
+                       "expires_at": None, "days_left": None, "meter": None}
         body = json.dumps(payload, sort_keys=True).encode("utf-8")
         self._send(200, body, "application/json; charset=utf-8")
 
