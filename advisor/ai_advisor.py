@@ -524,6 +524,31 @@ def _is_model_plan_limit(headers) -> bool:
     return str(limit).strip() == "0"
 
 
+def _note_auth_failure(code: int, detail: str) -> None:
+    """Record a rejected credential so the payload can say *why* it is dark.
+
+    A 401/403 is a different failure from a network error or a spent quota: the
+    key is present but the provider refused it (expired, revoked, or wrong
+    provider). Collapsing it into the generic "no usable reply" hides the one
+    thing an operator needs to see, so it is kept here and surfaced verbatim.
+    """
+    global _AUTH_FAILURE
+    detail = (detail or "").strip()
+    # The provider's own words when it gives any, otherwise the status code.
+    message = detail[:200] if detail else ("HTTP %d" % code)
+    _AUTH_FAILURE = {"code": code, "message": message}
+
+
+def auth_failure() -> dict | None:
+    """The last credential rejection seen, or None. Cleared by a good call."""
+    return _AUTH_FAILURE
+
+
+def _clear_auth_failure() -> None:
+    global _AUTH_FAILURE
+    _AUTH_FAILURE = None
+
+
 def call_openai_compatible(url: str, model: str, prompt: str, api_key: str,
                            label: str) -> str | None:
     """A chat completion on any OpenAI-compatible endpoint.
@@ -553,7 +578,11 @@ def call_openai_compatible(url: str, model: str, prompt: str, api_key: str,
         with contextlib.suppress(OSError):
             detail = exc.read().decode("utf-8", "replace")[:200]
         sys.stderr.write("[advisor] %s HTTP %s: %s\n" % (label, exc.code, detail))
-        if exc.code == 429 and not _is_model_plan_limit(exc.headers):
+        if exc.code in (401, 403):
+            # A rejected key is not a transient failure; name it so the caller
+            # can report "expired/revoked" instead of "no usable reply".
+            _note_auth_failure(exc.code, detail)
+        elif exc.code == 429 and not _is_model_plan_limit(exc.headers):
             _mark_rate_limited()
         return None
     except (urllib.error.URLError, OSError, ValueError) as exc:
@@ -608,11 +637,13 @@ def call_model(prompt: str, api_key: str) -> str | None:
         reply = call_gemini(prompt, api_key)
         if reply is not None:
             _LAST_MODEL = GEMINI_MODEL
+            _clear_auth_failure()
         return reply
     if PROVIDER == "groq":
         reply = call_groq(prompt, api_key)
         if reply is not None:
             _LAST_MODEL = GROQ_MODEL
+            _clear_auth_failure()
         return reply
     if PROVIDER == "mistral":
         for model in _model_chain():
@@ -620,6 +651,7 @@ def call_model(prompt: str, api_key: str) -> str | None:
                                            "mistral")
             if reply is not None:
                 _LAST_MODEL = model
+                _clear_auth_failure()
                 return reply
             if rate_limited():
                 # A spent quota, not a model the plan refuses: stop the walk.
@@ -652,6 +684,11 @@ _rate_limited_until = 0.0
 # one has answered. Reported instead of the configured default so a payload
 # never names a model that did not speak.
 _LAST_MODEL: str | None = None
+
+# The last credential rejection (HTTP 401/403) seen, as
+# ``{"code": int, "message": str}``, or None. Kept separate from the reply so a
+# caller can tell "the key is refused" apart from "the provider said nothing".
+_AUTH_FAILURE: dict | None = None
 
 
 def _mark_rate_limited() -> None:

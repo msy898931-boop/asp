@@ -204,9 +204,11 @@ class BuildTests(unittest.TestCase):
             "upcoming_events": ai_advisor.upcoming_events,
             "append_log": ai_engine.append_log,
             "backoff": ai_advisor._rate_limited_until,
+            "auth": ai_advisor._AUTH_FAILURE,
         }
         self._key = os.environ.get("GROQ_API_KEY")
         ai_advisor._rate_limited_until = 0.0
+        ai_advisor._AUTH_FAILURE = None
         ai_engine.append_log = lambda record: None
         ai_advisor.recent_news = lambda: []
         ai_advisor.upcoming_events = lambda: []
@@ -221,6 +223,7 @@ class BuildTests(unittest.TestCase):
         ai_advisor.upcoming_events = self._saved["upcoming_events"]
         ai_engine.append_log = self._saved["append_log"]
         ai_advisor._rate_limited_until = self._saved["backoff"]
+        ai_advisor._AUTH_FAILURE = self._saved["auth"]
         if self._key is None:
             os.environ.pop("GROQ_API_KEY", None)
         else:
@@ -277,6 +280,23 @@ class BuildTests(unittest.TestCase):
         result = ai_engine.Engine()._build()
         self.assertTrue(result.get("rate_limited"))
         self.assertIsNone(result["analysis"])
+
+    def test_a_rejected_key_is_named_not_collapsed(self):
+        # When the provider refuses the key, the note must say so (with the
+        # provider's words) instead of the generic "no usable reply" — that is
+        # the one failure an operator cannot see from outside the gate.
+        os.environ["GROQ_API_KEY"] = "test-key"
+
+        def refusing(prompt, key):
+            ai_advisor._note_auth_failure(401, '{"detail":"key expired"}')
+            return None
+
+        ai_advisor.call_model = refusing
+        result = ai_engine.Engine()._build()
+        self.assertIsNone(result["analysis"])
+        self.assertTrue(result.get("auth_failed"))
+        self.assertIn("rejected", result["note"])
+        self.assertIn("expired", result["note"])
 
     def test_no_key_means_no_model_call(self):
         os.environ.pop("GROQ_API_KEY", None)
