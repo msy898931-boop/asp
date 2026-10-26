@@ -432,7 +432,22 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   whose entry floats in empty space is dropped, which closes the fabrication gap
   the persona alone could not. Turn the check off with
   `ASTRA_SMC_REQUIRE_ANCHOR=0`; callers that pass no sheet skip it rather than
-  failing. `ASTRA_SMC_TIMEFRAMES` (empty = all) narrows the frames. The phone app exposes it as the **SMC** view (behind
+  The engine also **reads the tape freshness**. The bridge already stamps
+  every candle reply with `freshness`, `newest_closed_time` and any error; the
+  engine used to discard those and treat an old bar and a fresh one alike. It
+  now records them per frame, computes `lag_bars` (bars behind the wall clock),
+  and folds them into one `tape` verdict: **live** (every frame present and
+  within `ASTRA_SMC_MAX_LAG_BARS`, default 2 — the bars carry their
+  open time and the forming bar is always excluded, so a healthy read sits
+  between 1 and 2), **degraded** (a frame missing or behind: the
+  read still runs but is labelled provisional), or **stale** (no usable frame:
+  the engine **refuses to plan and makes no model call**, because a plan
+  anchored to old bars describes a market that has already moved). The verdict
+  rides in `snapshot.tape`, reaches the model in the prompt, and appears in the
+  reply `engine.tape` and in the phone panel meta line. `stale_tape: true`
+  marks the refusal. This is the anchoring rule one level up: the persona is
+  told to anchor every price to the fact sheet, and now it is told how current
+  that sheet's bars were. The phone app exposes it as the **SMC** view (behind
   More): `mobile/smc.js` renders the inner `analysis` object — bias, market
   read, one card per setup with entry/stop/scaled ladder/reward:risk, the
   swept liquidity and point of interest, and the confidence labelled an
