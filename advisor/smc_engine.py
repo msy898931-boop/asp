@@ -122,7 +122,9 @@ _SYSTEM_PROMPT = (
     "Reward-to-risk must be at least 1:2.\n"
     "Rules:\n"
     "- Anchor every price to the fact sheet. Use only the levels you were "
-    "given; never invent a price, a swing, a gap or an event.\n"
+    "given; never invent a price, a swing, a gap or an event. The entry MUST "
+    "sit inside an order block or a fair-value gap listed in the fact sheet: a "
+    "plan whose entry falls in empty space is discarded automatically.\n"
     "- A plan is coherent only if the stop sits on the losing side of the entry "
     "and the targets run in the winning direction, nearest first. For a LONG: "
     "stop < entry < target1 < target2 ... For a SHORT: stop > entry > "
@@ -228,13 +230,77 @@ def _as_float(value) -> float | None:
     return out
 
 
-def validate_plan(raw: dict, min_rr: float = MIN_RR) -> tuple[dict | None, str]:
+# How far outside a computed zone an entry may sit and still count as anchored
+# there, as a fraction of that frame's ATR. A few cents of slippage against the
+# zone edge is normal; half an ATR away is a different level entirely.
+ENTRY_ANCHOR_ATR = float(os.environ.get("ASTRA_SMC_ANCHOR_ATR", "0.5"))
+
+
+def _env_flag(name: str, default: str = "1") -> bool:
+    """A boolean from an environment flag: '0'/'false'/'no'/'off' turn it off."""
+    raw = os.environ.get(name, default)
+    return str(raw).strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _zone_of(entry: float, facts: dict, tol: float) -> str | None:
+    """The computed zone ``entry`` sits in on one frame, or None.
+
+    Checks the order blocks and the fair-value gaps the fact sheet actually
+    found — never a zone the model described in prose. The name returned is
+    what anchors the entry, so the reason a plan was kept is auditable.
+    """
+    for ob in facts.get("order_blocks") or []:
+        lo, hi = _as_float(ob.get("low")), _as_float(ob.get("high"))
+        if lo is not None and hi is not None and lo - tol <= entry <= hi + tol:
+            return "order block (%s)" % ob.get("kind")
+    for f in facts.get("fair_value_gaps") or []:
+        lo, hi = _as_float(f.get("low")), _as_float(f.get("high"))
+        if lo is not None and hi is not None and lo - tol <= entry <= hi + tol:
+            return "fair-value gap (%s)" % f.get("kind")
+    return None
+
+
+def entry_anchor(entry: float, facts_by_tf: dict) -> tuple[str | None, str | None]:
+    """Which timeframe's computed zone the entry sits at, and what zone it is.
+
+    This is the check the design promised but never enforced: the prompt tells
+    the model to anchor every price to the fact sheet, and this verifies that
+    the *entry* really does land on a zone the code computed — an order block
+    or a fair-value gap — rather than a level the model made up. Returns
+    ``(timeframe, zone)``, or ``(None, None)`` when the entry anchors nowhere.
+
+    The tolerance is each frame's own ATR (``ENTRY_ANCHOR_ATR`` of it), so a
+    quiet frame demands a tighter match than a volatile one — the same way a
+    trader reads a level differently on M5 than on H4.
+    """
+    for tf, facts in (facts_by_tf or {}).items():
+        if not isinstance(facts, dict):
+            continue
+        atr_value = _as_float(facts.get("atr")) or 0.0
+        tol = ENTRY_ANCHOR_ATR * atr_value
+        zone = _zone_of(entry, facts, tol)
+        if zone is not None:
+            return tf, zone
+    return None, None
+
+
+def validate_plan(raw: dict, min_rr: float = MIN_RR,
+                  facts_by_tf: dict | None = None,
+                  require_anchor: bool | None = None) -> tuple[dict | None, str]:
     """Check one model plan for coherence. Returns (plan, reason).
 
     A coherent plan has a direction, numeric levels, the stop on the losing side
     of the entry, targets in travel order, and reward-to-risk at least
     ``min_rr`` (the methodology's own floor). Anything else is dropped with a
     reason; the engine never repairs a number it cannot trust.
+
+    When ``facts_by_tf`` is supplied and anchoring is on
+    (``ASTRA_SMC_REQUIRE_ANCHOR``, default on), the entry must also land on a
+    zone the fact sheet computed — an order block or a fair-value gap. A plan
+    whose entry floats in empty space is dropped with the reason, because that
+    is exactly the fabricated level the design exists to prevent. Callers that
+    have no sheet (unit tests, callers reading a bare reply) pass nothing and
+    the check is skipped rather than failing the plan.
     """
     if not isinstance(raw, dict):
         return None, "not an object"
@@ -287,6 +353,20 @@ def validate_plan(raw: dict, min_rr: float = MIN_RR) -> tuple[dict | None, str]:
         return None, ("reward-to-risk %.2f is below the %.1f minimum"
                       % (rr, min_rr))
 
+    # The anchoring check: the entry must sit on a zone the fact sheet computed,
+    # not on a level the model invented. Skipped only when the caller supplied
+    # no sheet or turned it off — never silently when a sheet was passed.
+    anchor_tf: str | None = None
+    anchor_zone: str | None = None
+    if facts_by_tf is not None:
+        if require_anchor is None:
+            require_anchor = _env_flag("ASTRA_SMC_REQUIRE_ANCHOR", "1")
+        if require_anchor:
+            anchor_tf, anchor_zone = entry_anchor(entry, facts_by_tf)
+            if anchor_zone is None:
+                return None, ("entry %.2f is not anchored to a computed order "
+                              "block or fair-value gap" % entry)
+
     confidence = _as_float(raw.get("confidence"))
     if confidence is not None:
         confidence = max(0.0, min(1.0, confidence))
@@ -304,14 +384,23 @@ def validate_plan(raw: dict, min_rr: float = MIN_RR) -> tuple[dict | None, str]:
         "rationale": str(raw.get("rationale", "")).strip(),
         "sweep": str(raw.get("sweep", "")).strip(),
         "poi": str(raw.get("poi", "")).strip(),
+        # Which computed zone the entry was verified against. None when the
+        # anchoring check was off or no sheet was passed to validate_plan.
+        "anchored": anchor_zone is not None,
+        "anchor_timeframe": anchor_tf,
+        "anchor_zone": anchor_zone,
         # The model's own claim, never a measured edge.
         "confidence_validated": False,
     }
     return plan, "ok"
 
 
-def parse_engine(text: str) -> dict | None:
-    """Pull the JSON object out of a model reply, tolerating prose or fences."""
+def parse_engine(text: str, facts_by_tf: dict | None = None) -> dict | None:
+    """Pull the JSON object out of a model reply, tolerating prose or fences.
+
+    ``facts_by_tf`` is the computed fact sheet's ``timeframes`` map, passed so
+    each plan's entry can be checked against a zone the code actually found.
+    """
     if not text:
         return None
     candidate = text.strip()
@@ -339,7 +428,7 @@ def parse_engine(text: str) -> dict | None:
     raw_plans = parsed.get("plans")
     if isinstance(raw_plans, list):
         for raw in raw_plans[:MAX_PLANS * 2]:
-            plan, reason = validate_plan(raw)
+            plan, reason = validate_plan(raw, facts_by_tf=facts_by_tf)
             if plan is None:
                 rejected.append({"plan": raw if isinstance(raw, dict) else None,
                                  "reason": reason})
@@ -371,7 +460,10 @@ def assemble(snapshot: dict, parsed: dict) -> dict:
         "timeframes_missing": (snapshot.get("facts") or {})
         .get("missing_timeframes", []),
         "facts_note": (snapshot.get("facts") or {}).get("facts_note"),
+        "confluence": (snapshot.get("facts") or {}).get("confluence"),
         "min_reward_risk": MIN_RR,
+        "entry_anchor_required": _env_flag("ASTRA_SMC_REQUIRE_ANCHOR", "1"),
+        "entry_anchor_tolerance_atr": ENTRY_ANCHOR_ATR,
         "note": ("SMC/ICT analysis engine, isolated from the validated "
                  "pipeline. Structure is computed from closed bars; the plan "
                  "and its confidence are the model's own estimates, not "
@@ -434,7 +526,8 @@ class Engine:
             return result
 
         reply = ai_advisor.call_model(build_prompt(snapshot), api_key)
-        parsed = parse_engine(reply) if reply else None
+        facts_by_tf = (snapshot.get("facts") or {}).get("timeframes") or {}
+        parsed = parse_engine(reply, facts_by_tf) if reply else None
         if parsed is None:
             auth = ai_advisor.auth_failure()
             if auth:

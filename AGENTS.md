@@ -409,8 +409,11 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
     highs/lows) and **sweeps** (a wick beyond a level that closes back inside,
     i.e. a stop-hunt rather than a break), fair-value gaps, order blocks, and
     premium/discount against the recent range — plus session ranges (Asian,
-    London, New York) from bar timestamps. It uses no network, no model, and
-    never reads the wall clock; given the same bars it returns the same numbers.
+    London, New York) from bar timestamps and a **multi-timeframe confluence
+    tally** (how many frames' structure bias agree, with higher frames weighted
+    double). It uses no network, no model, and never reads the wall clock; given
+    the same bars it returns the same numbers. The tally is a *reading* of the
+    sheet, never a signal.
   - `advisor/smc_engine.py` then hands that fact sheet to the same external
     model and asks it only to **interpret** it: which structure is in play,
     where the point of interest is, and what setup (if any) follows. The model
@@ -423,8 +426,13 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   coherence — stop on the losing side, targets in travel order, first target
   beyond the entry, and reward:risk at or above `MIN_RR` (**2.0**, the
   methodology's own floor) — and an incoherent plan is **dropped with its
-  reason** (`rejected`), never repaired. `ASTRA_SMC_TIMEFRAMES` (empty = all)
-  narrows the frames. The phone app exposes it as the **SMC** view (behind
+  reason** (`rejected`), never repaired. It also **verifies the entry is
+  anchored** to a zone the fact sheet computed (an order block or a fair-value
+  gap, within `ASTRA_SMC_ANCHOR_ATR` of the frame's ATR, default 0.5): a plan
+  whose entry floats in empty space is dropped, which closes the fabrication gap
+  the persona alone could not. Turn the check off with
+  `ASTRA_SMC_REQUIRE_ANCHOR=0`; callers that pass no sheet skip it rather than
+  failing. `ASTRA_SMC_TIMEFRAMES` (empty = all) narrows the frames. The phone app exposes it as the **SMC** view (behind
   More): `mobile/smc.js` renders the inner `analysis` object — bias, market
   read, one card per setup with entry/stop/scaled ladder/reward:risk, the
   swept liquidity and point of interest, and the confidence labelled an
@@ -439,6 +447,34 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   school that turns out to add nothing can be switched off (`ASTRA_DISABLE_SMC=1`)
   without touching the validated pipeline, and the deterministic fact module
   keeps the model honest: it interprets numbers it did not invent.
+- **The SMC plans are measured, not just written** (`advisor/smc_resolve.py`,
+  `research/smc_zone_study.py`). The engine logs every plan to
+  `run/smc_engine_plans.jsonl`; the resolver reads that log back and decides what
+  happened, so `confidence` stops being an unfalsifiable claim. It is a plan
+  **limit order**: the entry must be *reached* before a trade exists, a plan price
+  never returns to is **EXPIRED** (never a win, never a loss, excluded from the
+  rate), the **stop wins a tie** (intra-bar order is unknowable), and the spread
+  is charged on resolution — the same accounting as `tracker/replay.py`, so an
+  SMC rate reads next to a tracker rate. Its Wilson interval and break-even solver
+  are *duplicated* from `tracker/validation_gate.py`, not imported, because
+  `advisor` must stay importable without `tracker`; a test asserts the two agree.
+  Run it with:
+  ```
+  python3 advisor/smc_resolve.py --log run/smc_engine_plans.jsonl \
+      --bars research/data/xauusd_m1/2025.csv.gz --tf M15
+  ```
+  `research/smc_zone_study.py` answers the harder question — *do the zones have
+  an edge?* — by building plans deterministically from the fact sheet (no model),
+  resolving them over 2021-2025, and splitting in-sample/out-of-sample exactly as
+  the tracker's gate does. It includes a **symmetric 1R/1R control** entered at
+  the market, which must resolve near 50%: if it does not, the resolver is biased
+  and nothing else can be trusted. The verdict on real data is
+  **`NO_EDGE_MEASURED`** — the zones do not clear break-even on either half, the
+  Wilson lower bound sits below break-even throughout, and the confluence filter
+  does not change that. The write-up is
+  `research/reports/smc_zone_study.md`. This is the same honesty the `akoan`
+  engine applies to itself: the school is shipped as a reading, and the reading
+  is now measured rather than assumed.
 
 ## The frozen v1 contract has four copies — keep them in step
 

@@ -189,6 +189,44 @@ class TimeframeFactsTests(unittest.TestCase):
         self.assertNotIn("direction", facts)
 
 
+class ConfluenceTests(unittest.TestCase):
+    def _facts(self, biases):
+        return {tf: {"structure": {"bias": b}} for tf, b in biases.items()}
+
+    def test_frames_that_agree_are_tallied(self):
+        facts = self._facts({"M5": "bullish", "M15": "bullish", "H1": "bullish"})
+        c = smc_read._confluence(facts)
+        self.assertEqual(c["dominant"], "bullish")
+        self.assertEqual(c["agreeing"], 3)
+        self.assertEqual(c["total_frames"], 3)
+        self.assertAlmostEqual(c["agreement"], 1.0)
+
+    def test_higher_frames_weigh_more(self):
+        # H1 and H4 bullish (weight 2 each) beat M5/M15/M30 bearish (weight 1).
+        facts = self._facts({"M5": "bearish", "M15": "bearish", "M30": "bearish",
+                             "H1": "bullish", "H4": "bullish"})
+        c = smc_read._confluence(facts)
+        self.assertEqual(c["weighted_score"], 1)
+        self.assertEqual(c["dominant"], "bullish")
+        self.assertEqual(sorted(c["opposing_frames"]), ["M15", "M30", "M5"])
+
+    def test_an_exact_tie_is_neutral_not_a_guess(self):
+        # M5 + M15 bullish (weight 1+1) against H1 bearish (weight 2): a tie.
+        facts = self._facts({"M5": "bullish", "M15": "bullish",
+                             "H1": "bearish"})
+        c = smc_read._confluence(facts)
+        self.assertEqual(c["weighted_score"], 0)
+        self.assertEqual(c["dominant"], "neutral")
+
+    def test_no_readable_frames_yields_none(self):
+        self.assertIsNone(smc_read._confluence({}))
+        self.assertIsNone(smc_read._confluence({"M5": {"structure": {}}}))
+
+    def test_the_tally_is_never_called_an_edge(self):
+        c = smc_read._confluence(self._facts({"M5": "bullish"}))
+        self.assertIn("not a measured edge", c["note"])
+
+
 class BuildTests(unittest.TestCase):
     def test_missing_frames_are_reported_not_faked(self):
         sheet = smc_read.build({"M15": build(BULL_THEN_BREAK_DOWN)},

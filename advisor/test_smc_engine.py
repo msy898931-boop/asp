@@ -12,6 +12,7 @@ import math
 import os
 import sys
 import unittest
+from typing import ClassVar
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -190,16 +191,116 @@ class AssembleTests(unittest.TestCase):
         self.assertEqual(out["engine"]["timeframes_missing"], ["H4"])
 
 
+class AnchorTests(unittest.TestCase):
+    """The entry-anchoring check: a plan must enter at a computed zone."""
+
+    def _sheet(self, blocks=None, gaps=None, atr=5.0):
+        return {"M15": {"atr": atr, "order_blocks": blocks or [],
+                        "fair_value_gaps": gaps or []}}
+
+    def test_an_entry_inside_an_order_block_is_anchored(self):
+        sheet = self._sheet(blocks=[{"kind": "bullish", "low": 1998.0,
+                                     "high": 2002.0}])
+        tf, zone = smc_engine.entry_anchor(2000.0, sheet)
+        self.assertEqual(tf, "M15")
+        self.assertIn("order block", zone)
+
+    def test_an_entry_inside_a_gap_is_anchored(self):
+        sheet = self._sheet(gaps=[{"kind": "bullish", "low": 1999.0,
+                                   "high": 2001.0}])
+        _tf, zone = smc_engine.entry_anchor(2000.0, sheet)
+        self.assertIn("fair-value gap", zone)
+
+    def test_an_entry_in_empty_space_is_not_anchored(self):
+        sheet = self._sheet(blocks=[{"kind": "bullish", "low": 1990.0,
+                                     "high": 1992.0}])
+        tf, zone = smc_engine.entry_anchor(2000.0, sheet)
+        self.assertIsNone(tf)
+        self.assertIsNone(zone)
+
+    def test_the_tolerance_scales_with_the_frames_atr(self):
+        # Entry 2 points above a zone: inside 0.5*ATR when ATR is 5, outside
+        # when ATR is 2 — a quiet frame demands a tighter match.
+        sheet_loose = self._sheet(blocks=[{"kind": "bullish", "low": 1996.0,
+                                           "high": 1998.0}], atr=5.0)
+        sheet_tight = self._sheet(blocks=[{"kind": "bullish", "low": 1996.0,
+                                           "high": 1998.0}], atr=2.0)
+        self.assertIsNotNone(smc_engine.entry_anchor(2000.0, sheet_loose)[1])
+        self.assertIsNone(smc_engine.entry_anchor(2000.0, sheet_tight)[1])
+
+    def test_a_plan_is_dropped_when_its_entry_is_not_anchored(self):
+        sheet = self._sheet(blocks=[{"kind": "bullish", "low": 1990.0,
+                                     "high": 1992.0}])
+        plan, reason = smc_engine.validate_plan(
+            {"direction": "LONG", "entry": 2000, "stop": 1995,
+             "targets": [2010, 2020], "confidence": 0.6}, facts_by_tf=sheet)
+        self.assertIsNone(plan)
+        self.assertIn("not anchored", reason)
+
+    def test_a_plan_is_kept_when_its_entry_is_anchored(self):
+        sheet = self._sheet(blocks=[{"kind": "bullish", "low": 1998.0,
+                                     "high": 2002.0}])
+        plan, _reason = smc_engine.validate_plan(
+            {"direction": "LONG", "entry": 2000, "stop": 1995,
+             "targets": [2010, 2020], "confidence": 0.6}, facts_by_tf=sheet)
+        self.assertIsNotNone(plan)
+        self.assertTrue(plan["anchored"])
+        self.assertEqual(plan["anchor_timeframe"], "M15")
+
+    def test_no_sheet_means_the_check_is_skipped_not_failed(self):
+        # A caller with no sheet (a bare reply) still gets its plan, and the
+        # plan records that it was not anchored rather than pretending it was.
+        plan, _reason = smc_engine.validate_plan(
+            {"direction": "LONG", "entry": 2000, "stop": 1995,
+             "targets": [2010, 2020], "confidence": 0.6})
+        self.assertIsNotNone(plan)
+        self.assertFalse(plan["anchored"])
+        self.assertIsNone(plan["anchor_zone"])
+
+    def test_the_check_can_be_turned_off_explicitly(self):
+        sheet = self._sheet(blocks=[{"kind": "bullish", "low": 1990.0,
+                                     "high": 1992.0}])
+        plan, _reason = smc_engine.validate_plan(
+            {"direction": "LONG", "entry": 2000, "stop": 1995,
+             "targets": [2010, 2020], "confidence": 0.6},
+            facts_by_tf=sheet, require_anchor=False)
+        self.assertIsNotNone(plan)
+
+    def test_a_bad_plan_is_still_dropped_before_the_anchor_check(self):
+        # Coherence failures must be reported as such, not as anchor failures.
+        sheet = self._sheet(blocks=[{"kind": "bullish", "low": 1998.0,
+                                     "high": 2002.0}])
+        plan, reason = smc_engine.validate_plan(
+            {"direction": "LONG", "entry": 2000, "stop": 2005,
+             "targets": [2010]}, facts_by_tf=sheet)
+        self.assertIsNone(plan)
+        self.assertIn("stop is not below", reason)
+
+
 class BuildTests(unittest.TestCase):
+    # A realistic fact sheet for the mocked snapshot: the reply below enters at
+    # 2000.0, so the sheet must carry a computed zone the entry can anchor to —
+    # otherwise the anchoring check (on by default) would drop every plan.
+    _FACTS: ClassVar[dict] = {
+        "timeframes": {
+            "M15": {"close": 2000.0, "atr": 5.0,
+                    "structure": {"bias": "bullish"},
+                    "order_blocks": [{"kind": "bullish", "low": 1998.0,
+                                      "high": 2002.0}],
+                    "fair_value_gaps": []},
+        },
+        "missing_timeframes": [],
+        "confluence": {"dominant": "bullish", "agreeing": 1, "total_frames": 1},
+        "facts_note": "n",
+    }
+
     def _patch(self, api_key="key", model_reply=None):
         return (
             mock.patch.object(ai_advisor, "provider_key", return_value=api_key),
             mock.patch.object(ai_advisor, "rate_limited", return_value=False),
             mock.patch.object(smc_engine, "build_snapshot",
                               return_value={"symbol": "XAUUSD", "price": 2000.0,
-                                            "facts": {"timeframes": {},
-                                                      "missing_timeframes": [],
-                                                      "facts_note": "n"},
+                                            "facts": dict(self._FACTS),
                                             "news": [], "events": []}),
             mock.patch.object(ai_advisor, "call_model",
                               return_value=model_reply),
