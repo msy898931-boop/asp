@@ -459,5 +459,52 @@ class TimeframeSelectionTests(unittest.TestCase):
                              smc_engine.ALL_TIMEFRAMES)
 
 
+class MeasuredRecordTests(unittest.TestCase):
+    """The engine's measured record is the project's finding, not the model's
+    claim. These pin the honesty contract: it cites its source, it does not
+    pretend to clear the gate, and it reaches both the model and the reply."""
+
+    def test_the_record_cites_its_source_and_scope(self):
+        rec = smc_engine.measured_record()
+        self.assertIn("source", rec)
+        self.assertIn("scope", rec)
+        self.assertIn("n", rec)
+        self.assertIn("win_pct", rec)
+        self.assertIn("break_even_pct", rec)
+
+    def test_the_record_does_not_falsely_claim_to_clear_the_gate(self):
+        rec = smc_engine.measured_record()
+        self.assertFalse(rec["clears_gate"])
+        self.assertTrue(rec["why_not"])
+        self.assertLess(rec["wilson_low_pct"], rec["break_even_pct"])
+
+    def test_the_record_is_a_fresh_dict_each_call(self):
+        first = smc_engine.measured_record()
+        first["n"] = 0
+        self.assertNotEqual(smc_engine.measured_record()["n"], 0)
+
+    def test_the_record_reaches_the_model_prompt(self):
+        view = smc_engine._prompt_view({"symbol": "XAUUSD", "price": 2000.0,
+                                        "facts": {}, "news": [], "events": [],
+                                        "measured_record": smc_engine.measured_record()})
+        self.assertIsNotNone(view["engine_measured_record"])
+        self.assertFalse(view["engine_measured_record"]["clears_gate"])
+
+    def test_the_record_reaches_the_engine_block_of_the_reply(self):
+        snapshot = {"price": 2000.0, "facts": {},
+                    "measured_record": smc_engine.measured_record()}
+        out = smc_engine.assemble(snapshot, {"plans": []})
+        self.assertIsNotNone(out["engine"]["measured_record"])
+        self.assertFalse(out["engine"]["measured_record"]["clears_gate"])
+
+    def test_the_numbers_match_the_study_report(self):
+        # Copied verbatim from research/reports/smc_zone_study.md; if the study
+        # is re-run and the numbers move, both move in the same commit.
+        rec = smc_engine.measured_record()
+        self.assertEqual(rec["n"], 9845)
+        self.assertEqual(rec["win_pct"], 23.2)
+        self.assertEqual(rec["break_even_pct"], 27.9)
+
+
 if __name__ == "__main__":
     unittest.main()

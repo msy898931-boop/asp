@@ -475,6 +475,16 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   `research/reports/smc_zone_study.md`. This is the same honesty the `akoan`
   engine applies to itself: the school is shipped as a reading, and the reading
   is now measured rather than assumed.
+- **The measured record is carried, not just written down** (`smc_engine.py`).
+  Because the study now exists, the engine embeds its verdict as
+  `MEASURED_RECORD` and passes it to the model as `engine_measured_record` and
+  to the client as `analysis.engine.measured_record`; the SMC panel renders it
+  above the model's plans, so the one line that is a *measurement* is read
+  before the *claims*. The persona is told the record is the project's finding,
+  not the model's to restate as its own confidence. The contract matches
+  `advisor/playbook.py`: the numbers are pasted in verbatim from the study, the
+  block cites its `source`, and it carries `clears_gate: false` with a `why_not`
+  so it can never wear the clothes of a result that passed.
 
 ## The frozen v1 contract has four copies — keep them in step
 
