@@ -193,6 +193,26 @@ pins.
 The store path is `ASTRA_ACCOUNTS_FILE` (default `<ASTRA_RUN_DIR>/accounts.json`,
 on the persistent disk). `mobile/test_gate.py` covers the gate and accounts.
 
+**Usage metering (the missing half of the gate).** Accounts answer *who* may
+use the app and *until when*; `mobile/metering.py` answers *how much*. It is a
+per-account daily request counter over the model-backed routes (`/engine/`,
+`/advisor/`) — the ones that spend provider tokens — so a plan can mean
+something and one runaway client cannot drain the model budget of everyone
+else. It is **off unless `ASTRA_METERING` is truthy**, and it needs accounts on
+to have an account to charge. Free and Pro allowances are `ASTRA_FREE_DAILY`
+(20) and `ASTRA_PRO_DAILY` (500); **0 means unlimited**, and an unlimited tier
+is never written to disk. The reset is the next UTC midnight (integer days, so
+no timezone table). It **fails open** by design: a meter that cannot read or
+write its file allows the request and warns on stderr, because locking a paying
+user out over a disk hiccup is worse than granting a free request — the gate
+still stands in front of every route. The master static token is never metered
+(the operator), and `/me.json` reports the meter without moving it. A spent
+allowance is a **429 with a JSON body** (`{"error": "daily quota spent",
+"meter": {...}}`), which the app shows as its own state, distinct from "engine
+unreachable". Store path is `ASTRA_METERING_FILE` (default
+`<ASTRA_RUN_DIR>/metering.json`); manage with `metering.py show|reset`.
+`mobile/test_metering.py` covers it.
+
 `mobile/performance.html` is the **transparency page** — the honest numbers the
 project already publishes in `docs/FINAL_REPORT.md`, shown to the buyer: OOS
 Brier skill ≈ +0.0012, directional accuracy 51.7%, ECE 0.0015, AUC ≈ 0.50, plus

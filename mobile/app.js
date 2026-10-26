@@ -202,7 +202,16 @@ async function getJson(url, timeoutMs = FETCH_TIMEOUT_MS) {
   try {
     const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
     connStats[url] = { ok: res.ok, ms: Math.round(performance.now() - t0) };
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      // Attach the status and any JSON body so a caller can tell a spent quota
+      // (429 with {"error":"daily quota spent"}) from a plain failure. The body
+      // is best-effort: an HTML error page is not JSON, and reading it must not
+      // mask the status.
+      const err = new Error(`HTTP ${res.status}`);
+      err.status = res.status;
+      try { err.payload = await res.json(); } catch (e) { err.payload = null; }
+      throw err;
+    }
     return res.json();
   } catch (err) {
     if (!connStats[url]) connStats[url] = { ok: false, ms: Math.round(performance.now() - t0) };

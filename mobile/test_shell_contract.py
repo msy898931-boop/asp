@@ -560,6 +560,21 @@ class EnginePanelRenderTest(unittest.TestCase):
             self.assertGreaterEqual(i18n.count(key + ":"), 2,
                                     "%s must be in en and ar" % key)
 
+    def test_a_spent_quota_is_shown_as_its_own_state(self):
+        # A 429 from the meter is not "engine down": the renderer must tell them
+        # apart, or a user whose daily allowance is spent is told the engine is
+        # broken. The distinct status and the reset time must both be present.
+        self.assertIn("eng_quota", self.src)
+        self.assertIn("err.status === 429", self.src)
+        self.assertIn("eng_quota_sub", self.src)
+
+    def test_the_quota_strings_exist_in_both_languages(self):
+        with open(os.path.join(sm.HERE, "i18n.js"), encoding="utf-8") as fh:
+            i18n = fh.read()
+        for key in ("eng_quota", "eng_quota_sub"):
+            self.assertGreaterEqual(i18n.count(key + ":"), 2,
+                                    "%s must be in en and ar" % key)
+
 
 if __name__ == "__main__":
     unittest.main()

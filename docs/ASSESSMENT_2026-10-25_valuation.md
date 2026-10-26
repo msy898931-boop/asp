@@ -212,6 +212,15 @@ multi-user gate that used to sit in this list closed in PR #17.
    and revocation work, but there is no usage quota and no billing; wire Stripe
    before charging anyone.
 
+> *Update (2026-10-26):* the usage quota half of point 3 is now built.
+> `mobile/metering.py` meters a per-account daily request count over the
+> model-backed routes (`/engine/`, `/advisor/`), off unless `ASTRA_METERING` is
+> set, with free/pro allowances and a UTC-midnight reset. It fails open (a meter
+> that cannot write allows the request) and never meters the operator's master
+> token. What remains for point 3 is **billing** (Stripe, i.e. point 4), not the
+> meter itself. Recorded by an AI agent (OpenHands) on behalf of
+> @msy898931-boop.
+
 ---
 
 *This document was produced by an AI agent (OpenHands) on behalf of

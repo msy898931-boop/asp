@@ -146,6 +146,43 @@ and nothing changes.
 Verify: `curl https://your-service/me.json?k=YOUR_KEY` returns
 `{"mode":"account","tier":"pro","days_left":30,...}`.
 
+## 3c. Usage metering (a daily analysis quota per account)
+
+Accounts answer *who* may use the app and *until when*; they do not limit *how
+much*. Metering adds a per-account daily request count over the model-backed
+routes (`/engine/`, `/advisor/`) — the ones that spend provider tokens — so a
+free tier can be genuinely limited without cutting off the price alerts. It is
+off until you switch it on, and it needs accounts on to have an account to
+charge:
+
+```sh
+# Render dashboard → Environment
+ASTRA_METERING=1
+ASTRA_METERING_FILE=/root/.astra/metering.json   # on the persistent disk
+ASTRA_FREE_DAILY=20    # free-tier analyses per day; 0 = unlimited
+ASTRA_PRO_DAILY=500    # pro-tier analyses per day; 0 = unlimited
+```
+
+A spent allowance answers `429` with a JSON body the app shows as its own
+state ("daily analysis quota spent, resets at …"), distinct from "engine
+unreachable". The reset is the next UTC midnight. Two deliberate choices worth
+knowing:
+
+- **It fails open.** If the meter's file cannot be read or written, the request
+  is allowed and a warning goes to stderr. Locking a paying user out over a disk
+  hiccup is worse than granting one free request; the access gate still stands
+  in front of every route regardless.
+- **The operator is never metered.** The static `ASTRA_ACCESS_TOKEN` is exempt,
+  so the master key always works.
+
+Inspect or clear counters with:
+
+| Command | What it does |
+| --- | --- |
+| `python3 mobile/metering.py show` | today's usage per account |
+| `python3 mobile/metering.py reset --id acc_ab12cd` | clear one account's counter |
+| `python3 mobile/metering.py reset` | clear every counter |
+
 ## 4. Activate each purchase
 
 Stripe emails you the payment with the buyer's chat id in the custom field. Turn

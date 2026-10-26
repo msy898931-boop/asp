@@ -140,10 +140,22 @@ async function loadEngine(force) {
     $("eng-meta").textContent = bits.join(" · ");
     setStatus(T("eng_ok"));
   } catch (err) {
-    setStatus(T("eng_unreachable"));
-    $("eng-read").textContent = "";
-    $("eng-meta").textContent = "";
-    tradesEl.innerHTML = "";
+    // A spent daily analysis quota is a 429 the server explains in JSON; show
+    // it as a distinct message so the user knows it resets, not that the engine
+    // is down. Any other failure stays "unreachable".
+    const p = err && err.payload;
+    if (err && err.status === 429 && p && p.meter) {
+      setStatus(T("eng_quota"));
+      const reset = p.meter.reset_at
+        ? new Date(p.meter.reset_at * 1000).toLocaleString() : "";
+      $("eng-read").textContent = fmt(T("eng_quota_sub"),
+        { used: p.meter.used, limit: p.meter.limit, reset: reset });
+    } else {
+      setStatus(T("eng_unreachable"));
+      $("eng-read").textContent = "";
+      $("eng-meta").textContent = "";
+      tradesEl.innerHTML = "";
+    }
     $("eng-bias").textContent = "--";
     $("eng-bias").className = "ai-stance neutral";
   } finally {
