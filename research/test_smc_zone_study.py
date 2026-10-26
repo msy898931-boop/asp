@@ -23,6 +23,8 @@ from research.smc_zone_study import (  # noqa: E402
     _slice_at,
     build_plan,
     control_plan,
+    evaluate_year,
+    frame_step,
     resample,
 )
 
@@ -128,6 +130,53 @@ class ResampleTests(unittest.TestCase):
         self.assertEqual(out[0]["close"], 114.0)
         self.assertEqual(out[0]["high"], 115.0)
         self.assertEqual(out[0]["low"], 99.0)
+
+
+class FrameStepTests(unittest.TestCase):
+    """The decision frame is a knob, and M15 must keep its original cadence."""
+
+    def test_the_default_frame_keeps_the_original_step(self):
+        # The M15 run's numbers are a committed artefact; the step must not move.
+        self.assertEqual(frame_step("M15"), 8)
+
+    def test_a_slower_frame_samples_fewer_of_its_own_bars(self):
+        self.assertEqual(frame_step("M30"), 4)
+        self.assertEqual(frame_step("H1"), 2)
+        self.assertEqual(frame_step("H4"), 1)
+
+    def test_an_unknown_frame_still_advances(self):
+        self.assertGreaterEqual(frame_step("bogus"), 1)
+
+
+class EvaluateFrameTests(unittest.TestCase):
+    """evaluate_year must honour the decision frame, and refuse an unknown one."""
+
+    @staticmethod
+    def _tape(days: int = 12) -> list:
+        # A flat-ish M1 tape long enough for a higher frame to fill a window.
+        base = 1760000000 - (1760000000 % 3600)
+        bars = []
+        for k in range(days * 24 * 60):
+            px = 2000.0 + (k % 40) * 0.1
+            bars.append({"time": base + k * 60, "open": px, "high": px + 0.5,
+                         "low": px - 0.5, "close": px})
+        return bars
+
+    def test_an_unknown_frame_yields_nothing(self):
+        out = evaluate_year(self._tape(), 2021, tf="bogus")
+        self.assertEqual(out, {"smc": [], "confluence": [], "control": []})
+
+    def test_the_default_frame_is_m15(self):
+        # No tf passed must equal tf="M15" — the original call signature.
+        tape = self._tape()
+        self.assertEqual(evaluate_year(tape, 2021),
+                         evaluate_year(tape, 2021, tf="M15"))
+
+    def test_a_higher_frame_still_produces_a_control(self):
+        out = evaluate_year(self._tape(), 2021, tf="H1")
+        # The control does not depend on a zone being found, only on ATR > 0,
+        # so a higher frame must still return a symmetric ruler to compare to.
+        self.assertTrue(out["control"])
 
 
 if __name__ == "__main__":

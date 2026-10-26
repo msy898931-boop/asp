@@ -25,6 +25,7 @@ bar, and is resolved against bars strictly after it. Stdlib only, no network.
 Run:
     python3 research/smc_zone_study.py
     python3 research/smc_zone_study.py --years 2021,2022,2023,2024,2025
+    python3 research/smc_zone_study.py --tf H1        # same question, slower tape
 """
 
 from __future__ import annotations
@@ -56,6 +57,21 @@ TF = "M15"
 # sees. Higher frames need fewer bars for the same span, so the cost stays sane.
 FRAMES = {"M15": 15, "M30": 30, "H1": 60, "H4": 240}
 FRAME_WINDOW = {"M15": WINDOW, "M30": 150, "H1": 150, "H4": 120}
+
+# The sampling cadence in wall-clock minutes, tied to the M15 default so the
+# first run's numbers do not move. A higher decision frame samples at the same
+# two-hourly cadence, which is fewer of its own bars — the point is to compare
+# frames over the same tape, not to over-sample the slower one.
+STEP_MINUTES = STEP * 15
+
+
+def frame_step(tf: str) -> int:
+    """How many bars of ``tf`` to skip between plans for a two-hourly cadence.
+
+    M15 gives 8 (the study's original step); a higher frame gives fewer of its
+    own bars, never zero, so the loop always advances.
+    """
+    return max(1, STEP_MINUTES // FRAMES.get(tf, 15))
 
 
 # ── data ─────────────────────────────────────────────────────────────────
@@ -183,31 +199,43 @@ def _slice_at(bars: Sequence[dict], cutoff_time: float,
     return eligible[-count:]
 
 
-def evaluate_year(m1: Sequence[dict], year: int) -> Dict[str, List[dict]]:
+def evaluate_year(m1: Sequence[dict], year: int,
+                  tf: str = TF) -> Dict[str, List[dict]]:
     """Resolve every plan this year's tape offers. Returns rows by strategy.
 
     Keys: ``smc`` (zone plans), ``confluence`` (zone plans whose direction
     agrees with the *multi-frame* tally), ``control`` (symmetric 1R/1R). The
     sheet is built from four frames so the confluence tally carries real
     information rather than echoing a single frame's bias.
+
+    ``tf`` is the **decision frame**: the frame whose structure bias and zones
+    the plan is built from, and whose bars resolve it. It defaults to M15, the
+    study's original frame, so that run is byte-for-byte unchanged; passing a
+    higher frame asks the same question — do the zones have an edge? — on a
+    slower tape, where the answer should not be an accident of one timeframe.
+    The control is measured on the same frame, so it stays a fair ruler.
     """
     out: Dict[str, List[dict]] = {"smc": [], "confluence": [], "control": []}
-    bars_by_tf = {tf: resample(m1, minutes)
-                  for tf, minutes in FRAMES.items()}
-    m15 = bars_by_tf["M15"]
-    if len(m15) < WINDOW + 40:
+    bars_by_tf = {f: resample(m1, minutes)
+                  for f, minutes in FRAMES.items()}
+    if tf not in bars_by_tf:
+        return out
+    decision = bars_by_tf[tf]
+    window_len = FRAME_WINDOW.get(tf, WINDOW)
+    step = frame_step(tf)
+    if len(decision) < window_len + 40:
         return out
 
-    for i in range(WINDOW, len(m15) - 40, STEP):
-        cutoff = m15[i - 1]["time"]      # the last closed M15 bar
-        window = m15[max(0, i - WINDOW):i]
+    for i in range(window_len, len(decision) - 40, step):
+        cutoff = decision[i - 1]["time"]      # the last closed bar of the frame
+        window = decision[max(0, i - window_len):i]
         generated_at = cutoff
-        forward = m15[i:]
+        forward = decision[i:]
 
-        sheet_bars = {tf: _slice_at(bars, cutoff, FRAME_WINDOW[tf])
-                      for tf, bars in bars_by_tf.items()}
+        sheet_bars = {f: _slice_at(bars, cutoff, FRAME_WINDOW[f])
+                      for f, bars in bars_by_tf.items()}
         sheet = smc_read.build(sheet_bars, tuple(FRAMES))
-        plan = build_plan(sheet, TF)
+        plan = build_plan(sheet, tf)
         if plan is not None:
             res = smc_resolve.resolve_plan(plan, forward,
                                            generated_at=generated_at,
@@ -241,8 +269,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--years", default="2021,2022,2023,2024,2025")
     parser.add_argument("--limit", type=int, default=400000,
                         help="M1 bars read per year file")
+    parser.add_argument("--tf", default=TF, choices=tuple(FRAMES),
+                        help="decision frame; M15 is the study's original frame")
+    parser.add_argument("--out", default=None,
+                        help="report path; defaults to smc_zone_study.json for "
+                             "M15 and smc_zone_study_<tf>.json otherwise")
     args = parser.parse_args(argv)
 
+    tf = args.tf
     all_rows: Dict[str, List[dict]] = {"smc": [], "confluence": [], "control": []}
     for year in [int(y) for y in args.years.split(",") if y.strip()]:
         path = os.path.join(DATA_DIR, "%d.csv.gz" % year)
@@ -250,13 +284,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print("skip %d: %s not found" % (year, path))
             continue
         m1 = load_m1(path, limit=args.limit)
-        rows = evaluate_year(m1, year)
+        rows = evaluate_year(m1, year, tf=tf)
         for key in all_rows:
             all_rows[key].extend(rows[key])
         print("%d: %d M1 bars -> %d zone plans"
               % (year, len(m1), len(rows["smc"])))
 
-    report = {"tf": TF, "window": WINDOW, "step": STEP, "cost_usd": COST_USD,
+    report = {"tf": tf, "window": FRAME_WINDOW.get(tf, WINDOW),
+              "step": frame_step(tf), "cost_usd": COST_USD,
               "oos_year": OOS_YEAR, "years": args.years, "strategies": {}}
 
     print("\n" + "=" * 74)
@@ -283,7 +318,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                      s["total_r"]))
 
     os.makedirs(REPORT_DIR, exist_ok=True)
-    out_path = os.path.join(REPORT_DIR, "smc_zone_study.json")
+    # The M15 report keeps its name so the committed artefact and the engine's
+    # MEASURED_RECORD keep pointing at the same file; another frame writes its
+    # own, so a second run never overwrites the first's evidence.
+    if args.out:
+        out_path = args.out
+    elif tf == TF:
+        out_path = os.path.join(REPORT_DIR, "smc_zone_study.json")
+    else:
+        out_path = os.path.join(REPORT_DIR, "smc_zone_study_%s.json" % tf.lower())
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, ensure_ascii=False)
     print("\nreport written to %s" % out_path)
