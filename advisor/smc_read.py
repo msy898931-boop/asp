@@ -60,8 +60,8 @@ SESSIONS = (("asian", 0, 7), ("london", 7, 16), ("newyork", 12, 21))
 FACTS_NOTE = (
     "Deterministic SMC/ICT facts computed from closed bars: swing structure, "
     "the last BOS/CHoCH, the premium/discount split, equal-highs/equal-lows "
-    "liquidity, sweeps, fair-value gaps, order blocks and session ranges. "
-    "These are readings, not a measured edge."
+    "liquidity, sweeps, fair-value gaps, order blocks, session ranges and the "
+    "multi-timeframe confluence tally. These are readings, not a measured edge."
 )
 
 
@@ -462,6 +462,66 @@ def session_ranges(bars: Sequence[dict]) -> Optional[dict]:
     return out
 
 
+# ── multi-timeframe confluence ───────────────────────────────────────────
+
+# Higher frames carry double weight: they set the bias the lower frames trade
+# into, the same role split the rest of the advisor uses (mtf_read's ladder).
+CONFLUENCE_WEIGHTS = {"M5": 1, "M15": 1, "M30": 1, "H1": 2, "H4": 2}
+
+
+def _confluence(facts_by_tf: Dict[str, dict]) -> Optional[dict]:
+    """Tally how many frames' *structure* bias point the same way.
+
+    Each frame's bias is already a fact on this sheet (``structure.bias``); this
+    only counts them, so it invents nothing. It is a reading of the sheet, not a
+    signal and not a measured edge — the model still decides what to do with it.
+    Returns None when no frame produced a read.
+
+    ``opposing_frames`` is the honest half: a 4/5 agreement that includes H4
+    against the call is weaker than a 3/5 that does not, and the caller can see
+    which is which rather than trusting a single number.
+    """
+    counts = {"bullish": 0, "bearish": 0, "neutral": 0}
+    bulls: List[str] = []
+    bears: List[str] = []
+    neutrals: List[str] = []
+    weighted = 0
+    for tf in facts_by_tf:
+        bias = ((facts_by_tf[tf] or {}).get("structure") or {}).get("bias")
+        if bias not in counts:
+            continue
+        counts[bias] += 1
+        if bias == "bullish":
+            bulls.append(tf)
+            weighted += CONFLUENCE_WEIGHTS.get(tf, 1)
+        elif bias == "bearish":
+            bears.append(tf)
+            weighted -= CONFLUENCE_WEIGHTS.get(tf, 1)
+        else:
+            neutrals.append(tf)
+    total = len(bulls) + len(bears) + len(neutrals)
+    if not total:
+        return None
+    if weighted > 0:
+        dominant, agreeing, opposing = "bullish", bulls, bears
+    elif weighted < 0:
+        dominant, agreeing, opposing = "bearish", bears, bulls
+    else:
+        dominant, agreeing, opposing = "neutral", neutrals, bulls + bears
+    return {
+        "counts": counts,
+        "weighted_score": weighted,
+        "dominant": dominant,
+        "agreeing_frames": agreeing,
+        "opposing_frames": opposing,
+        "agreeing": len(agreeing),
+        "total_frames": total,
+        "agreement": round(len(agreeing) / total, 2),
+        "note": ("A tally of the frames' structure bias. A reading of the "
+                 "sheet, not a measured edge."),
+    }
+
+
 # ── the whole sheet ──────────────────────────────────────────────────────
 
 def timeframe_facts(bars: Sequence[dict]) -> Optional[dict]:
@@ -518,5 +578,6 @@ def build(bars_by_tf: Dict[str, Sequence[dict]],
         "timeframes": facts,
         "missing_timeframes": missing,
         "sessions": sessions,
+        "confluence": _confluence(facts),
         "facts_note": FACTS_NOTE,
     }
