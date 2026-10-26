@@ -1477,5 +1477,208 @@ class CommandMenuPayloadTest(unittest.TestCase):
             self.assertRegex(entry["command"], r"^[a-z0-9_]{1,32}$")
 
 
+class SmcAlertFormatTests(unittest.TestCase):
+    """The pushed alert is compact but must not drop the honesty contract."""
+
+    def test_the_alert_carries_the_levels_and_the_direction(self):
+        smc = _smc()
+        text = bot.format_smc_alert(smc, smc["analysis"]["plans"][0])
+        self.assertIn("شراء", text)
+        self.assertIn("4122.5", text)
+        self.assertIn("4110", text)
+        self.assertIn("4148", text)
+
+    def test_the_alert_labels_the_confidence_as_an_estimate(self):
+        smc = _smc()
+        text = bot.format_smc_alert(smc, smc["analysis"]["plans"][0])
+        self.assertIn("58%", text)
+        self.assertIn("تقدير", text)
+
+    def test_the_alert_states_shadow_mode_and_no_execution(self):
+        smc = _smc()
+        text = bot.format_smc_alert(smc, smc["analysis"]["plans"][0])
+        self.assertIn("وضع الظل", text)
+        self.assertIn("لا تنفيذ", text)
+
+    def test_the_alert_carries_the_news_caution_when_set(self):
+        smc = _smc(news_caution=True, key_event="CPI")
+        text = bot.format_smc_alert(smc, smc["analysis"]["plans"][0])
+        self.assertIn("حذر إخباري", text)
+        self.assertIn("CPI", text)
+
+    def test_a_short_plan_is_labelled_as_a_sale(self):
+        plans = [{"direction": "SHORT", "entry": 4200.0, "stop": 4215.0,
+                  "targets": [4170.0], "target": 4170.0, "risk": 15.0,
+                  "reward": 30.0, "reward_risk": 2.0, "confidence": 0.7}]
+        smc = _smc(bias="SHORT", plans=plans)
+        text = bot.format_smc_alert(smc, plans[0])
+        self.assertIn("بيع", text)
+        self.assertIn("70%", text)
+
+
+class SmcWatchTests(unittest.TestCase):
+    def _plan(self, direction="LONG", entry=4122.5, stop=4110.0,
+              targets=(4135.0, 4148.0), confidence=0.58):
+        return {"direction": direction, "entry": entry, "stop": stop,
+                "targets": list(targets), "target": list(targets)[-1],
+                "risk": abs(entry - stop),
+                "reward": abs(list(targets)[-1] - entry),
+                "reward_risk": 2.0, "confidence": confidence}
+
+    def _read(self, *plans, bias="LONG", news_caution=False, key_event=""):
+        return _smc(bias=bias, plans=list(plans) or None,
+                    news_caution=news_caution, key_event=key_event)
+
+    def test_first_poll_primes_and_stays_silent(self):
+        watch = bot.SmcWatch()
+        self.assertEqual(watch.poll(self._read(self._plan())), [])
+
+    def test_a_confident_new_setup_is_pushed_once(self):
+        watch = bot.SmcWatch()
+        watch.poll(self._read(self._plan(entry=4122.5, stop=4110.0)))
+        out = watch.poll(self._read(self._plan(entry=4200.0, stop=4180.0,
+                                               targets=(4240.0,))))
+        self.assertEqual(len(out), 1)
+        self.assertIn("4200", out[0])
+
+    def test_the_same_setup_never_re_alerts(self):
+        watch = bot.SmcWatch()
+        watch.poll(self._read(self._plan()))
+        self.assertEqual(watch.poll(self._read(self._plan())), [])
+        self.assertEqual(watch.poll(self._read(self._plan())), [])
+
+    def test_a_plan_below_the_confidence_floor_is_never_pushed(self):
+        watch = bot.SmcWatch(min_confidence=0.6)
+        watch.poll(self._read(self._plan()))
+        out = watch.poll(self._read(self._plan(entry=4200.0, stop=4180.0,
+                                               targets=(4240.0,),
+                                               confidence=0.55)))
+        self.assertEqual(out, [])
+
+    def test_an_unscored_plan_is_never_pushed(self):
+        watch = bot.SmcWatch()
+        plan = self._plan(entry=4200.0, stop=4180.0, targets=(4240.0,))
+        del plan["confidence"]
+        watch.poll(self._read(self._plan()))
+        self.assertEqual(watch.poll(self._read(plan)), [])
+
+    def test_a_missing_analysis_is_never_announced(self):
+        watch = bot.SmcWatch()
+        watch.poll(self._read(self._plan()))
+        self.assertEqual(watch.poll(_smc(configured=False, analysis=False)), [])
+        self.assertEqual(watch.poll(_smc(rate_limited=True, analysis=False)), [])
+        self.assertEqual(watch.poll({}), [])
+        self.assertEqual(watch.poll(None), [])
+
+    def test_a_cent_move_is_not_news(self):
+        # The entry is the freshest close: it drifts by cents and the stop moves
+        # with it. That is the same setup being re-read, not a new one.
+        watch = bot.SmcWatch(material=0.5)
+        watch.poll(self._read(self._plan(entry=4122.5, stop=4110.0)))
+        self.assertEqual(
+            watch.poll(self._read(self._plan(entry=4122.9, stop=4110.4))), [])
+
+    def test_a_moved_structure_is_news(self):
+        watch = bot.SmcWatch(material=0.5)
+        watch.poll(self._read(self._plan(entry=4122.5, stop=4110.0,
+                                         targets=(4135.0, 4148.0))))
+        out = watch.poll(self._read(self._plan(entry=4122.5, stop=4120.0,
+                                               targets=(4160.0, 4180.0))))
+        self.assertEqual(len(out), 1)
+
+    def test_a_reversal_is_pushed_at_once(self):
+        watch = bot.SmcWatch(material=0.9)
+        watch.poll(self._read(self._plan()))
+        out = watch.poll(self._read(
+            self._plan(direction="SHORT", entry=4122.5, stop=4130.0,
+                       targets=(4100.0,)), bias="SHORT"))
+        self.assertEqual(len(out), 1)
+        self.assertIn("بيع", out[0])
+
+    def test_the_highest_confidence_plan_is_the_one_pushed(self):
+        watch = bot.SmcWatch(min_confidence=0.5)
+        watch.poll(self._read(self._plan(confidence=0.55)))
+        low = self._plan(entry=4100.0, stop=4090.0, targets=(4130.0,),
+                         confidence=0.55)
+        high = self._plan(entry=4200.0, stop=4180.0, targets=(4260.0,),
+                          confidence=0.9)
+        out = watch.poll(self._read(low, high))
+        self.assertEqual(len(out), 1)
+        self.assertIn("4200", out[0])
+        self.assertIn("90%", out[0])
+
+    def test_a_lone_low_confidence_plan_does_not_block_a_high_one(self):
+        watch = bot.SmcWatch(min_confidence=0.5)
+        watch.poll(self._read(self._plan(confidence=0.55)))
+        weak = self._plan(entry=4100.0, stop=4090.0, targets=(4130.0,),
+                          confidence=0.2)
+        strong = self._plan(entry=4200.0, stop=4180.0, targets=(4260.0,),
+                            confidence=0.8)
+        out = watch.poll(self._read(weak, strong))
+        self.assertEqual(len(out), 1)
+        self.assertIn("4200", out[0])
+
+    def test_due_is_false_before_the_interval_and_true_after(self):
+        watch = bot.SmcWatch(interval=900.0)
+        now = 1_000_000.0
+        self.assertTrue(watch.due(now))
+        watch.mark_read(now)
+        self.assertFalse(watch.due(now + 100))
+        self.assertFalse(watch.due(now + 899))
+        self.assertTrue(watch.due(now + 900))
+
+    def test_a_burst_of_re_reads_stays_silent(self):
+        watch = bot.SmcWatch(material=0.5)
+        watch.poll(self._read(self._plan(entry=4122.5, stop=4110.0,
+                                         targets=(4135.0, 4148.0))))
+        for i in range(1, 8):
+            self.assertEqual(
+                watch.poll(self._read(self._plan(
+                    entry=4122.5 + i * 0.1, stop=4110.0 + i * 0.1,
+                    targets=(4135.0 + i * 0.1, 4148.0 + i * 0.1)))), [])
+
+
+class SmcMonitorTests(unittest.TestCase):
+    """The monitor asks the engine only when the watch says it is due."""
+
+    def test_the_engine_is_read_at_most_once_per_interval(self):
+        smc = _smc()
+        api = FakeSmcApi(smc)
+        calls = {"n": 0}
+        original = api.smc_read
+
+        def counting_smc_read(refresh=False):
+            calls["n"] += 1
+            return original(refresh=refresh)
+
+        api.smc_read = counting_smc_read
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "subs.json")
+        sent = []
+
+        class FakeClient:
+            def send_message(self, chat_id, text, keyboard=False):
+                sent.append(text)
+
+        watch = bot.SmcWatch(interval=3600.0)
+        subs.add("1")
+        bot._check_smc(api, watch, subs, FakeClient())  # type: ignore[arg-type]
+        bot._check_smc(api, watch, subs, FakeClient())  # type: ignore[arg-type]
+        self.assertEqual(calls["n"], 1)
+
+    def test_an_unreachable_engine_is_silent(self):
+        api = FakeSmcApi(_smc(), available=False)
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "subs.json")
+        sent = []
+
+        class FakeClient:
+            def send_message(self, chat_id, text, keyboard=False):
+                sent.append(text)
+
+        watch = bot.SmcWatch(interval=0.0)
+        subs.add("1")
+        bot._check_smc(api, watch, subs, FakeClient())  # type: ignore[arg-type]
+        self.assertEqual(sent, [])
+
+
 if __name__ == "__main__":
     unittest.main()

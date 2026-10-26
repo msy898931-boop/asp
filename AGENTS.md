@@ -107,6 +107,33 @@ menu.
 Push alerts fire on health/bridge/new-signal transitions (first reading is
 primed silently) and when a user's price level is crossed.
 
+The SMC/ICT engine's read is also pushed, not only answered on demand:
+`SmcWatch` (in `astra_bot.py`) turns `/smc` into a push. It is the one watch
+whose source **spends model tokens**, so it is gated twice — by time and by
+confidence:
+
+- **Time.** `SmcWatch.due()` allows at most one engine read per
+  `ASTRA_SMC_ALERT_INTERVAL` (default **900s** → ≤96 reads/day). Without it the
+  15s monitor cycle would re-read the engine ~5,760 times a day. The engine
+  caches for its own TTL (`ASTRA_SMC_CACHE_TTL`, 60s), so a shorter interval
+  would only re-serve the cache.
+- **Confidence.** Only a plan the model *scored* at or above
+  `ASTRA_SMC_ALERT_MIN_CONFIDENCE` (default **0.5**) is pushed, and when several
+  qualify the highest wins (one push per read). An **unscored** plan is dropped,
+  never assumed confident — the honest default when the number is missing.
+  `/smc` still shows every plan.
+- **Materiality.** Same rule as the trade card: keyed on direction + stop +
+  targets (never the entry, which is the freshest close and drifts by cents), and
+  a same-direction re-read is only news when the structure moved by at least
+  `ASTRA_SMC_ALERT_MATERIAL` (default **0.5**) of one risk. A direction *flip* is
+  pushed at once.
+
+Set `ASTRA_SMC_ALERTS=0` (or `--no-smc-alerts`) to keep the engine on but silent.
+The push is read-only, labels the confidence an estimate, and carries the
+shadow-mode line like every other alert. Tests: `SmcWatchTests`,
+`SmcAlertFormatTests`, `SmcMonitorTests` in
+`bridge/telegram_bot/test_astra_bot.py`.
+
 The advisor's **trade card** is also pushed: `TradeCardWatch` polls
 `AstraApi.trade_card()` each cycle and alerts only when the card's identity
 (direction + stop/target) differs from the last one announced, so a setup
@@ -1553,6 +1580,17 @@ Two keys to remember:
   `openai/gpt-oss-120b`) on the **host** (Render dashboard; the blueprint marks
   it `sync: false`). `.env` holds a working key for local runs but is gitignored
   — never commit it, the repo is public.
+
+**`ASTRA_ADVISOR_PROVIDER` must name a provider, not be empty.** The code reads
+`os.environ.get("ASTRA_ADVISOR_PROVIDER", "groq")` — so an **unset** variable
+falls back to `groq`, but a variable that is **set to the empty string** (which
+is what a blueprint entry with `value: ""` does) resolves to `""`. `""` is in no
+`_KEY_ENV` entry, so `provider_key()` returns `""` and every model surface — the
+advisor, the AI engine **and the SMC engine** — answers `configured: false`
+("not configured") no matter which API keys are present. This was live in
+`render.yaml` and made the SMC engine look broken when it was only unconfigured.
+The blueprint now sets `value: "mistral"`; if you switch providers, change this
+variable to match the `*_API_KEY` you actually set.
 
 ### The economic calendar and the Arabic trade plan
 

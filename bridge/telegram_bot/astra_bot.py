@@ -125,6 +125,25 @@ CARD_ALERT_MATERIAL = float(os.environ.get("ASTRA_CARD_ALERT_MATERIAL", "0.5"))
 # structure. It exists for an operator who wants a hard ceiling regardless.
 CARD_ALERT_COOLDOWN = float(os.environ.get("ASTRA_CARD_ALERT_COOLDOWN", "0"))
 
+# ── the SMC/ICT push ────────────────────────────────────────────────────────
+# Reading the SMC engine asks the model for a fresh analysis, so the monitor
+# does not poll it on the ordinary cycle (that would be thousands of calls a
+# day). It reads at most once every SMC_ALERT_INTERVAL seconds and stays quiet
+# in between; the engine's own cache would otherwise serve the same read again.
+SMC_ALERT_INTERVAL = float(os.environ.get("ASTRA_SMC_ALERT_INTERVAL", "900"))
+
+# A plan is only pushed when the model's *own* confidence estimate clears this
+# floor. A plan the model left unscored is never pushed: "sure" cannot be
+# claimed without a number, and the operator can still read it with /smc.
+SMC_ALERT_MIN_CONFIDENCE = float(
+    os.environ.get("ASTRA_SMC_ALERT_MIN_CONFIDENCE", "0.5"))
+
+# The same materiality rule the trade card uses. On a live tape the levels drift
+# by cents with every closed bar, so a same-direction re-read is only news when
+# the structure moved by at least this much of one risk (stop-to-entry). A
+# change of direction is exempt — a reversal is pushed at once.
+SMC_ALERT_MATERIAL = float(os.environ.get("ASTRA_SMC_ALERT_MATERIAL", "0.5"))
+
 # How far ahead the pre-news prep plan is pushed. A high-impact US release moves
 # gold a median of ~$5.2 in the hour after it prints, but the direction is not
 # predictable (measured 40-58% agreement — a coin), so the push is a
@@ -1243,6 +1262,162 @@ class ForecastWatch:
         return ["🧭 تحضير قبل الخبر\n" + news_forecast.format_forecast(d)]
 
 
+class SmcWatch:
+    """Edge-triggered alerts when the SMC/ICT engine reads a *fresh* setup.
+
+    ``/smc`` is an on-demand read: the operator asks, the engine answers. This
+    watch turns the same read into a push, so a setup the engine finds is
+    delivered without the operator polling for it. Two rules keep it from
+    becoming noise:
+
+    * **Confidence floor.** Only a plan the model scored at or above
+      ``min_confidence`` is pushed. An unscored plan is dropped, not assumed
+      confident — the honest default when the number is missing. The full read,
+      scored or not, stays available through ``/smc``.
+    * **Materiality.** A plan is identified by its direction, stop and targets —
+      the levels a trader acts on, not the entry, which is the freshest close
+      and drifts by cents every bar. A same-direction re-read is only news when
+      the structure moved by at least ``material`` of one risk. A change of
+      direction is exempt: a reversal is pushed at once.
+
+    ``interval`` throttles how often the engine is asked at all. The engine
+    caches its read for its own TTL, so polling faster would only re-announce a
+    cached answer; a slower cadence is cheaper on the model's token quota, which
+    is the reason this watch exists rather than an ordinary poll.
+
+    Read-only, like everything else here: it announces levels, it never acts on
+    them, and it carries no execution authority.
+    """
+
+    def __init__(self, min_confidence: float = SMC_ALERT_MIN_CONFIDENCE,
+                 material: float = SMC_ALERT_MATERIAL,
+                 interval: float = SMC_ALERT_INTERVAL) -> None:
+        self._primed = False
+        self._last: Optional[tuple] = None
+        self._last_plan: Optional[Dict[str, Any]] = None
+        self._min_confidence = min_confidence
+        self._material = material
+        self._interval = interval
+        self._last_read = 0.0
+
+    def due(self, now: Optional[float] = None) -> bool:
+        """Whether enough time has passed to ask the engine again."""
+        now = time.time() if now is None else now
+        return (now - self._last_read) >= self._interval
+
+    def mark_read(self, now: Optional[float] = None) -> None:
+        """Record that the engine was just asked, starting the next interval."""
+        self._last_read = time.time() if now is None else now
+
+    @staticmethod
+    def _plan_key(plan: Dict[str, Any]) -> tuple:
+        targets = tuple(plan.get("targets") or ())
+        return (plan.get("direction"), plan.get("stop"), targets)
+
+    def _pick(self, smc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """The best pushable plan, or None when none clears the floor.
+
+        "Best" is the highest confidence: when the engine offers two setups the
+        operator should see the one it is most sure of, and a single push per
+        read keeps the channel quiet.
+        """
+        analysis = smc.get("analysis")
+        if not isinstance(analysis, dict):
+            return None
+        plans = analysis.get("plans") or []
+        scored: List[Dict[str, Any]] = []
+        for plan in plans:
+            if not isinstance(plan, dict):
+                continue
+            conf = plan.get("confidence")
+            if not isinstance(conf, (int, float)) or isinstance(conf, bool):
+                continue
+            if float(conf) < self._min_confidence:
+                continue
+            scored.append(plan)
+        if not scored:
+            return None
+        return max(scored, key=lambda p: float(p.get("confidence") or 0.0))
+
+    def _moved(self, plan: Dict[str, Any]) -> float:
+        """How far the structure moved since the last push, in units of risk.
+
+        The stop and the targets are the levels a trader acts on; the entry only
+        sets the scale. A re-read that nudges them by cents scores near zero and
+        is dropped; one that lifts the stop by most of a risk is announced.
+        """
+        if not self._last_plan:
+            return 1.0
+        old = self._last_plan
+        try:
+            risk = abs(float(plan["entry"]) - float(plan["stop"]))
+            if risk <= 0.0:
+                return 1.0
+            moved = abs(float(plan["stop"]) - float(old["stop"]))
+            for nt, ot in zip(plan.get("targets") or [], old.get("targets") or []):
+                moved = max(moved, abs(float(nt) - float(ot)))
+            return moved / risk
+        except (KeyError, TypeError, ValueError):
+            return 1.0
+
+    def poll(self, smc: Optional[Dict[str, Any]] = None,
+             now: Optional[float] = None) -> List[str]:
+        """Announce a fresh high-confidence setup, at most once per structure."""
+        if not smc:
+            return []
+        plan = self._pick(smc)
+        if not self._primed:
+            # Learn the current setup silently: one already open when the bot
+            # starts must not fire the moment it comes online.
+            self._last = self._plan_key(plan) if plan else None
+            self._last_plan = plan
+            self._primed = True
+            return []
+        if plan is None:
+            return []
+        key = self._plan_key(plan)
+        if key == self._last:
+            return []
+        reversed_direction = key[0] != (self._last or (None,))[0]
+        if not reversed_direction and self._moved(plan) < self._material:
+            # The structure must have actually moved; a same-setup re-read that
+            # only shifted the entry is not news.
+            return []
+        self._last = key
+        self._last_plan = plan
+        return [format_smc_alert(smc, plan)]
+
+
+def format_smc_alert(smc: Dict[str, Any], plan: Dict[str, Any]) -> str:
+    """Arabic push for a fresh SMC setup: the plan, then the honesty line.
+
+    Deliberately compact — a push is read on a lock screen, so it carries the
+    levels a trader acts on and the model's own confidence, and nothing else.
+    The full reasoning (market read, sweep, point of interest) stays behind
+    ``/smc``. Never claims a measured edge and never claims execution.
+    """
+    direction = _signal_ar(plan.get("direction"))
+    entry = _num(plan.get("entry"))
+    stop = _num(plan.get("stop"))
+    targets = plan.get("targets") or []
+    lines = [
+        "📐 فرصة SMC/ICT جديدة",
+        f"{direction} · دخول {entry}",
+        f"وقف {stop} · أهداف " + " ← ".join(_num(x) for x in targets),
+    ]
+    rr = plan.get("reward_risk")
+    if rr is not None:
+        lines.append(f"مخاطرة/مكافأة {rr}")
+    conf = plan.get("confidence")
+    if isinstance(conf, (int, float)) and not isinstance(conf, bool):
+        lines.append(f"ثقة الموديل (تقدير): {round(float(conf) * 100)}%")
+    if (smc.get("analysis") or {}).get("news_caution"):
+        event = str((smc.get("analysis") or {}).get("key_event") or "").strip()
+        lines.append("⚠️ حذر إخباري" + (f": {event}" if event else "."))
+    lines.append("وضع الظل: تقديرات الموديل، لا تنفيذ ولا أوامر.")
+    return "\n".join(lines)
+
+
 class TradeCardWatch:
     """Edge-triggered alerts when the advisor publishes a *new* trade card.
 
@@ -1361,7 +1536,8 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                     ent: Optional[Entitlements] = None,
                     vol_model: Optional[VolatilityModel] = None,
                     card_watch: Optional["TradeCardWatch"] = None,
-                    forecast_watch: Optional["ForecastWatch"] = None) -> None:
+                    forecast_watch: Optional["ForecastWatch"] = None,
+                    smc_watch: Optional["SmcWatch"] = None) -> None:
     engine = AlertEngine(api)
     engine.prime()
     watch = NewsWatch()
@@ -1404,6 +1580,11 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
                 _check_trade_card(api, card_watch, subs, client, news_context)
             except Exception as exc:  # noqa: BLE001
                 print(f"[warn] trade card: {exc}", file=sys.stderr)
+        if smc_watch is not None:
+            try:
+                _check_smc(api, smc_watch, subs, client, news_context)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[warn] smc watch: {exc}", file=sys.stderr)
 
 
 def _check_volatility(api: AstraApi, model: VolatilityModel,
@@ -1447,6 +1628,31 @@ def _check_trade_card(api: AstraApi, watch: "TradeCardWatch",
     except ApiError:
         return
     for alert in watch.poll(card):
+        if news_context:
+            alert = alert + "\n" + news_context
+        _broadcast(client, subs, alert)
+
+
+def _check_smc(api: AstraApi, watch: "SmcWatch",
+               subs: Subscriptions, client: TelegramClient,
+               news_context: Optional[str] = None) -> None:
+    """Read the SMC engine when due and push a fresh, confident setup.
+
+    Unlike the trade card this read spends the model's token quota, so it is
+    gated by ``watch.due()``: the engine is asked at most once per
+    ``ASTRA_SMC_ALERT_INTERVAL``, not on every monitor cycle. An engine that is
+    off, unconfigured, rate-limited or rejected answers without an analysis, and
+    the watch stays silent — there is nothing to announce and the operator can
+    still ask with ``/smc``.
+    """
+    if not watch.due():
+        return
+    watch.mark_read()
+    try:
+        smc = api.smc_read()
+    except ApiError:
+        return
+    for alert in watch.poll(smc):
         if news_context:
             alert = alert + "\n" + news_context
         _broadcast(client, subs, alert)
@@ -1504,6 +1710,19 @@ def parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
     p.add_argument("--no-forecast-alerts", action="store_true",
                    default=os.environ.get("ASTRA_FORECAST_ALERTS", "1") == "0",
                    help="disable the pre-news prep push")
+    p.add_argument("--no-smc-alerts", action="store_true",
+                   default=os.environ.get("ASTRA_SMC_ALERTS", "1") == "0",
+                   help="disable the push for fresh SMC/ICT setups")
+    p.add_argument("--smc-alert-interval", type=float,
+                   default=SMC_ALERT_INTERVAL,
+                   help="seconds between SMC engine reads (default: 900)")
+    p.add_argument("--smc-alert-min-confidence", type=float,
+                   default=SMC_ALERT_MIN_CONFIDENCE,
+                   help="lowest model confidence worth pushing (default: 0.5)")
+    p.add_argument("--smc-alert-material", type=float,
+                   default=SMC_ALERT_MATERIAL,
+                   help="minimum structure move, in units of risk, for a "
+                        "same-direction SMC alert (default: 0.5)")
     return p.parse_args(argv)
 
 
@@ -1543,6 +1762,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     card_watch = None if args.no_card_alerts else TradeCardWatch(
         args.card_alert_cooldown, args.card_alert_material)
     forecast_watch = None if args.no_forecast_alerts else ForecastWatch()
+    smc_watch = None if args.no_smc_alerts else SmcWatch(
+        args.smc_alert_min_confidence, args.smc_alert_material,
+        args.smc_alert_interval)
 
     for sig in (_signal.SIGINT, _signal.SIGTERM):
         _signal.signal(sig, lambda *_: _stop.set())
@@ -1576,7 +1798,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     monitor = threading.Thread(target=monitor_backend,
                                args=(api, subs, client, args.interval, levels, ent,
-                                     vol_model, card_watch, forecast_watch),
+                                     vol_model, card_watch, forecast_watch, smc_watch),
                                daemon=True)
     monitor.start()
     try:
