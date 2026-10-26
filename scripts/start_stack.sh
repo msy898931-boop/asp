@@ -21,6 +21,7 @@ API_PORT=8790
 BRIDGE_PORT=8791
 ADVISOR_PORT=8792
 ENGINE_PORT=8794
+SMC_PORT=8795
 TRACKER_PORT=8793
 RUNDIR="$ROOT/run"
 mkdir -p "$RUNDIR"
@@ -144,6 +145,35 @@ else
         echo "[start] ai engine launched on :$ENGINE_PORT (pid $!) - provider $_prov, configured"
     else
         echo "[start] ai engine launched on :$ENGINE_PORT (pid $!) - provider $_prov, not configured (set $_keyname)"
+    fi
+fi
+
+# --- SMC engine (isolated, opt-in) ---------------------------------------
+# A third isolated analyst: it computes a deterministic SMC/ICT fact sheet
+# (structure, liquidity, fair-value gaps, order blocks) from closed bars and
+# asks the model to reason over it. Its own process and port, separate from the
+# advisor and the AI engine; it never touches the engine or the ledger. Off by
+# default; opt in with ASTRA_ENABLE_SMC=1 and out with ASTRA_DISABLE_SMC=1.
+if [ "${ASTRA_DISABLE_SMC:-0}" = "1" ]; then
+    echo "[start] smc engine disabled (ASTRA_DISABLE_SMC=1)"
+elif [ "${ASTRA_ENABLE_SMC:-0}" != "1" ]; then
+    echo "[start] smc engine off (set ASTRA_ENABLE_SMC=1 to enable)"
+elif alive "$(pid_of smc)"; then
+    echo "[start] smc engine already running (pid $(pid_of smc))"
+else
+    setsid nohup python3 "$ROOT/advisor/smc_engine.py" --port "$SMC_PORT" \
+        > "$RUNDIR/smc.log" 2>&1 < /dev/null &
+    echo $! > "$RUNDIR/smc.pid"
+    _prov="${ASTRA_ADVISOR_PROVIDER:-groq}"
+    case "$_prov" in
+        gemini)  _key="${GEMINI_API_KEY:-}";  _keyname="GEMINI_API_KEY" ;;
+        mistral) _key="${MISTRAL_API_KEY:-}"; _keyname="MISTRAL_API_KEY" ;;
+        *)       _key="${GROQ_API_KEY:-}";    _keyname="GROQ_API_KEY" ;;
+    esac
+    if [ -n "$_key" ]; then
+        echo "[start] smc engine launched on :$SMC_PORT (pid $!) - provider $_prov, configured"
+    else
+        echo "[start] smc engine launched on :$SMC_PORT (pid $!) - provider $_prov, not configured (set $_keyname)"
     fi
 fi
 

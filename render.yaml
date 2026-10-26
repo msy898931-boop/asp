@@ -26,6 +26,17 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false          # free Groq key; enables the AI advisor tab. Empty = "not configured"
+      - key: MISTRAL_API_KEY
+        sync: false          # alternative provider key (EU-hosted free tier). Sign-up
+                             # is not region-locked, so this is the fallback when
+                             # Groq/Gemini refuse to issue a key from your region.
+      - key: ASTRA_ADVISOR_PROVIDER
+        value: ""            # groq (default), gemini or mistral. Must name the
+                             # provider whose *_API_KEY above is actually set.
+      - key: ASTRA_ENABLE_SMC
+        value: ""            # "1" turns the isolated SMC/ICT analysis engine on.
+                             # Empty/off by default; the engine stays dormant and
+                             # /smc answers "not available" until this is set.
       - key: VAPID_PUBLIC_KEY
         sync: false          # free, generated locally; both empty = Web Push off (in-app alerts only)
       - key: VAPID_PRIVATE_KEY

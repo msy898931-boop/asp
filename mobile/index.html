@@ -264,6 +264,20 @@
     <button id="eng-refresh" class="text-btn" type="button" data-i18n="ai_refresh">Ask again</button>
   </section>
 
+  <!-- SMC/ICT ENGINE (isolated, unvalidated) -->
+  <section class="panel" id="view-smc" hidden>
+    <h2 class="panel-title" data-i18n="smc_title">SMC / ICT analysis</h2>
+    <p class="panel-note ai-warn" data-i18n="smc_warn">Smart Money Concepts read: market structure, liquidity sweeps, fair-value gaps and order blocks computed from closed bars, then reasoned over by an external model. Outside the validated system, unvalidated. Not financial advice.</p>
+    <div class="ai-stance-row">
+      <span class="ai-stance" id="smc-bias">--</span>
+      <span class="ai-conf" id="smc-status"></span>
+    </div>
+    <p class="ai-thesis" id="smc-read"></p>
+    <div id="smc-plans"></div>
+    <p class="ai-review" id="smc-meta"></p>
+    <button id="smc-refresh" class="text-btn" type="button" data-i18n="ai_refresh">Ask again</button>
+  </section>
+
   <!-- VOLATILITY -->
   <section class="panel" id="view-vol" hidden>
     <h2 class="panel-title" data-i18n="vol_title">Volatility filter</h2>
@@ -327,6 +341,7 @@
   <button class="tab" data-view="tracker" type="button" data-i18n="tab_tracker">Signals</button>
   <button class="tab" data-view="ai" type="button" data-i18n="tab_ai">AI</button>
   <button class="tab" data-view="engine" type="button" data-i18n="tab_engine">Analysis</button>
+  <button class="tab" data-view="smc" type="button" data-i18n="tab_smc">SMC</button>
   <button class="tab" data-view="conn" type="button" data-i18n="tab_conn">Data</button>
   <button class="tab" data-view="bridge" type="button" data-i18n="tab_bridge">Bridge</button>
 </div>
@@ -352,6 +367,7 @@
 <script src="vol.js"></script>
 <script src="akoan.js"></script>
 <script src="engine.js"></script>
+<script src="smc.js"></script>
 <script src="ticker.js"></script>
 </body>
 </html>

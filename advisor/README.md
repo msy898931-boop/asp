@@ -128,6 +128,48 @@ suppressing it.
 | `GET /v1/engine` | Current engine read (cached). `?refresh=1` forces a new one. |
 | `GET /health` | Liveness and whether a key is configured. |
 
+## SMC/ICT engine (`smc_engine.py`)
+
+A third isolated analyst for a **Smart Money Concepts / Inner Circle Trader**
+read. It is split in two, so the model interprets numbers it did not invent:
+
+- **`smc_read.py` — the fact module.** Deterministic, closed-bar only. It
+  computes swing pivots, market structure (BOS and CHoCH), liquidity pools
+  (equal highs/lows) and **sweeps** (a wick beyond a level that closes back
+  inside — a stop-hunt, not a break), fair-value gaps, order blocks, and
+  premium/discount against the recent range, plus session ranges (Asian, London,
+  New York) from bar timestamps. No network, no model, no wall clock: same bars
+  in, same numbers out.
+- **`smc_engine.py` — the engine.** Hands that fact sheet to the same external
+  model and asks it only to interpret it — which structure is in play, where the
+  point of interest is, and what setup follows. The model never authors a price.
+
+It is isolated exactly like the advisor and the AI engine: its own process on
+port 8795, its own log (`run/smc_engine_plans.jsonl`), loopback reads only, no
+ledger write, no order. Every reply is `validated: false` and each plan carries
+`confidence_validated: false`. Before a plan is shown, `validate_plan` checks it
+is coherent — stop on the losing side, targets in travel order, first target
+beyond the entry, and reward:risk at or above `MIN_RR` (**2.0**, the
+methodology's own floor). An incoherent plan is **dropped with its reason**
+(`rejected`), never repaired.
+
+```bash
+# One read, printed to the terminal:
+GROQ_API_KEY=gsk_... python3 advisor/smc_engine.py --once
+
+# Serve it:
+GROQ_API_KEY=gsk_... python3 advisor/smc_engine.py --port 8795
+```
+
+Started by `scripts/start_stack.sh` only when `ASTRA_ENABLE_SMC=1`; opt out with
+`ASTRA_DISABLE_SMC=1`. `ASTRA_SMC_TIMEFRAMES` narrows which frames the fact
+sheet is computed over (empty = all).
+
+| Route | Meaning |
+| --- | --- |
+| `GET /v1/smc` | Current SMC read (cached). `?refresh=1` forces a new one. |
+| `GET /health` | Liveness and whether a key is configured. |
+
 ## Endpoints
 
 | Route | Meaning |

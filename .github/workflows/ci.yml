@@ -63,7 +63,7 @@ jobs:
 
       - name: Syntax-check the phone app
         run: |
-          for f in app i18n panels advisor tracker alerts vol akoan ticker; do
+          for f in app i18n panels advisor tracker alerts vol akoan engine smc ticker; do
             node --check "mobile/$f.js"
           done
           node --check mobile/sw.js

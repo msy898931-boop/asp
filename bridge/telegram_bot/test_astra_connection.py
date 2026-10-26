@@ -170,6 +170,44 @@ class _EngineHandler(BaseHTTPRequestHandler):
 
 
 @_quiet
+class _SmcHandler(BaseHTTPRequestHandler):
+    """The SMC engine's routes: the read envelope, and liveness."""
+
+    def do_GET(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.endswith("/smc"):
+            body = {"smc": {
+                "schema_version": "1.0", "symbol": "XAUUSD", "validated": False,
+                "provider": "mistral", "configured": True, "model": "m",
+                "framework": "SMC/ICT", "snapshot": {"price": 4122.0},
+                "analysis": {
+                    "market_read": "بنية صاعدة مع مسح سيولة أسفل القاع.",
+                    "bias": "LONG", "news_caution": False, "key_event": "",
+                    "plans": [{
+                        "direction": "LONG", "entry": 4122.5, "stop": 4110.0,
+                        "targets": [4135.0, 4148.0], "target": 4148.0,
+                        "reward_risk": 2.04, "confidence": 0.58,
+                        "sweep": "قاع متساوٍ عند 4112",
+                        "poi": "بلوك أوامر عند 4115",
+                        "confidence_validated": False,
+                    }],
+                    "rejected": [],
+                },
+                "note": "SMC/ICT analysis engine output.",
+            }}
+        elif parsed.path.endswith("/health"):
+            body = {"service": "smc-engine", "status": "OK"}
+        else:
+            body = {"error": "unknown route"}
+        raw = json.dumps(body).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+
+@_quiet
 class _FakeTelegramHandler(BaseHTTPRequestHandler):
     """A recording stand-in for api.telegram.org.
 
@@ -221,11 +259,14 @@ class ConnectionTest(unittest.TestCase):
         self.addCleanup(self.advisor.close)
         self.engine = _Server(_EngineHandler)
         self.addCleanup(self.engine.close)
+        self.smc = _Server(_SmcHandler)
+        self.addCleanup(self.smc.close)
         self.api = AstraApi(
             base_url=self.backend.url("/api/v1"),
             bridge_base=self.bridge.url("/v1"),
             advisor_base=self.advisor.url("/v1"),
             engine_base=self.engine.url("/v1"),
+            smc_base=self.smc.url("/v1"),
         )
         self.state = tempfile.mkdtemp(prefix="astra-conn-")
         self.addCleanup(shutil.rmtree, self.state, True)
@@ -344,6 +385,43 @@ class ConnectionTest(unittest.TestCase):
                        advisor_base=self.advisor.url("/v1"),
                        engine_base=slow.url("/v1"))
         self.assertEqual(api.engine_read()["provider"], "mistral")
+
+    # -- the SMC engine over the real transport ----------------------------
+
+    def test_smc_read_reads_the_smc_envelope(self):
+        # The SMC engine wraps its read as {"smc": ...} on its own port; a
+        # client that read the engine envelope would never find it.
+        smc = self.api.smc_read()
+        self.assertEqual(smc["provider"], "mistral")
+        self.assertEqual(smc["framework"], "SMC/ICT")
+        self.assertEqual(smc["analysis"]["bias"], "LONG")
+
+    def test_a_missing_smc_engine_is_an_error_not_an_invented_read(self):
+        from astra_api import ApiError
+        api = AstraApi(base_url=self.backend.url("/api/v1"),
+                       bridge_base=self.bridge.url("/v1"),
+                       advisor_base=self.advisor.url("/v1"),
+                       engine_base=self.engine.url("/v1"),
+                       smc_base=f"http://127.0.0.1:{_free_port()}/v1")
+        with self.assertRaises(ApiError):
+            api.smc_read()
+
+    def test_smc_command_renders_the_live_engine(self):
+        reply = self._router().handle("123", "/smc")
+        self.assertIn("شراء", reply)
+        self.assertIn("4122.5", reply)
+        self.assertIn("وضع الظل", reply)  # the shadow-mode disclaimer
+
+    def test_smc_command_degrades_when_the_engine_is_gone(self):
+        api = AstraApi(base_url=self.backend.url("/api/v1"),
+                       bridge_base=self.bridge.url("/v1"),
+                       advisor_base=self.advisor.url("/v1"),
+                       engine_base=self.engine.url("/v1"),
+                       smc_base=f"http://127.0.0.1:{_free_port()}/v1")
+        router = CommandRouter(
+            api, Subscriptions(Path(self.state) / "s.json"), None)
+        reply = router.handle("123", "/smc")
+        self.assertIn("غير متاح", reply)  # reported, not crashed
 
     # -- the commands, end to end ------------------------------------------
 
