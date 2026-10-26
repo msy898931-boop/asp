@@ -474,7 +474,11 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   does not change that. The write-up is
   `research/reports/smc_zone_study.md`. This is the same honesty the `akoan`
   engine applies to itself: the school is shipped as a reading, and the reading
-  is now measured rather than assumed.
+  is now measured rather than assumed. The frame is a knob (`--tf`), not an
+  assumption: `--tf H1` re-runs the identical method on a slower tape and lands
+  on the same verdict (`research/reports/smc_zone_study_h1.md`), so
+  `NO_EDGE_MEASURED` is a property of the zones, not of the frame they were read
+  on. M15 stays the frame in production, and the default run is unchanged.
 - **The measured record is carried, not just written down** (`smc_engine.py`).
   Because the study now exists, the engine embeds its verdict as
   `MEASURED_RECORD` and passes it to the model as `engine_measured_record` and
