@@ -38,6 +38,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import ai_advisor
+import playbook
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -120,6 +121,14 @@ _SYSTEM_PROMPT = (
     "anchored, or when no coherent trade exists; say why in market_read. Do not "
     "force a trade that the numbers do not support, but do not default to "
     "NEUTRAL out of caution either.\n"
+    "- The snapshot carries a playbook: named schools (trend following, "
+    "counter-trend fade, post-release momentum, release+trend confluence, "
+    "regime-filtered trend) each with the record the project measured on real "
+    "data. Say which school a trade belongs to in its rationale, using the "
+    "school's plain name. The playbook's measured numbers are the project's "
+    "findings, not yours to restate as your own win_rate: if a school's record "
+    "does not clear the gate, you may still give the trade, but say the school "
+    "is unproven rather than implying an edge.\n"
     "- This is analysis for a research tool, not advice. Do not promise "
     "returns.\n"
     "Reply with JSON only, keys: market_read (two or three Arabic sentences "
@@ -206,6 +215,7 @@ def _prompt_view(snapshot: dict) -> dict:
         "timeframes": snapshot["timeframes"],
         "missing_timeframes": snapshot["missing_timeframes"],
         "rule_card": snapshot["rule_card"],
+        "playbook": playbook.catalogue(),
         "news": snapshot["news"],
         "events": snapshot["events"],
     }
@@ -383,6 +393,101 @@ def _rule_atr(snapshot: dict) -> float | None:
     return None
 
 
+def _regime_proxy(read: dict) -> str:
+    """A regime label from an M15 read, using the replay's own slope threshold.
+
+    The read carries ``ema_fast``/``ema_slow`` and a ``structure`` vote, which
+    together are the replay's trend test; it does not carry volatility, so this
+    proxy never reports VOLATILE. It is named a proxy for exactly that reason:
+    a trade labelled TRENDING_UP here means the trend test passed, not that the
+    replay's full regime (volatility included) agreed.
+    """
+    fast = _as_float(read.get("ema_fast"))
+    slow = _as_float(read.get("ema_slow"))
+    if not fast or not slow:
+        return ""
+    slope = (fast - slow) / slow
+    structure = read.get("structure")
+    if abs(slope) < playbook.TREND_SLOPE_THRESHOLD:
+        return "RANGING"
+    up = slope > 0
+    agrees = (up and isinstance(structure, int) and structure > 0) or (
+        not up and isinstance(structure, int) and structure < 0)
+    if agrees:
+        return "TRENDING_UP" if up else "TRENDING_DOWN"
+    return "RANGING"
+
+
+def _school_context(trade: dict, snapshot: dict) -> dict:
+    """The playbook context for a model trade, from facts the engine already has.
+
+    The playbook is scored on the *rule* engine's context rows, so a model trade
+    is mapped onto the same shape: the M15 read gives the regime proxy, RSI and
+    the ATR scale, the trade gives the direction, and the H4 read gives
+    alignment. Nothing here is invented; a field the engine cannot supply is
+    simply absent and the corresponding school will not fire.
+    """
+    m15 = snapshot["timeframes"].get("M15") or {}
+    h4 = snapshot["timeframes"].get("H4") or {}
+    direction = str(trade.get("direction") or "").upper()
+    context: dict = {
+        "direction": direction,
+        "regime": _regime_proxy(m15),
+        "rsi": m15.get("rsi"),
+        "atr_pct": (m15.get("atr") or 0.0) / trade["entry"] if trade.get("entry") else 0.0,
+    }
+    h4_dir = h4.get("direction")
+    if h4_dir in ("LONG", "SHORT") and direction in ("LONG", "SHORT"):
+        context["h4_align"] = "ALIGNED" if h4_dir == direction else "AGAINST"
+    # The research's "after a release" window is two hours. The calendar keeps
+    # events from one hour in the past onward (``fetch_calendar`` drops anything
+    # older), so the live engine can only see a release up to ~1h old — a
+    # narrower window than the school was measured on, which the school's
+    # ``scope`` says. A high-impact event just fired sets recent_release.
+    for event in snapshot.get("events") or []:
+        in_hours = event.get("in_hours")
+        if isinstance(in_hours, (int, float)) and -2.0 <= in_hours <= 0.0:
+            context["recent_release"] = True
+            break
+    return context
+
+
+def _playbook_label(trade: dict, snapshot: dict) -> dict:
+    """Which named school this trade belongs to, and that school's real record.
+
+    The label is description, not endorsement: it names the strategy and quotes
+    the measured record the research produced. A school whose record does not
+    clear the gate is reported as such, so the model's ``win_rate`` claim is
+    never mistaken for the school's measurement.
+    """
+    context = _school_context(trade, snapshot)
+    school = playbook.primary(context)
+    label: dict = {"context": context, "school": None, "measured": None,
+                   "note": "no named school matches this trade"}
+    if school is not None:
+        label["school"] = school.key
+        label["school_name"] = school.name
+        label["school_name_ar"] = school.name_ar
+        label["school_family"] = school.school
+        label["school_family_ar"] = school.family_ar
+        label["thesis"] = school.thesis
+        label["measured"] = school.measured
+        if school.measured and school.measured.get("clears_gate"):
+            label["note"] = "school's measured record clears the promotion gate"
+        elif school.measured:
+            label["note"] = ("school's measured record does NOT clear the gate: "
+                             + str(school.measured.get("why_not", "")))
+            m = school.measured
+            label["note_ar"] = (
+                "المدرسة «%s»: النتيجة المقيسة على بيانات حقيقية n=%s، نسبة نجاح "
+                "%s%%، R/صفقة %s — لم تجتز بوابة الترقية."
+                % (school.name_ar or school.name, m.get("n"),
+                   m.get("win_pct"), m.get("r_per_trade")))
+        else:
+            label["note"] = "school not scored yet"
+    return label
+
+
 def assemble(snapshot: dict, parsed: dict) -> dict:
     """Attach the anchor checks and the honest stamps to a parsed reply."""
     card = snapshot.get("rule_card")
@@ -390,6 +495,7 @@ def assemble(snapshot: dict, parsed: dict) -> dict:
     price = snapshot.get("price")
     for trade in parsed["trades"]:
         trade["anchor"] = _anchor_check(trade, card, atr)
+        trade["playbook"] = _playbook_label(trade, snapshot)
         if price is not None:
             trade["distance_from_price"] = round(trade["entry"] - price, 2)
     parsed["engine"] = {
@@ -397,9 +503,13 @@ def assemble(snapshot: dict, parsed: dict) -> dict:
         "timeframes_read": sorted(snapshot["timeframes"]),
         "timeframes_missing": snapshot["missing_timeframes"],
         "rule_card": card,
+        "playbook": playbook.catalogue(),
+        "playbook_clears_gate": playbook.clears_gate_count(),
         "note": ("AI analysis engine, isolated from the validated pipeline. "
-                 "Trades and win-rates are the model's own estimates, not "
-                 "measured edges. Shadow analysis only: no orders are placed."),
+                 "Each trade is labelled with its playbook school and that "
+                 "school's measured record from the real replay. The model's "
+                 "win_rate is its own estimate, not the measured rate. Shadow "
+                 "analysis only: no orders are placed."),
     }
     return parsed
 
@@ -469,8 +579,10 @@ class Engine:
 
         result["analysis"] = assemble(snapshot, parsed)
         result["model"] = ai_advisor.answered_model() or result["model"]
-        result["note"] = ("AI analysis engine output. Trades and win-rates are "
-                          "the model's estimates, produced outside the validated "
+        result["note"] = ("AI analysis engine output. Each trade is labelled "
+                          "with its playbook school and that school's measured "
+                          "record; the model's win-rate is its own estimate, "
+                          "not a measured edge. Produced outside the validated "
                           "pipeline. Shadow analysis only, not financial advice.")
         append_log({
             "generated_at_utc": result["generated_at_utc"],
@@ -479,6 +591,8 @@ class Engine:
             "bias": parsed["bias"],
             "trade_count": len(parsed["trades"]),
             "trades": parsed["trades"],
+            "schools": [t.get("playbook", {}).get("school")
+                        for t in result["analysis"]["trades"]],
             "provider": ai_advisor.PROVIDER,
             "model": ai_advisor.answered_model() or ai_advisor.active_model(),
         })
@@ -512,6 +626,15 @@ def _print_once(result: dict) -> None:
             " ← ".join(str(x) for x in t["targets"]), t["reward_risk"]))
         if t["rationale"]:
             print("   %s" % t["rationale"])
+        pb = t.get("playbook") or {}
+        if pb.get("school"):
+            m = pb.get("measured") or {}
+            print("   playbook: %s (%s) · measured n=%s win=%s%% R/trade=%s · %s"
+                  % (pb["school_name"], pb["school_family"],
+                     m.get("n", "?"), m.get("win_pct", "?"),
+                     m.get("r_per_trade", "?"), pb["note"]))
+        elif pb:
+            print("   playbook: %s" % pb.get("note", "no school"))
         if not t["anchor"]["anchored"]:
             print("   ⚠ %s" % t["anchor"]["note"])
     for bad in analysis["rejected"]:

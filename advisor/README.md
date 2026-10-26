@@ -123,6 +123,51 @@ the card through anyway, with the opposition recorded as
 `card.structural_warning` and shown in the Arabic card text, instead of
 suppressing it.
 
+**The playbook, and where the win-rate number comes from.** A model's `win_rate`
+is a claim; it is `win_rate_validated: false` everywhere and must never be read
+as an edge. To give the user a number that *was* measured, the engine now
+carries a **playbook** (`advisor/playbook.py`): a catalogue of named trading
+schools, each written as an explicit rule over facts the engine already has
+(higher-timeframe alignment, regime, RSI, and whether a high-impact release
+fired within two hours). Each school quotes the record the project's own
+research measured by replaying the real Dukascopy M15 book (2021-2025, 7084
+resolved trades) through `tracker/replay.py` and scoring it with
+`tracker/validation_gate.py`.
+
+Every trade the engine returns is labelled with the school it belongs to and
+that school's measured record — win rate, net R per trade, sample size, and
+whether it cleared the promotion gate. The label is description, not
+endorsement: **no school in the catalogue clears the gate**, and the engine says
+so in the trade's `playbook.note` rather than implying an edge. The whole
+catalogue is also on the reply under `engine.playbook`, and
+`engine.playbook_clears_gate` is the count that did clear (currently 0).
+
+```bash
+# Print the catalogue and its measured records:
+python3 advisor/playbook.py
+```
+
+The schools, and what the real replay measured. The numbers are copied
+verbatim from `research/features_real/rule_report.txt` and `study_report.txt`;
+"all years" rows come from the rule report, "in-sample" rows from the study
+report (which splits at 2024):
+
+| School | Rule | Measured | OOS R/trade | Gate |
+| --- | --- | --- | --- | --- |
+| Trend following | H4 aligned with the M15 direction | all years 36.9% win, R/trade −0.062 (n=3210) | −0.041 | reject |
+| Counter-trend fade | H4 against the M15 direction | in-sample 35.0% win, R/trade −0.152 (n=1460) | −0.066 | reject |
+| Post-release momentum | within 2h of a high-impact release | all years 40.1% win, R/trade +0.056 (n=409) | +0.043 | reject |
+| Release + trend confluence | H4 aligned AND within 2h of a release | all years 43.8% win, R/trade +0.117 (n=208) | +0.046 | reject |
+| Regime-filtered trend | M15 regime is TRENDING_UP/DOWN | in-sample 35.9% win, R/trade −0.111 (n=1306) | −0.055 | reject |
+
+The baseline book for reference: 36.2% win, R/trade −0.080. The confluence
+school is the strongest candidate (in-sample n=140, R/trade +0.188, permutation
+p=0.0067) but its in-sample Wilson lower bound (39.1%) still misses break-even
+(39.9%) and the sample is small, so it is a "revisit with more data", not a
+green light. The measured table lives in `advisor/playbook.py`; a test
+(`advisor/test_playbook.py`) re-reads the two reports and fails if any number
+drifts, so the catalogue cannot quietly diverge from the research.
+
 | Route | Meaning |
 | --- | --- |
 | `GET /v1/engine` | Current engine read (cached). `?refresh=1` forces a new one. |

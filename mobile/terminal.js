@@ -164,6 +164,7 @@ const STRINGS = {
     eng_refresh: "اسأل مرة أخرى",
     eng_winrate: "نسبة النجاح (تقديرية)",
     eng_winrate_est: "{p}% (تقديري)",
+    eng_playbook: "المدرسة", eng_playbook_measured: "القياس: عدد={n}، نجاح {w}%، R/صفقة {r}",
     eng_no_trades: "ما في صفقة نظامية بهالقراءة.",
     eng_timeframes: "الفريمات المقروءة", eng_news_used: "استخدم الأخبار",
     eng_rejected: "{n} صفقة مُستبعدة لعدم اتساقها",
@@ -314,6 +315,7 @@ const STRINGS = {
     eng_refresh: "Ask again",
     eng_winrate: "Win-rate (est.)",
     eng_winrate_est: "{p}% (estimate)",
+    eng_playbook: "School", eng_playbook_measured: "Measured: n={n}, win={w}%, R/trade={r}",
     eng_no_trades: "No coherent trade this read.",
     eng_timeframes: "Frames read", eng_news_used: "News used",
     eng_rejected: "{n} trade(s) dropped as incoherent",
@@ -1285,6 +1287,23 @@ function engTradeCard(t, index) {
     note.className = "eng-rationale";
     note.textContent = t.rationale;
     card.appendChild(note);
+  }
+  if (t.playbook && t.playbook.school) {
+    const pb = t.playbook;
+    const block = document.createElement("div");
+    block.className = "eng-playbook";
+    const m = pb.measured || {};
+    const name = pb.school_name_ar || pb.school_name || pb.school;
+    const head = document.createElement("div");
+    head.className = "eng-playbook-school";
+    head.textContent = T("eng_playbook") + ": " + name;
+    const meas = document.createElement("div");
+    meas.className = "eng-playbook-measured";
+    meas.textContent = T("eng_playbook_measured")
+      .replace("{n}", String(m.n)).replace("{w}", String(m.win_pct))
+      .replace("{r}", String(m.r_per_trade));
+    block.append(head, meas);
+    card.appendChild(block);
   }
   if (t.anchor && t.anchor.anchored === false && t.anchor.note) {
     const warn = document.createElement("div");

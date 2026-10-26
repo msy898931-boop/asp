@@ -898,6 +898,13 @@ html[dir="rtl"] .ai-events li::before { left: auto; right: 0; }
 .eng-anchor {
   margin-top: .35rem; font-size: .8rem; color: var(--gold, #c9a24b);
 }
+.eng-playbook {
+  margin-top: .45rem; padding-top: .4rem; font-size: .82rem;
+  border-top: 1px solid rgba(148, 163, 184, .18);
+  color: var(--muted, #6b7280);
+}
+.eng-playbook-school { font-weight: 600; color: var(--text, inherit); }
+.eng-playbook-measured { margin-top: .15rem; }
 .eng-empty {
   margin: .6rem 0 0; font-size: .88rem; color: var(--muted, #6b7280);
 }
