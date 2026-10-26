@@ -1214,6 +1214,53 @@ class FakeEngineApi(FakeApi):
         return self._engine
 
 
+def _smc(configured=True, rate_limited=False, bias="LONG",
+         market_read="بنية صاعدة مع مسح سيولة أسفل القاع.", plans=None,
+         key_event="", news_caution=False, analysis=True, provider="mistral",
+         model="m"):
+    """An SMC envelope shaped exactly as smc_engine.py emits it."""
+    if plans is None:
+        plans = [{
+            "direction": "LONG", "entry": 4122.5, "stop": 4110.0,
+            "targets": [4135.0, 4148.0], "target": 4148.0,
+            "risk": 12.5, "reward": 25.5, "reward_risk": 2.04,
+            "confidence": 0.58, "rationale": "CHoCH صاعد",
+            "sweep": "قاع متساوٍ عند 4112", "poi": "بلوك أوامر عند 4115",
+            "confidence_validated": False,
+        }]
+    env = {
+        "schema_version": "1.0", "symbol": "XAUUSD", "validated": False,
+        "source": "smc-engine (isolated)", "provider": provider,
+        "framework": "SMC/ICT",
+        "configured": configured, "model": model if configured else None,
+        "snapshot": {"price": 4122.0, "facts": {}},
+        "analysis": None,
+    }
+    if rate_limited:
+        env["rate_limited"] = True
+        env["note"] = "SMC engine paused: the provider's daily quota is spent."
+    elif configured and analysis:
+        env["analysis"] = {
+            "market_read": market_read, "bias": bias, "plans": plans,
+            "rejected": [], "news_caution": news_caution, "key_event": key_event,
+        }
+        env["note"] = "SMC/ICT analysis engine output."
+    return env
+
+
+class FakeSmcApi(FakeApi):
+    """A fake backend whose SMC engine returns a canned read (or is down)."""
+
+    def __init__(self, smc, available=True):
+        super().__init__(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY,
+                         available=available)
+        self._smc = smc
+
+    def smc_read(self, refresh=False):
+        self._maybe_raise()
+        return self._smc
+
+
 class EngineFormatTests(unittest.TestCase):
     def test_a_trade_carries_the_exact_levels_and_direction(self):
         text = bot.format_engine(_engine())
@@ -1300,6 +1347,103 @@ class EngineCommandTests(unittest.TestCase):
 
     def test_the_menu_lists_the_engine_command(self):
         self.assertIn("/engine", dict(bot.BOT_COMMANDS))
+
+
+class SmcFormatTests(unittest.TestCase):
+    def test_a_plan_carries_the_exact_levels_and_direction(self):
+        text = bot.format_smc(_smc())
+        self.assertIn("شراء", text)
+        self.assertIn("4122.5", text)
+        self.assertIn("4110", text)
+        self.assertIn("4135", text)
+        self.assertIn("4148", text)
+
+    def test_the_confidence_is_labelled_as_the_model_estimate(self):
+        # The engine stamps confidence_validated: false; the reply must not
+        # read as a measured probability.
+        text = bot.format_smc(_smc())
+        self.assertIn("تقدير الموديل", text)
+        self.assertIn("58%", text)
+
+    def test_the_sweep_and_point_of_interest_are_surfaced(self):
+        text = bot.format_smc(_smc())
+        self.assertIn("السيولة الممسوحة", text)
+        self.assertIn("قاع متساوٍ", text)
+        self.assertIn("منطقة الاهتمام", text)
+        self.assertIn("بلوك أوامر", text)
+
+    def test_the_shadow_disclaimer_always_closes_a_live_read(self):
+        text = bot.format_smc(_smc())
+        self.assertIn("وضع الظل", text)
+        self.assertIn("لا تنفيذ", text)
+
+    def test_a_neutral_read_reports_no_plans_honestly(self):
+        text = bot.format_smc(_smc(bias="NEUTRAL", plans=[]))
+        self.assertIn("حياد", text)
+        self.assertIn("لا إعدادات", text)
+        self.assertNotIn("دخول", text)
+
+    def test_a_scaled_ladder_renders_every_target(self):
+        plans = [{"direction": "SHORT", "entry": 4150.0, "stop": 4162.0,
+                  "targets": [4138.0, 4126.0, 4114.0], "target": 4114.0,
+                  "reward_risk": 3.0, "confidence": 0.5}]
+        text = bot.format_smc(_smc(bias="SHORT", plans=plans))
+        for level in ("4138", "4126", "4114"):
+            self.assertIn(level, text)
+
+    def test_an_unconfigured_engine_says_what_to_set(self):
+        text = bot.format_smc(_smc(configured=False, analysis=False))
+        self.assertIn("غير مفعّل", text)
+        self.assertIn("وضع الظل", text)
+
+    def test_a_paused_engine_reports_the_spent_quota(self):
+        text = bot.format_smc(_smc(rate_limited=True, analysis=False))
+        self.assertIn("استُهلكت", text)
+
+    def test_a_missing_engine_is_reported_plainly(self):
+        self.assertIn("غير متاح", bot.format_smc({}))
+
+    def test_the_news_caution_is_surfaced_when_present(self):
+        text = bot.format_smc(_smc(news_caution=True,
+                                   key_event="قرار الفائدة 20:00"))
+        self.assertIn("حذر إخباري", text)
+        self.assertIn("قرار الفائدة", text)
+
+    def test_a_missing_level_renders_as_a_dash_not_a_crash(self):
+        plans = [{"direction": "LONG", "entry": None, "stop": None,
+                  "targets": [], "target": None, "reward_risk": None,
+                  "confidence": None}]
+        text = bot.format_smc(_smc(plans=plans))
+        self.assertIn("—", text)
+
+
+class SmcCommandTests(unittest.TestCase):
+    def _router(self, smc, available=True):
+        api = FakeSmcApi(smc, available)
+        subs = bot.Subscriptions(Path(tempfile.mkdtemp()) / "s.json")
+        return bot.CommandRouter(api, subs, None), api
+
+    def test_smc_command_renders_the_read(self):
+        router, _ = self._router(_smc())
+        reply = router.handle("1", "/smc")
+        self.assertIn("4122.5", reply)
+        self.assertIn("وضع الظل", reply)
+
+    def test_smc_button_runs_the_command(self):
+        router, _ = self._router(_smc())
+        self.assertIn("4122.5", router.handle("1", "📐 محرّك SMC"))
+
+    def test_smc_command_degrades_when_the_engine_is_down(self):
+        router, _ = self._router(_smc(), available=False)
+        reply = router.handle("1", "/smc")
+        self.assertIn("غير متاح", reply)
+        self.assertIn("ASTRA_ENABLE_SMC", reply)
+
+    def test_help_lists_the_smc_command(self):
+        self.assertIn("/smc", bot.CommandRouter.HELP)
+
+    def test_the_menu_lists_the_smc_command(self):
+        self.assertIn("/smc", dict(bot.BOT_COMMANDS))
 
 
 class CommandMenuPayloadTest(unittest.TestCase):

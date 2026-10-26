@@ -354,6 +354,46 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   and a note naming the quota, and `/v1/health` exposes `rate_limited` so a
   monitor can see it. The app keeps the snapshot and card on screen and shows
   the paused note instead of a blank panel.
+- The **SMC/ICT engine** (`advisor/smc_engine.py`, port 8795) is a third
+  isolated analyst, alongside the advisor and the AI engine, for a Smart Money
+  Concepts / Inner Circle Trader read. It is split in two by design, mirroring
+  the advisor's honesty contract:
+  - `advisor/smc_read.py` is a **deterministic fact module**. It computes the
+    SMC primitives from **closed bars only** — swing pivots, market structure
+    (BOS and CHoCH with the broken level and bar age), liquidity pools (equal
+    highs/lows) and **sweeps** (a wick beyond a level that closes back inside,
+    i.e. a stop-hunt rather than a break), fair-value gaps, order blocks, and
+    premium/discount against the recent range — plus session ranges (Asian,
+    London, New York) from bar timestamps. It uses no network, no model, and
+    never reads the wall clock; given the same bars it returns the same numbers.
+  - `advisor/smc_engine.py` then hands that fact sheet to the same external
+    model and asks it only to **interpret** it: which structure is in play,
+    where the point of interest is, and what setup (if any) follows. The model
+    never authors a price the fact module did not compute.
+  It is isolated exactly like the AI engine: its own process on port 8795, its
+  own log (`run/smc_engine_plans.jsonl`), loopback reads only, no ledger write,
+  no order. Off by default; opt in with `ASTRA_ENABLE_SMC=1`, out with
+  `ASTRA_DISABLE_SMC=1`. Every reply is stamped `validated: false` and each
+  plan carries `confidence_validated: false`. `validate_plan` enforces
+  coherence — stop on the losing side, targets in travel order, first target
+  beyond the entry, and reward:risk at or above `MIN_RR` (**2.0**, the
+  methodology's own floor) — and an incoherent plan is **dropped with its
+  reason** (`rejected`), never repaired. `ASTRA_SMC_TIMEFRAMES` (empty = all)
+  narrows the frames. The phone app exposes it as the **SMC** view (behind
+  More): `mobile/smc.js` renders the inner `analysis` object — bias, market
+  read, one card per setup with entry/stop/scaled ladder/reward:risk, the
+  swept liquidity and point of interest, and the confidence labelled an
+  estimate — and shows an honest status (unconfigured, paused, unreachable)
+  instead of a blank panel. The panel is read-only and changes nothing else: a
+  dead SMC engine leaves every other tab green. Run it once with
+  `python3 advisor/smc_engine.py --once`; serve it with `--port`.
+  **Why a separate engine, not a change to the core.** SMC/ICT is an
+  opinionated school whose "order blocks" and "fair-value gaps" are *readings*
+  of raw price action, not measurements with an edge — the same reason the
+  advisor and AI engine live outside the C++ core. Keeping it isolated means a
+  school that turns out to add nothing can be switched off (`ASTRA_DISABLE_SMC=1`)
+  without touching the validated pipeline, and the deterministic fact module
+  keeps the model honest: it interprets numbers it did not invent.
 
 ## The frozen v1 contract has four copies — keep them in step
 

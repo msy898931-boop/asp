@@ -514,7 +514,7 @@ class BotHeartbeatTest(unittest.TestCase):
 
 
 class TabBarTest(unittest.TestCase):
-    """Ten views: five primary tabs in one row plus a More sheet for the rest."""
+    """Eleven views: five primary tabs in one row plus a More sheet for the rest."""
 
     def _read(self, name):
         with open(os.path.join(sm.HERE, name), encoding="utf-8") as fh:
@@ -527,10 +527,10 @@ class TabBarTest(unittest.TestCase):
         self.assertEqual(nav.count('class="tab"'), 5)
         self.assertIn('class="tab tab-more"', nav)
         self.assertIn('aria-controls="tabs-more"', nav)
-        # The secondary row holds the other five views and starts hidden.
+        # The secondary row holds the other six views and starts hidden.
         sheet = html[html.index('id="tabs-more"'):html.index("</div>", html.index('id="tabs-more"'))]
-        self.assertEqual(sheet.count('class="tab"'), 5)
-        for view in ("tracker", "ai", "engine", "conn", "bridge"):
+        self.assertEqual(sheet.count('class="tab"'), 6)
+        for view in ("tracker", "ai", "engine", "smc", "conn", "bridge"):
             self.assertIn('data-view="%s"' % view, sheet)
         self.assertIn("hidden", html[html.index('class="tabs-more" id="tabs-more"'):html.index(">", html.index('id="tabs-more"'))])
 
@@ -538,9 +538,9 @@ class TabBarTest(unittest.TestCase):
         css = self._read("styles.css")
         self.assertIn("grid-template-columns: repeat(6, 1fr)", css)
         self.assertIn("display: grid", css)
-        # The More sheet anchors above the fixed-height bar, five across.
+        # The More sheet anchors above the fixed-height bar, six across.
         self.assertIn(".tabs-more:not([hidden])", css)
-        self.assertIn("grid-template-columns: repeat(5, 1fr)", css)
+        self.assertIn("grid-template-columns: repeat(6, 1fr)", css)
         # The overflow affordance stays for a wide screen that still overflows.
         self.assertIn(".tabs.more-left", css)
         self.assertIn(".tabs.more-right", css)
@@ -903,5 +903,55 @@ class EngineProxyTimeoutTest(unittest.TestCase):
         # The route passes the wider engine budget explicitly.
         routing = inspect.getsource(sm.Handler.do_GET)
         self.assertIn("_ENGINE_PROXY_TIMEOUT", routing)
+
+
+class SmcProxyTest(unittest.TestCase):
+    """The SMC engine is a third isolated sidecar behind its own /smc/ route.
+
+    The route must forward to the SMC base on its own port and carry the same
+    wider model-round-trip budget the engine route uses, so a cold SMC read is
+    not turned into a 503 by the shared budget.
+    """
+
+    class _StubSmc(BaseHTTPRequestHandler):
+        def log_message(self, *a):  # silence
+            pass
+
+        def do_GET(self):
+            body = json.dumps({"smc": {"configured": True, "analysis": None,
+                                       "note": "stub", "path": self.path}}
+                              ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def test_the_smc_route_forwards_to_the_smc_base(self):
+        saved = sm.Handler.smc_base
+        stub = _serve(self._StubSmc)
+        sm.Handler.smc_base = "http://127.0.0.1:%d" % stub.server_address[1]
+        app = _serve(sm.Handler)
+        try:
+            url = "http://127.0.0.1:%d/smc/v1/smc" % app.server_address[1]
+            with urllib.request.urlopen(url, timeout=15) as resp:
+                self.assertEqual(resp.status, 200)
+                body = json.loads(resp.read().decode("utf-8"))
+        finally:
+            _stop(app)
+            _stop(stub)
+            sm.Handler.smc_base = saved
+        self.assertIn("smc", body)
+        # The prefix is stripped before forwarding, like /engine/ and /advisor/.
+        self.assertEqual(body["smc"]["path"], "/v1/smc")
+
+    def test_the_smc_route_carries_its_own_budget(self):
+        routing = inspect.getsource(sm.Handler.do_GET)
+        self.assertIn('path.startswith("/smc/")', routing)
+        self.assertIn("_ENGINE_PROXY_TIMEOUT", routing)
+        # The default port matches the sidecar's, not the engine's.
+        self.assertIn("8795", sm.Handler.smc_base)
+
+
 if __name__ == "__main__":
     unittest.main()

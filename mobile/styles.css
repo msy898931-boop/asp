@@ -645,7 +645,7 @@ html[data-skeleton="true"] .banner .dot { background: var(--flat); box-shadow: n
   box-shadow: 0 -10px 24px rgba(0, 0, 0, .28);
   z-index: 10;
 }
-.tabs-more:not([hidden]) { display: grid; grid-template-columns: repeat(5, 1fr); }
+.tabs-more:not([hidden]) { display: grid; grid-template-columns: repeat(6, 1fr); }
 .tab-more[aria-expanded="true"] { color: var(--gold); }
 .tabs.more-left {
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 30px);

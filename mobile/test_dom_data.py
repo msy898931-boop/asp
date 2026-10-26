@@ -115,6 +115,36 @@ ENGINE = {
     }
 }
 
+# The isolated SMC/ICT engine's envelope, shaped like smc_engine.py's
+# `Engine._build`: `analysis` is null unless a provider key is configured. The
+# panel reads `analysis` and shows the model's own plans, with the confidence
+# labelled an estimate and the swept liquidity / point of interest named.
+SMC = {
+    "smc": {
+        "schema_version": "1.0", "symbol": "XAUUSD", "validated": False,
+        "source": "smc-engine (isolated)", "provider": "groq",
+        "framework": "SMC/ICT",
+        "configured": True, "model": "llama-3.3-70b",
+        "analysis": {
+            "market_read": "بنية صاعدة على H1 مع مسح سيولة أسفل القاع.",
+            "bias": "LONG",
+            "news_caution": True, "key_event": "قرار الفائدة",
+            "rejected": [],
+            "plans": [{
+                "direction": "LONG", "entry": 2415.5, "stop": 2408.0,
+                "targets": [2426.0, 2434.0],
+                "reward_risk": 2.53, "confidence": 0.55,
+                "confidence_validated": False,
+                "rationale": "CHoCH صاعد بعد مسح سيولة.",
+                "sweep": "قاع متساوٍ", "poi": "بلوك أوامر",
+            }],
+            "engine": {"timeframes_read": ["M15", "H1", "H4"],
+                       "timeframes_missing": [], "note": "isolated"},
+        },
+        "note": "SMC/ICT analysis engine output.",
+    }
+}
+
 
 class _QuietServer(ThreadingHTTPServer):
     daemon_threads = True
@@ -183,6 +213,8 @@ class SeededDomTest(unittest.TestCase):
             fulfil(PUSH)
         elif path.startswith("/engine/v1/engine"):
             fulfil(payloads.get("engine", ENGINE))
+        elif path.startswith("/smc/v1/smc"):
+            fulfil(payloads.get("smc", SMC))
         elif url.startswith(self.base):
             route.continue_()
         else:
@@ -427,6 +459,56 @@ class SeededDomTest(unittest.TestCase):
             self.assertIn("quota", page.text_content("#eng-status"))
             self.assertEqual(
                 page.eval_on_selector_all("#eng-trades .ai-card", "e => e.length"), 0)
+        finally:
+            page.close()
+
+
+    # -- the isolated SMC/ICT engine panel ---------------------------------
+
+    def test_smc_panel_renders_the_model_plans(self):
+        page, _ = self._open()
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click(".tab-more")
+            page.click('#tabs-more .tab[data-view="smc"]')
+            self._wait(page, "document.querySelectorAll('#smc-plans .ai-card')"
+                             ".length === 1")
+            card = page.text_content("#smc-plans .ai-card")
+            self.assertIn("2415.50", card)
+            self.assertIn("2408.00", card)
+            self.assertIn("2.53", card)
+            # The confidence is the model's claim; it must be labelled as one.
+            self.assertIn("55%", card)
+            self.assertIn("estimate", card)
+            # Two targets render as a ladder, not a single number.
+            self.assertEqual(
+                page.eval_on_selector_all(
+                    "#smc-plans .ai-card-targets-list li", "e => e.length"), 2)
+            # The SMC vocabulary the persona speaks in is surfaced.
+            self.assertIn("قاع متساوٍ", card)
+            self.assertIn("بلوك أوامر", card)
+        finally:
+            page.close()
+
+    def test_smc_panel_reads_analysis_not_the_envelope(self):
+        # `configured: true` with a null `analysis` is the paused/unavailable
+        # shape. Rendering the envelope would print "[object Object]"; the panel
+        # must instead show the honest status and no plan cards.
+        stalled = {"smc": {"configured": True, "analysis": None,
+                           "rate_limited": True,
+                           "note": "SMC engine paused: quota spent."}}
+        page, _ = self._open(payloads={**PAYLOADS, "smc": stalled})
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click(".tab-more")
+            page.click('#tabs-more .tab[data-view="smc"]')
+            self._wait(page, "document.querySelector('#smc-status')"
+                             ".textContent.length > 0")
+            self.assertIn("quota", page.text_content("#smc-status"))
+            self.assertEqual(
+                page.eval_on_selector_all("#smc-plans .ai-card", "e => e.length"), 0)
         finally:
             page.close()
 

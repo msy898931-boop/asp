@@ -337,7 +337,7 @@ function updateTabFades() {
 }
 
 // The secondary views live behind More so the bar is one row on a phone.
-const SECONDARY_VIEWS = ["tracker", "ai", "engine", "conn", "bridge"];
+const SECONDARY_VIEWS = ["tracker", "ai", "engine", "smc", "conn", "bridge"];
 
 function selectView(view) {
   const tabs = [...document.querySelectorAll(".tab")];
@@ -362,6 +362,7 @@ function selectView(view) {
   if (view === "tracker") loadTracker();
   if (view === "ai") loadAdvisor(false);
   if (view === "engine") loadEngine(false);
+  if (view === "smc") loadSmc(false);
 }
 
 function setMoreOpen(open) {
@@ -411,6 +412,7 @@ function init() {
   $("refresh").addEventListener("click", refresh);
   $("ai-refresh").addEventListener("click", () => loadAdvisor(true));
   $("eng-refresh").addEventListener("click", () => loadEngine(true));
+  $("smc-refresh").addEventListener("click", () => loadSmc(true));
   $("alerts").addEventListener("click", toggleAlerts);
   $("push-test").addEventListener("click", sendTestPush);
   $("level-form").addEventListener("submit", (e) => {

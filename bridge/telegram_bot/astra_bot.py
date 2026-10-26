@@ -156,6 +156,7 @@ BUTTON_COMMANDS: Dict[str, str] = {
     "📋 مستوياتي": "/levels",
     "🗑 مسح المستويات": "/clearlevels",
     "🤖 محرّك التحليل": "/engine",
+    "📐 محرّك SMC": "/smc",
     "⭐ خطتي": "/plan",
     "❓ مساعدة": "/help",
 }
@@ -173,6 +174,7 @@ BOT_COMMANDS: List[tuple] = [
     ("/status", "حالة النظام والوضع"),
     ("/card", "بطاقة صفقة متعدّدة الفريمات"),
     ("/engine", "قراءة محرّك التحليل الذكي (تقديرات)"),
+    ("/smc", "قراءة محرّك SMC/ICT (بنية وسيولة، تقديرات)"),
     ("/plan", "خطتي وحدودي"),
     ("/myid", "معرّف محادثتي"),
     ("/subscribe", "تشغيل التنبيهات"),
@@ -483,6 +485,84 @@ def format_engine(engine: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def format_smc(smc: Dict[str, Any]) -> str:
+    """The isolated SMC/ICT engine's read, rendered for a phone screen.
+
+    Same honesty contract as ``format_engine``: the plans are the model's own
+    interpretation of a deterministic fact sheet, not a measured edge. The
+    confidence is labelled an estimate, and the swept liquidity and point of
+    interest the persona reasoned over are surfaced so the read is not a bare
+    number. Degrades in the same shape: unconfigured, paused, or no plans.
+    """
+    if not smc:
+        return "📐 محرّك SMC/ICT غير متاح على هذا الخادم (غير منصّب)."
+
+    provider = smc.get("provider") or "?"
+    lines = [f"📐 محرّك SMC/ICT · {provider}"]
+
+    if not smc.get("configured", True):
+        lines.append("المحرّك غير مفعّل: لم يُضبط مفتاح المزوّد.")
+        lines.append("وضع الظل. ليست نصيحة مالية.")
+        return "\n".join(lines)
+
+    if smc.get("rate_limited"):
+        lines.append("⏸ متوقّف مؤقتًا: حصة المزوّد اليومية استُهلكت.")
+        lines.append("وضع الظل. ليست نصيحة مالية.")
+        return "\n".join(lines)
+
+    analysis = smc.get("analysis")
+    if not isinstance(analysis, dict):
+        lines.append(smc.get("note") or "لا قراءة متاحة الآن.")
+        lines.append("وضع الظل. ليست نصيحة مالية.")
+        return "\n".join(lines)
+
+    lines.append(f"الميل العام: {_signal_ar(analysis.get('bias'))}")
+
+    read = str(analysis.get("market_read") or "").strip()
+    if read:
+        lines.append("")
+        lines.append(read)
+
+    plans = analysis.get("plans") or []
+    if not plans:
+        lines.append("")
+        lines.append("لا إعدادات: لا بنية متماسكة الآن.")
+    for i, p in enumerate(plans, 1):
+        direction = _signal_ar(p.get("direction"))
+        lines.append("")
+        lines.append(f"#{i} {direction}")
+        lines.append(f"  دخول {_num(p.get('entry'))} · وقف {_num(p.get('stop'))}")
+        targets = p.get("targets") or ([p.get("target")]
+                                       if p.get("target") is not None else [])
+        if targets:
+            lines.append("  أهداف " + " ← ".join(_num(x) for x in targets))
+        rr = p.get("reward_risk")
+        if rr is not None:
+            lines.append(f"  المخاطرة/المكافأة {rr}")
+        sweep = str(p.get("sweep") or "").strip()
+        if sweep:
+            lines.append(f"  السيولة الممسوحة: {sweep}")
+        poi = str(p.get("poi") or "").strip()
+        if poi:
+            lines.append(f"  منطقة الاهتمام: {poi}")
+        conf = p.get("confidence")
+        if conf is not None:
+            try:
+                pct = round(float(conf) * 100)
+                lines.append(f"  الثقة (تقدير الموديل): {pct}%")
+            except (TypeError, ValueError):
+                lines.append(f"  الثقة (تقدير الموديل): {conf}")
+
+    if analysis.get("news_caution"):
+        event = str(analysis.get("key_event") or "").strip()
+        lines.append("")
+        lines.append("⚠️ حذر إخباري" + (f": {event}" if event else "."))
+
+    lines.append("")
+    lines.append("تقديرات الموديل، لا حافة مقيسة. وضع الظل: لا تنفيذ ولا أوامر.")
+    return "\n".join(lines)
+
+
 # ─────────────────────────── news formatting ────────────────────────────────
 
 _NEWS_WINDOW_AR: Dict[str, str] = {
@@ -661,6 +741,7 @@ class CommandRouter:
         "🌊 /vol - توقّع تقلّب السوق (لا يتنبّأ بالاتجاه)\n"
         "🎯 /card - بطاقة صفقة متعدّدة الفريمات (أرقام محسوبة)\n"
         "🤖 /engine - قراءة محرّك التحليل الذكي (تقديرات الموديل، لا حافة مقيسة)\n"
+        "📐 /smc - قراءة محرّك SMC/ICT (بنية وسيولة، تقديرات)\n"
         "🩺 /health - تفاصيل الصحة\n"
         "📈 /analysis - آخر تحليل\n"
         "📶 /bridge - حالة جسر MT5\n"
@@ -767,6 +848,21 @@ class CommandRouter:
                     "فعّله بـ ASTRA_ENABLE_ENGINE=1.")
         return format_engine(engine)
 
+    def _smc_command(self) -> str:
+        """The isolated SMC/ICT engine's latest read, on demand.
+
+        Like the AI engine it is opt-in (``ASTRA_ENABLE_SMC=1``) and answers on
+        its own port, so a missing one is expected and reported plainly rather
+        than treated as a fault. Reading it can spend the model's token quota,
+        which is why this is an explicit request and never polled.
+        """
+        try:
+            smc = self.api.smc_read()
+        except ApiError:
+            return ("📐 محرّك SMC/ICT غير متاح الآن (غير منصّب أو متوقّف). "
+                    "فعّله بـ ASTRA_ENABLE_SMC=1.")
+        return format_smc(smc)
+
     def _news_command(self) -> str:
         """The live news read: window, schedule, tape and headlines."""
         d = news_digest()
@@ -856,6 +952,8 @@ class CommandRouter:
                 return self._card_command()
             if cmd == "/engine":
                 return self._engine_command()
+            if cmd == "/smc":
+                return self._smc_command()
             if cmd == "/news":
                 return self._news_command()
             if cmd == "/forecast":

@@ -103,7 +103,7 @@ import metering  # noqa: E402
 # candles, the local volatility/akoan math) is free to serve, so metering is
 # scoped to these prefixes — a free user loading the app does not burn their
 # daily analysis budget on static assets.
-_METERED_PREFIXES = ("/engine/", "/advisor/")
+_METERED_PREFIXES = ("/engine/", "/advisor/", "/smc/")
 
 
 def _metered_path(path: str) -> bool:
@@ -345,7 +345,7 @@ def _build_stamp() -> str:
     h = hashlib.sha1()
     for name in ("index.html", "styles.css", "app.js", "i18n.js", "panels.js",
                  "advisor.js", "tracker.js", "alerts.js", "vol.js", "akoan.js",
-                 "engine.js", "ticker.js", "sw.js",
+                 "engine.js", "smc.js", "ticker.js", "sw.js",
                  "terminal.html", "terminal.css", "terminal.js"):
         try:
             with open(os.path.join(HERE, name), "rb") as fh:
@@ -358,7 +358,7 @@ def _build_stamp() -> str:
 _BUILD = _build_stamp()
 _SHELL_ASSET_RE = re.compile(
     rb'(href|src)="(styles\.css|app\.js|i18n\.js|panels\.js|advisor\.js|'
-    rb'tracker\.js|alerts\.js|vol\.js|akoan\.js|engine\.js|ticker\.js|'
+    rb'tracker\.js|alerts\.js|vol\.js|akoan\.js|engine\.js|smc\.js|ticker\.js|'
     rb'terminal\.css|terminal\.js)')
 _STARTED_AT = time.time()
 
@@ -820,6 +820,7 @@ class Handler(BaseHTTPRequestHandler):
     advisor_base = "http://127.0.0.1:8792"
     tracker_base = "http://127.0.0.1:8793"
     engine_base = "http://127.0.0.1:8794"
+    smc_base = "http://127.0.0.1:8795"
     apk_path = ""
 
     def log_message(self, fmt, *args):  # quieter logs
@@ -892,6 +893,9 @@ class Handler(BaseHTTPRequestHandler):
             self._proxy(self.tracker_base + path[len("/tracker"):], self.path)
         elif path.startswith("/engine/"):
             self._proxy(self.engine_base + path[len("/engine"):], self.path,
+                        timeout=_ENGINE_PROXY_TIMEOUT)
+        elif path.startswith("/smc/"):
+            self._proxy(self.smc_base + path[len("/smc"):], self.path,
                         timeout=_ENGINE_PROXY_TIMEOUT)
         else:
             self._static(path)
@@ -1375,6 +1379,7 @@ def main(argv=None) -> int:
     parser.add_argument("--advisor-port", type=int, default=8792)
     parser.add_argument("--tracker-port", type=int, default=8793)
     parser.add_argument("--engine-port", type=int, default=8794)
+    parser.add_argument("--smc-port", type=int, default=8795)
     parser.add_argument("--apk", default=os.path.join(
         os.path.dirname(HERE), "android", "dist", "astra.apk"),
         help="APK to offer at /astra.apk (optional)")
@@ -1391,6 +1396,7 @@ def main(argv=None) -> int:
     Handler.advisor_base = f"http://127.0.0.1:{args.advisor_port}"
     Handler.tracker_base = f"http://127.0.0.1:{args.tracker_port}"
     Handler.engine_base = f"http://127.0.0.1:{args.engine_port}"
+    Handler.smc_base = f"http://127.0.0.1:{args.smc_port}"
     Handler.apk_path = os.path.abspath(args.apk)
 
     server = _BoundedServer((args.host, args.port), Handler,

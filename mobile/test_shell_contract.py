@@ -30,7 +30,7 @@ import serve_mobile as sm  # noqa: E402
 # one string, so a symbol's file may change without breaking the assertion.
 CLIENT_SCRIPTS = ("app.js", "i18n.js", "panels.js", "advisor.js",
                   "tracker.js", "alerts.js", "vol.js", "akoan.js", "engine.js",
-                  "ticker.js")
+                  "smc.js", "ticker.js")
 
 
 def client_js() -> str:

@@ -17,6 +17,7 @@ DEFAULT_API_BASE = "http://127.0.0.1:8790/api/v1"
 BRIDGE_PORT = 8791   # the host's Python bridge port (see StartupCoordinator)
 ADVISOR_PORT = 8792  # the isolated AI advisor's loopback port
 ENGINE_PORT = 8794   # the isolated AI analysis engine's loopback port
+SMC_PORT = 8795      # the isolated SMC/ICT analysis engine's loopback port
 _READ_TIMEOUT_SECONDS = 5.0
 # The engine builds its read with a synchronous model round-trip, so a cold
 # request can take as long as the advisor's own HTTP budget (default 20s).
@@ -37,13 +38,15 @@ class AstraApi:
                  timeout: float = _READ_TIMEOUT_SECONDS,
                  bridge_base: Optional[str] = None,
                  advisor_base: Optional[str] = None,
-                 engine_base: Optional[str] = None) -> None:
+                 engine_base: Optional[str] = None,
+                 smc_base: Optional[str] = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        # The bridge, the advisor and the engine answer on their own loopback
-        # ports, outside the /api/v1 prefix. Keep the API host but swap in the
-        # right port unless an explicit base is given.
-        if bridge_base is None or advisor_base is None or engine_base is None:
+        # The bridge, the advisor, the engine and the SMC engine answer on their
+        # own loopback ports, outside the /api/v1 prefix. Keep the API host but
+        # swap in the right port unless an explicit base is given.
+        if (bridge_base is None or advisor_base is None or engine_base is None
+                or smc_base is None):
             from urllib.parse import urlsplit, urlunsplit
             parts = urlsplit(self.base_url)
             if bridge_base is None:
@@ -55,9 +58,13 @@ class AstraApi:
             if engine_base is None:
                 engine_base = urlunsplit(
                     (parts.scheme, f"{parts.hostname}:{ENGINE_PORT}", "/v1", "", ""))
+            if smc_base is None:
+                smc_base = urlunsplit(
+                    (parts.scheme, f"{parts.hostname}:{SMC_PORT}", "/v1", "", ""))
         self.bridge_base = bridge_base.rstrip("/")
         self.advisor_base = advisor_base.rstrip("/")
         self.engine_base = engine_base.rstrip("/")
+        self.smc_base = smc_base.rstrip("/")
 
     # -- transport ----------------------------------------------------------
 
@@ -163,6 +170,23 @@ class AstraApi:
                             timeout=_ENGINE_TIMEOUT_SECONDS)
         engine = env.get("engine") if isinstance(env, dict) else None
         return engine if isinstance(engine, dict) else {}
+
+    # -- SMC engine (the isolated SMC/ICT analysis engine) -----------------
+
+    def smc_read(self, refresh: bool = False) -> Dict[str, Any]:
+        """The SMC/ICT engine's latest read, as the engine's own envelope.
+
+        The SMC engine answers ``{"smc": {...}}`` on its own port (8795).
+        Like the AI engine's read this can spend the model's token quota, so it
+        is fetched only when an operator asks for it and never polled. An
+        unreachable engine raises ``ApiError`` so the caller reports it honestly
+        instead of inventing a read.
+        """
+        suffix = "?refresh=1" if refresh else ""
+        env = self._get_abs(f"{self.smc_base}/smc{suffix}",
+                            timeout=_ENGINE_TIMEOUT_SECONDS)
+        smc = env.get("smc") if isinstance(env, dict) else None
+        return smc if isinstance(smc, dict) else {}
 
     # -- composite health snapshot -----------------------------------------
 

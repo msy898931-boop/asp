@@ -15,6 +15,7 @@ BRIDGE_PORT="${BRIDGE_PORT:-8791}"
 TRACKER_PORT="${TRACKER_PORT:-8793}"
 ADVISOR_PORT="${ADVISOR_PORT:-8792}"
 ENGINE_PORT="${ENGINE_PORT:-8794}"
+SMC_PORT="${SMC_PORT:-8795}"
 
 echo "[entry] backend host starting (api=${API_PORT})"
 /app/aura_backend_host --api-port "${API_PORT}" --interval-ms 5000 &
@@ -49,6 +50,17 @@ python3 /app/advisor/ai_advisor.py --port "${ADVISOR_PORT}" &
 echo "[entry] AI analysis engine starting (engine=${ENGINE_PORT})"
 python3 /app/advisor/ai_engine.py --port "${ENGINE_PORT}" &
 
+# The SMC/ICT engine is a third isolated analyst behind its own tab. It is
+# opt-in (ASTRA_ENABLE_SMC=1) and, like the others, answers "not configured"
+# until the provider key is set. It computes its fact sheet from closed bars and
+# never touches the engine or the ledger.
+if [ "${ASTRA_ENABLE_SMC:-0}" = "1" ] && [ "${ASTRA_DISABLE_SMC:-0}" != "1" ]; then
+    echo "[entry] SMC engine starting (smc=${SMC_PORT})"
+    python3 /app/advisor/smc_engine.py --port "${SMC_PORT}" &
+else
+    echo "[entry] SMC engine off (set ASTRA_ENABLE_SMC=1 to enable)"
+fi
+
 echo "[entry] serving phone app on 0.0.0.0:${PORT}"
 exec python3 /app/mobile/serve_mobile.py \
     --host 0.0.0.0 \
@@ -57,4 +69,5 @@ exec python3 /app/mobile/serve_mobile.py \
     --bridge-port "${BRIDGE_PORT}" \
     --tracker-port "${TRACKER_PORT}" \
     --advisor-port "${ADVISOR_PORT}" \
-    --engine-port "${ENGINE_PORT}"
+    --engine-port "${ENGINE_PORT}" \
+    --smc-port "${SMC_PORT}"

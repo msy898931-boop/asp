@@ -301,13 +301,16 @@ class MeteredRoutesTest(unittest.TestCase):
         meter.reset_store()
         self._accounts = accounts
         self._upstream = _serve(_StubBridge)
-        self._saved_bases = (sm.Handler.engine_base, sm.Handler.advisor_base)
+        self._saved_bases = (sm.Handler.engine_base, sm.Handler.advisor_base,
+                             sm.Handler.smc_base)
         base = "http://127.0.0.1:%d" % self._upstream.server_address[1]
         sm.Handler.engine_base = base
         sm.Handler.advisor_base = base
+        sm.Handler.smc_base = base
 
     def tearDown(self):
-        sm.Handler.engine_base, sm.Handler.advisor_base = self._saved_bases
+        (sm.Handler.engine_base, sm.Handler.advisor_base,
+         sm.Handler.smc_base) = self._saved_bases
         _stop(self._upstream)
         for k, v in self._saved.items():
             if v is None:
@@ -350,6 +353,17 @@ class MeteredRoutesTest(unittest.TestCase):
         for _ in range(5):
             status, _ = self._status("/version.json?k=" + created.key)
             self.assertEqual(status, 200)
+
+    def test_the_smc_route_is_metered_like_the_engine(self):
+        # The SMC engine spends a model token per cold read, so it shares the
+        # engine's metering rather than being a free route.
+        created = self._free_account()
+        for _ in range(2):
+            status, _ = self._status("/smc/v1/smc?k=" + created.key)
+            self.assertEqual(status, 200)
+        status, body = self._status("/smc/v1/smc?k=" + created.key)
+        self.assertEqual(status, 429)
+        self.assertIn("daily quota spent", body)
 
     def test_a_pro_account_has_a_wider_allowance(self):
         created = self._accounts.store().create(email="p@b.c",
