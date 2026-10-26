@@ -148,6 +148,14 @@ async function loadSmc(force) {
       return;
     }
     if (!analysis) {
+      if (e.stale_tape) {
+        // The engine saw the bars and refused them, not failed to reach the
+        // model. Say which it was: "stale tape" is a market-data condition the
+        // user can act on, "unreachable" is not.
+        setStatus(T("smc_tape_stale_short"));
+        $("smc-read").textContent = e.note || "";
+        return;
+      }
       setStatus(e.rate_limited ? T("smc_paused") : T("smc_unreachable"));
       $("smc-read").textContent = e.note || "";
       return;
@@ -178,6 +186,18 @@ async function loadSmc(force) {
     const bits = [];
     if (e.model) bits.push(`${T("ai_model")}: ${e.model}`);
     if (tf) bits.push(`${T("eng_timeframes")}: ${tf}`);
+    // The tape's freshness leads the meta line: a plan is only as good as the
+    // bars it was read from, so how current those bars were belongs next to the
+    // model's name, not buried in the panel.
+    const tape = eng.tape || {};
+    const bad = (tape.frames_degraded || []).join(" ");
+    if (tape.state === "degraded") {
+      bits.unshift(fmt(T("smc_tape_degraded"), { frames: bad || "-" }));
+    } else if (tape.state === "stale") {
+      bits.unshift(fmt(T("smc_tape_stale"), { frames: bad || "-" }));
+    } else if (tape.state === "live") {
+      bits.unshift(T("smc_tape_live"));
+    }
     if (analysis.news_caution) {
       bits.push(analysis.key_event
         ? `${T("smc_news_caution")}: ${analysis.key_event}`

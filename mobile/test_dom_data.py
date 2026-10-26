@@ -139,7 +139,13 @@ SMC = {
                 "sweep": "قاع متساوٍ", "poi": "بلوك أوامر",
             }],
             "engine": {"timeframes_read": ["M15", "H1", "H4"],
-                       "timeframes_missing": [], "note": "isolated"},
+                       "timeframes_missing": [], "note": "isolated",
+                       "tape": {"state": "degraded",
+                                "frames_read": ["M15", "H1"],
+                                "frames_degraded": ["H4"],
+                                "max_lag_bars": 1,
+                                "per_frame": {"H4": {"status": "lagging",
+                                                     "lag_bars": 3.0}}}},
         },
         "note": "SMC/ICT analysis engine output.",
     }
@@ -488,6 +494,24 @@ class SeededDomTest(unittest.TestCase):
             # The SMC vocabulary the persona speaks in is surfaced.
             self.assertIn("قاع متساوٍ", card)
             self.assertIn("بلوك أوامر", card)
+        finally:
+            page.close()
+
+    def test_smc_panel_shows_a_degraded_tape(self):
+        # A plan is only as good as the bars it was read from. When a frame
+        # lags, the panel must say so rather than presenting the read as if the
+        # tape were live.
+        page, _ = self._open()
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click(".tab-more")
+            page.click('#tabs-more .tab[data-view="smc"]')
+            self._wait(page, "document.querySelector('#smc-meta')"
+                             ".textContent.length > 0")
+            meta = page.text_content("#smc-meta")
+            self.assertIn("H4", meta)
+            self.assertIn("provisional", meta)
         finally:
             page.close()
 

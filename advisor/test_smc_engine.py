@@ -506,5 +506,124 @@ class MeasuredRecordTests(unittest.TestCase):
         self.assertEqual(rec["break_even_pct"], 27.9)
 
 
+class TapeFreshnessTests(unittest.TestCase):
+    """The engine must know how current the tape is, and refuse a dead one.
+
+    A read is anchored to closed bars. If those bars are old the plan describes
+    a market that has already moved, so the freshness the bridge already
+    reports must reach the model and must gate the plan."""
+
+    def test_a_just_closed_bar_is_a_normal_lag_not_an_error(self):
+        # Bars are stamped by open time and the forming bar is excluded, so a
+        # healthy read sits between 1 and 2 bars behind the clock.
+        now = 1_760_000_000.0
+        self.assertEqual(smc_engine._bar_lag_bars(now - 900, "M15", now), 1.0)
+        self.assertAlmostEqual(smc_engine._bar_lag_bars(now - 1799, "M15", now),
+                               1.9989, places=3)
+
+    def test_a_healthy_live_tape_is_not_flagged_lagging(self):
+        # Regression: the first cut defaulted the allowance to 1, which flagged
+        # every healthy frame as lagging and refused every plan. A frame that
+        # just closed must read ok.
+        now = 1_760_000_000.0
+        minutes = smc_engine._TF_MINUTES
+
+        def reply(url, *a, **kw):
+            tf = url.split("tf=")[1].split("&")[0]
+            step = minutes[tf] * 60
+            bars = [{"time": int(now - step - i * step)} for i in range(60)]
+            return {"bars": bars, "newest_closed_time": int(now - step),
+                    "freshness": "FRESH"}
+
+        with mock.patch.object(ai_advisor, "_get_json", side_effect=reply), \
+             mock.patch.object(smc_engine, "time") as t:
+            t.time.return_value = now
+            out, tape = smc_engine.fetch_all_bars()
+        self.assertEqual(sorted(out), sorted(smc_engine.TIMEFRAMES))
+        self.assertEqual({v["status"] for v in tape.values()}, {"ok"})
+        self.assertEqual(smc_engine.tape_verdict(tape, smc_engine.TIMEFRAMES)
+                         ["state"], "live")
+
+    def test_a_frame_behind_the_clock_reports_its_lag(self):
+        now = 1_760_000_000.0
+        self.assertEqual(smc_engine._bar_lag_bars(now - 3 * 900, "M15", now), 3.0)
+
+    def test_an_unusable_bar_time_yields_no_lag_rather_than_zero(self):
+        self.assertIsNone(smc_engine._bar_lag_bars(None, "M15", 1.0))
+        self.assertIsNone(smc_engine._bar_lag_bars(0, "M15", 1.0))
+        self.assertIsNone(smc_engine._bar_lag_bars(1.0, "bogus", 1.0))
+
+    def test_a_full_live_tape_reads_live(self):
+        tape = {tf: {"status": "ok"} for tf in smc_engine.TIMEFRAMES}
+        self.assertEqual(smc_engine.tape_verdict(tape, smc_engine.TIMEFRAMES)
+                         ["state"], "live")
+
+    def test_one_lagging_frame_degrades_the_tape_but_keeps_the_read(self):
+        tape = {tf: {"status": "ok"} for tf in smc_engine.TIMEFRAMES}
+        tape["H4"] = {"status": "lagging"}
+        verdict = smc_engine.tape_verdict(tape, smc_engine.TIMEFRAMES)
+        self.assertEqual(verdict["state"], "degraded")
+        self.assertEqual(verdict["frames_degraded"], ["H4"])
+        self.assertIn("H4", verdict["per_frame"])
+
+    def test_a_tape_with_nothing_usable_reads_stale(self):
+        tape = {tf: {"status": "error", "code": "MARKET_DATA_STALE"}
+                for tf in smc_engine.TIMEFRAMES}
+        self.assertEqual(smc_engine.tape_verdict(tape, smc_engine.TIMEFRAMES)
+                         ["state"], "stale")
+
+    def test_the_tape_reaches_the_model_prompt(self):
+        view = smc_engine._prompt_view({
+            "symbol": "XAUUSD", "price": 2000.0, "facts": {}, "news": [],
+            "events": [], "measured_record": smc_engine.measured_record(),
+            "tape": {"state": "degraded", "frames_degraded": ["H4"]}})
+        self.assertEqual(view["tape"]["state"], "degraded")
+
+    def test_the_persona_is_told_how_to_read_a_lagging_tape(self):
+        self.assertIn("lag_bars", smc_engine._SYSTEM_PROMPT)
+        self.assertIn("provisional", smc_engine._SYSTEM_PROMPT)
+
+    def test_a_stale_tape_yields_no_plan_and_no_model_call(self):
+        stale = {"symbol": "XAUUSD", "price": 2000.0, "facts": {},
+                 "news": [], "events": [],
+                 "measured_record": smc_engine.measured_record(),
+                 "tape": {"state": "stale", "frames_degraded": list(
+                     smc_engine.TIMEFRAMES)}}
+        with mock.patch.object(ai_advisor, "provider_key", return_value="k"), \
+             mock.patch.object(smc_engine, "build_snapshot", return_value=stale), \
+             mock.patch.object(ai_advisor, "call_model") as call, \
+             mock.patch.object(smc_engine, "append_log"):
+            result = smc_engine.Engine()._build()
+        self.assertTrue(result["stale_tape"])
+        self.assertIsNone(result["analysis"])
+        call.assert_not_called()
+
+    def test_a_stale_note_names_an_unreachable_bridge_distinctly(self):
+        # Both faults yield no plan, but the user can restart a bridge and
+        # cannot restart a feed. The note must not conflate them.
+        unreachable = {"state": "stale", "frames_degraded": ["M15"],
+                       "per_frame": {"M15": {"status": "unreachable"}}}
+        behind = {"state": "stale", "frames_degraded": ["M15"],
+                  "per_frame": {"M15": {"status": "lagging", "lag_bars": 4}}}
+        self.assertIn("غير متاح", smc_engine.stale_tape_note(unreachable))
+        self.assertIn("غير محدّثة", smc_engine.stale_tape_note(behind))
+
+    def test_a_degraded_tape_still_plans_and_says_so(self):
+        degraded = {"symbol": "XAUUSD", "price": 2000.0,
+                    "facts": dict(BuildTests._FACTS), "news": [], "events": [],
+                    "measured_record": smc_engine.measured_record(),
+                    "tape": {"state": "degraded", "frames_degraded": ["H4"],
+                             "frames_read": ["M15"]}}
+        with mock.patch.object(ai_advisor, "provider_key", return_value="k"), \
+             mock.patch.object(ai_advisor, "rate_limited", return_value=False), \
+             mock.patch.object(smc_engine, "build_snapshot", return_value=degraded), \
+             mock.patch.object(ai_advisor, "call_model", return_value=reply()), \
+             mock.patch.object(smc_engine, "append_log"):
+            result = smc_engine.Engine()._build()
+        self.assertIsNotNone(result["analysis"])
+        self.assertEqual(result["analysis"]["engine"]["tape"]["state"],
+                         "degraded")
+
+
 if __name__ == "__main__":
     unittest.main()

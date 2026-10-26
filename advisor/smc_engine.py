@@ -41,6 +41,7 @@ import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Sequence
 
 import ai_advisor
 import smc_read
@@ -75,6 +76,19 @@ def _resolve_timeframes() -> tuple[str, ...]:
 TIMEFRAMES = _resolve_timeframes()
 BARS_PER_TF = int(os.environ.get("ASTRA_SMC_BARS", "220"))
 MIN_BARS = 30
+
+# Each decision frame's length in minutes, so the engine can judge how far
+# behind the wall clock its newest closed bar is. Kept local rather than
+# imported from the bridge: `advisor` must stay importable without `bridge`.
+_TF_MINUTES = {"M5": 5, "M15": 15, "M30": 30, "H1": 60, "H4": 240}
+
+# How many whole bars behind the clock a frame may be and still count as live.
+# The bridge stamps each bar with its **open** time, so a healthy closed-bar
+# read sits between 1 and 2: the newest closed bar opened one interval ago when
+# it just closed, and two by the time the next forming bar is itself about to
+# close. Above 2 means a closed bar the engine should have seen is absent — the
+# state in which structure can describe a market that has already moved.
+MAX_LAG_BARS = int(os.environ.get("ASTRA_SMC_MAX_LAG_BARS", "2"))
 
 MAX_PLANS = int(os.environ.get("ASTRA_SMC_MAX_PLANS", "2"))
 CACHE_TTL = float(os.environ.get("ASTRA_SMC_CACHE_TTL", "60"))
@@ -185,6 +199,12 @@ _SYSTEM_PROMPT = (
     "and do not present your estimate as if it were the measurement.\n"
     "- Explicitly warn when a high-impact event (CPI, FOMC, NFP) is imminent "
     "or was flagged, because SMC structure can be invalidated by news.\n"
+    "- The snapshot carries tape: the freshness of the bars the fact sheet was "
+    "built from, with a per-frame lag_bars. The bars are stamped by their open "
+    "time and the forming bar is excluded by design, so a lag_bars of 1 or 2 is "
+    "normal. If any frame reads lagging or degraded, the structure may describe "
+    "a market that has already moved: say so in market_read and treat the setup "
+    "as provisional rather than actionable.\n"
     "- A missing timeframe is not grounds to refuse; reason from the frames you "
     "have and note the gap in market_read at most in passing.\n"
     "- Return an empty plans list when the structure genuinely offers no "
@@ -203,24 +223,98 @@ _SYSTEM_PROMPT = (
 )
 
 
-def fetch_all_bars() -> dict:
-    """Closed bars for every timeframe the bridge answers for.
+def _bar_lag_bars(newest_closed: float, tf: str, now: float) -> float | None:
+    """How many whole bars of ``tf`` behind ``now`` the newest closed bar is.
 
-    Reuses the advisor's tolerant envelope handling and drops any frame too
-    short to carry a read.
+    ``None`` when the bar time is unusable. The value is a float so a frame can
+    be a fraction of a bar behind, which is normal: the forming bar is always
+    excluded, so the newest bar the engine sees is the one that just closed.
     """
+    if not isinstance(newest_closed, (int, float)) or newest_closed <= 0:
+        return None
+    minutes = _TF_MINUTES.get(tf)
+    if not minutes:
+        return None
+    return max(0.0, (now - float(newest_closed)) / (minutes * 60.0))
+
+
+def fetch_all_bars(now: float | None = None) -> tuple[dict, dict]:
+    """Closed bars per timeframe, plus an honest freshness report per frame.
+
+    Returns ``(bars_by_tf, tape)``. The bridge stamps every candle reply with
+    the freshness it judged upstream; this reads those stamps instead of
+    discarding them, so the engine can tell a live tape from a lagging one
+    rather than treating both as equally current. A frame the bridge answered
+    with an error — a stale feed, an absent terminal — is recorded as such and
+    carries no bars, which is the difference between "no read" and "a read of
+    nothing".
+    """
+    now = time.time() if now is None else now
     out: dict = {}
+    tape: dict = {}
     for tf in TIMEFRAMES:
         url = "%s/v1/candles?tf=%s&limit=%d" % (BRIDGE_BASE, tf, BARS_PER_TF)
         payload = ai_advisor._get_json(url)
         if not isinstance(payload, dict):
+            tape[tf] = {"status": "unreachable"}
             continue
         if isinstance(payload.get("payload"), dict):
             payload = payload["payload"]
+        # An error envelope carries no bars by design; name why rather than
+        # letting the frame vanish into "missing".
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict) and error.get("code"):
+            tape[tf] = {"status": "error", "code": str(error.get("code")),
+                        "message": str(error.get("message", ""))}
+            continue
         bars = payload.get("bars") or payload.get("candles") or []
-        if isinstance(bars, list) and len(bars) >= MIN_BARS:
-            out[tf] = bars
-    return out
+        if not isinstance(bars, list) or len(bars) < MIN_BARS:
+            tape[tf] = {"status": "insufficient",
+                        "count": len(bars) if isinstance(bars, list) else 0}
+            continue
+        newest = payload.get("newest_closed_time")
+        if newest is None:
+            newest = bars[-1].get("time")
+        lag = _bar_lag_bars(newest, tf, now)
+        entry = {"status": "ok", "bars": len(bars),
+                 "newest_closed_time": newest,
+                 "freshness": payload.get("freshness") or "UNKNOWN",
+                 "lag_bars": None if lag is None else round(lag, 2)}
+        if lag is not None and lag > MAX_LAG_BARS:
+            entry["status"] = "lagging"
+        tape[tf] = entry
+        out[tf] = bars
+    return out, tape
+
+
+def tape_verdict(tape: dict, timeframes: Sequence[str]) -> dict:
+    """A single honest word for the tape the reads rest on.
+
+    ``live`` when every frame is present and none lags past the allowance;
+    ``degraded`` when a frame is missing or behind; ``stale`` when nothing
+    usable came back at all. The engine still answers on a degraded tape — a
+    reading of a thin tape beats no reading — but it says so, and on a stale
+    tape it refuses the plan outright rather than describing a market it cannot
+    see.
+    """
+    frames = [tape.get(tf) or {"status": "unreachable"} for tf in timeframes]
+    ok = [f for f in frames if f.get("status") == "ok"]
+    bad = [f for f in frames if f.get("status") != "ok"]
+    if not ok:
+        state = "stale"
+    elif bad:
+        state = "degraded"
+    else:
+        state = "live"
+    return {
+        "state": state,
+        "frames_read": sorted(f for f in timeframes
+                              if (tape.get(f) or {}).get("status") == "ok"),
+        "frames_degraded": sorted(f for f in timeframes
+                                  if (tape.get(f) or {}).get("status") != "ok"),
+        "max_lag_bars": MAX_LAG_BARS,
+        "per_frame": {tf: tape.get(tf) for tf in timeframes},
+    }
 
 
 def build_snapshot() -> dict:
@@ -230,6 +324,7 @@ def build_snapshot() -> dict:
         "captured_at_utc": int(time.time()),
         "price": None,
         "facts": None,
+        "tape": None,
         "news": [],
         "news_available": False,
         "events": [],
@@ -241,7 +336,8 @@ def build_snapshot() -> dict:
     if tick and isinstance(tick.get("payload"), dict):
         snapshot["price"] = tick["payload"].get("last")
 
-    bars_by_tf = fetch_all_bars()
+    bars_by_tf, tape = fetch_all_bars()
+    snapshot["tape"] = tape_verdict(tape, TIMEFRAMES)
     snapshot["facts"] = smc_read.build(bars_by_tf, TIMEFRAMES)
 
     headlines = ai_advisor.recent_news()
@@ -265,6 +361,7 @@ def _prompt_view(snapshot: dict) -> dict:
         "symbol": snapshot["symbol"],
         "price": snapshot["price"],
         "smc_facts": snapshot["facts"],
+        "tape": snapshot.get("tape"),
         "engine_measured_record": snapshot.get("measured_record"),
         "news": snapshot["news"],
         "events": snapshot["events"],
@@ -504,6 +601,27 @@ def parse_engine(text: str, facts_by_tf: dict | None = None) -> dict | None:
     }
 
 
+def stale_tape_note(tape: dict | None) -> str:
+    """The Arabic-facing reason a stale tape yields no plan.
+
+    "Unreachable" and "stale" are different faults with the same consequence:
+    no usable tape, so no plan. The note names which, because one is a bridge
+    the user can restart and the other is a feed that is genuinely behind.
+    """
+    tape = tape or {}
+    frames = tape.get("frames_degraded") or []
+    listed = ", ".join(frames) if frames else "كل الأطر"
+    per_frame = tape.get("per_frame") or {}
+    statuses = {str((per_frame.get(f) or {}).get("status"))
+                for f in frames} or {"unreachable"}
+    if statuses == {"unreachable"}:
+        return ("تعذّر إصدار خطة: جسر بيانات السوق غير متاح (%s). "
+                "لا شمعات مغلقة موثوقة، لذلك لا تُعرض خطة." % listed)
+    return ("تعذّر إصدار خطة: الأطر المغلقة غير محدّثة (%s). "
+            "القراءة على شريط قديم قد تصف سوقاً تحرّك بالفعل، لذلك لا تُعرض خطة."
+            % listed)
+
+
 def assemble(snapshot: dict, parsed: dict) -> dict:
     """Attach the honest stamps and the fact sheet to a parsed reply."""
     price = snapshot.get("price")
@@ -518,6 +636,9 @@ def assemble(snapshot: dict, parsed: dict) -> dict:
         .get("missing_timeframes", []),
         "facts_note": (snapshot.get("facts") or {}).get("facts_note"),
         "confluence": (snapshot.get("facts") or {}).get("confluence"),
+        # The freshness of the bars this read rests on, so a plan is never read
+        # without knowing how current the market it describes actually was.
+        "tape": snapshot.get("tape"),
         # The project's measured record for this school, kept clearly apart from
         # the model's own confidence so a claim is never read as a measurement.
         "measured_record": snapshot.get("measured_record"),
@@ -577,6 +698,17 @@ class Engine:
                               "SMC analyst."
                               % ai_advisor._KEY_ENV.get(ai_advisor.PROVIDER,
                                                         "the provider key"))
+            return result
+
+        # A stale tape is the one state where the engine refuses to plan. Every
+        # read is anchored to closed bars, so if those bars are old the plan
+        # would describe a market that has already moved — the exact error the
+        # anchoring rule exists to prevent, one level up. No model call is made:
+        # a plan is not produced and then hidden, it is never asked for.
+        tape = snapshot.get("tape") or {}
+        if tape.get("state") == "stale":
+            result["stale_tape"] = True
+            result["note"] = stale_tape_note(tape)
             return result
 
         if ai_advisor.rate_limited():
