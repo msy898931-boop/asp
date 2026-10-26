@@ -3,6 +3,7 @@
 #include "pages/ChartPage.h"
 #include "pages/HistoryPage.h"
 #include "pages/HealthPage.h"
+#include "pages/SmcPage.h"
 #include "pages/SettingsPage.h"
 #include "pages/ComingSoonPage.h"
 #include "dialogs/ConfirmExitDialog.h"
@@ -137,6 +138,7 @@ void MainWindow::setupSidebar() {
             { "Health",    Health,    ":/icons/health.svg" },
         }},
         { "INTELLIGENCE", {
+            { "SMC / ICT", Smc, ":/icons/smc.svg" },
             { "Research", -1, "" },
             { "Knowledge", -1, "" },
         }},
@@ -430,6 +432,7 @@ void MainWindow::setupContentArea() {
     mPages[Chart] = new ChartPage(this);       // stub — no /candles endpoint
     mPages[History] = new HistoryPage(this);
     mPages[Health] = new HealthPage(this);
+    mPages[Smc] = new SmcPage(this);
     mPages[Settings] = new SettingsPage(this);
     mPages[ComingSoon] = new ComingSoonPage(this);
 
@@ -502,6 +505,13 @@ void MainWindow::onNavClicked(int navIndex) {
 
     if (mCurrentPage == History && mApiClient) {
         mApiClient->fetchAnalysisHistory(50);
+    }
+
+    if (mCurrentPage == Smc) {
+        // The SMC engine is its own process on its own port; the page talks to
+        // it directly and never through the backend host, so the frozen v1
+        // contract is untouched.
+        if (auto* smc = qobject_cast<SmcPage*>(mPages[Smc])) smc->refresh();
     }
 }
 
@@ -1058,6 +1068,11 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
 
     if (ctrlDown && event->key() == Qt::Key_K) {
         onNavClicked(navIndexOfPage(Health));
+        return;
+    }
+
+    if (ctrlDown && event->key() == Qt::Key_M) {
+        onNavClicked(navIndexOfPage(Smc));
         return;
     }
 

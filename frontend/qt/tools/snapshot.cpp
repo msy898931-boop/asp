@@ -139,8 +139,11 @@ bool capture(MainWindow& win, const char* name, const QString& outDir,
     return true;
 }
 
-// Drive a private MainWindow slot by meta-name (nav indices match MainWindow's
-// onNavClicked: 0 Dashboard, 1 Chart, 2 History, 3 Health, 4 Research, ...).
+// Drive a private MainWindow slot by meta-name. The indices are the sidebar's
+// flat order (MainWindow::setupSidebar):
+//   0 Dashboard, 1 Chart, 2 History, 3 Health, 4 SMC/ICT,
+//   5 Research (coming soon), 6 Knowledge, 7 Approval Center, 8 Governance,
+//   9 Incidents, 10 Configuration (Settings), 11 Recovery.
 void nav(MainWindow& win, int index) {
     QMetaObject::invokeMethod(&win, "onNavClicked", Qt::DirectConnection,
                               Q_ARG(int, index));
@@ -268,12 +271,16 @@ int main(int argc, char* argv[]) {
     nav(win, 3);
     ok &= capture(win, "health_dark.png", outDir);
 
-    // ── settings (Configuration, nav index 9) ──────────────────────────────
-    nav(win, 9);
+    // ── smc / ict (nav index 4) ────────────────────────────────────────────
+    nav(win, 4);
+    ok &= capture(win, "smc_dark.png", outDir);
+
+    // ── settings (Configuration, nav index 10) ─────────────────────────────
+    nav(win, 10);
     ok &= capture(win, "settings_dark.png", outDir);
 
-    // ── coming soon (Research, nav index 4 -> shared ComingSoonPage) ───────
-    nav(win, 4);
+    // ── coming soon (Research, nav index 5 -> shared ComingSoonPage) ───────
+    nav(win, 5);
     ok &= capture(win, "coming_soon_dark.png", outDir);
 
     // ── light-theme pass over the remaining pages ──────────────────────────
@@ -286,9 +293,11 @@ int main(int argc, char* argv[]) {
     ok &= capture(win, "history_light.png", outDir);
     nav(win, 3);
     ok &= capture(win, "health_light.png", outDir);
-    nav(win, 9);
-    ok &= capture(win, "settings_light.png", outDir);
     nav(win, 4);
+    ok &= capture(win, "smc_light.png", outDir);
+    nav(win, 10);
+    ok &= capture(win, "settings_light.png", outDir);
+    nav(win, 5);
     ok &= capture(win, "coming_soon_light.png", outDir);
     applyTheme(app, "theme-dark.qss");
     win.initStyleChrome();

@@ -746,6 +746,82 @@ class ProviderTests(unittest.TestCase):
         self.assertTrue(
             advisor._is_model_plan_limit({"x-ratelimit-limit-req-minute": "0"}))
 
+    def test_a_rejected_key_is_recorded_not_hidden(self):
+        # A 401 means the key is present but refused (expired or revoked). It
+        # must be recorded with the provider's own words so the engine can say
+        # "rejected" instead of the generic "no usable reply", and it must NOT
+        # trip the quota back-off (a bad key is not a spent budget).
+        original_auth = advisor._AUTH_FAILURE
+        original_backoff = advisor._rate_limited_until
+        advisor._AUTH_FAILURE = None
+        advisor._rate_limited_until = 0.0
+
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                req.full_url, 401, "Unauthorized", {},
+                __import__("io").BytesIO(
+                    b'{"detail":"Your API key expired on 2026-10-26."}'))
+
+        original = advisor.urllib.request.urlopen
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            self.assertIsNone(advisor.call_mistral("hello", "sk-mistral"))
+            self.assertFalse(advisor.rate_limited())
+            failure = advisor.auth_failure()
+            self.assertIsNotNone(failure)
+            self.assertEqual(failure["code"], 401)
+            self.assertIn("expired", failure["message"])
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor._AUTH_FAILURE = original_auth
+            advisor._rate_limited_until = original_backoff
+
+    def test_a_good_call_clears_the_auth_failure(self):
+        # Once the provider answers, a stale rejection must not linger and keep
+        # reporting the engine as broken.
+        original_auth = advisor._AUTH_FAILURE
+        advisor._AUTH_FAILURE = {"code": 401, "message": "expired"}
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps(
+                    {"choices": [{"message": {"content": '{"stance":"LONG"}'}}]}
+                ).encode()
+
+        original_provider = advisor.PROVIDER
+        original = advisor.urllib.request.urlopen
+        advisor.PROVIDER = "mistral"
+        advisor.urllib.request.urlopen = lambda req, timeout=None: FakeResp()
+        try:
+            self.assertIsNotNone(advisor.call_model("hello", "sk-mistral"))
+            self.assertIsNone(advisor.auth_failure())
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor.PROVIDER = original_provider
+            advisor._AUTH_FAILURE = original_auth
+
+    def test_a_403_is_also_an_auth_failure(self):
+        original_auth = advisor._AUTH_FAILURE
+        advisor._AUTH_FAILURE = None
+
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                req.full_url, 403, "Forbidden", {},
+                __import__("io").BytesIO(b"forbidden"))
+
+        original = advisor.urllib.request.urlopen
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            self.assertIsNone(advisor.call_groq("hello", "gsk_test"))
+            failure = advisor.auth_failure()
+            self.assertIsNotNone(failure)
+            self.assertEqual(failure["code"], 403)
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor._AUTH_FAILURE = original_auth
+
     def test_the_mistral_chain_falls_through_a_refused_model(self):
         # The first model answers a plan-limit 429, the second answers for real:
         # call_model must move on and report the model that actually replied.

@@ -26,6 +26,7 @@ class HistoryPage;
 class HealthPage;
 class SettingsPage;
 class ComingSoonPage;
+class SmcPage;
 
 namespace astra {
 
@@ -96,7 +97,7 @@ private:
     [[nodiscard]] int navIndexOfPage(int pageIndex) const;
 
     // Navigation
-    enum Page { Dashboard, Chart, History, Health, Settings, ComingSoon, PageCount };
+    enum Page { Dashboard, Chart, History, Health, Smc, Settings, ComingSoon, PageCount };
     QStackedWidget* mContentStack = nullptr;
     QVector<QWidget*> mPages;
 

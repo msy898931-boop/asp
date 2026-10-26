@@ -239,6 +239,22 @@ class BuildTests(unittest.TestCase):
         self.assertTrue(result["rate_limited"])
         self.assertIn("quota", result["note"])
 
+    def test_a_rejected_key_is_named_not_collapsed(self):
+        # The provider refusing the key is a distinct, operator-visible failure;
+        # it must be named (with the provider's words), not folded into the
+        # generic "no usable reply".
+        p1, p2, p3, p4, p5 = self._patch(model_reply=None)
+        with p1, p2, p3, p4, \
+             mock.patch.object(ai_advisor, "auth_failure",
+                               return_value={"code": 401,
+                                             "message": "key expired"}), \
+             p5:
+            result = smc_engine.Engine()._build()
+        self.assertIsNone(result["analysis"])
+        self.assertTrue(result.get("auth_failed"))
+        self.assertIn("rejected", result["note"])
+        self.assertIn("expired", result["note"])
+
     def test_no_key_means_no_model_call(self):
         with mock.patch.object(ai_advisor, "provider_key", return_value=""), \
              mock.patch.object(smc_engine, "build_snapshot",

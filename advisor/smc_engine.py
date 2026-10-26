@@ -436,7 +436,18 @@ class Engine:
         reply = ai_advisor.call_model(build_prompt(snapshot), api_key)
         parsed = parse_engine(reply) if reply else None
         if parsed is None:
-            if ai_advisor.rate_limited():
+            auth = ai_advisor.auth_failure()
+            if auth:
+                # The key is present but the provider refused it (expired or
+                # revoked). Naming it beats the generic "no usable reply".
+                result["auth_failed"] = True
+                result["note"] = ("SMC engine rejected by the provider: %s "
+                                  "(HTTP %s). Check %s on the host: the key may "
+                                  "be expired or revoked."
+                                  % (auth["message"], auth["code"],
+                                     ai_advisor._KEY_ENV.get(
+                                         ai_advisor.PROVIDER, "the provider key")))
+            elif ai_advisor.rate_limited():
                 result["rate_limited"] = True
                 result["note"] = ("SMC engine paused: the provider's daily "
                                   "quota is spent. The fact sheet below is "
@@ -514,11 +525,14 @@ class Handler(BaseHTTPRequestHandler):
             force = "refresh=1" in query
             self._json(200, {"smc": self.engine.current(force=force)})
         elif path in ("/health", "/v1/health"):
+            auth = ai_advisor.auth_failure()
             self._json(200, {"service": "smc-engine", "status": "OK",
                              "framework": "SMC/ICT",
                              "provider": ai_advisor.PROVIDER,
                              "configured": bool(ai_advisor.provider_key()),
-                             "rate_limited": ai_advisor.rate_limited()})
+                             "rate_limited": ai_advisor.rate_limited(),
+                             "auth_ok": auth is None,
+                             "auth_error": auth["message"] if auth else None})
         else:
             self._json(404, {"error": "unknown route", "path": path})
 
