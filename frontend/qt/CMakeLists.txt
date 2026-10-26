@@ -34,6 +34,7 @@ set(ASTRA_SOURCES
     src/pages/ChartPage.cpp
     src/pages/HistoryPage.cpp
     src/pages/HealthPage.cpp
+    src/pages/SmcPage.cpp
     src/pages/SettingsPage.cpp
     src/widgets/SignalCard.cpp
     src/widgets/LevelsCard.cpp
@@ -59,6 +60,7 @@ set(ASTRA_HEADERS
     src/pages/ChartPage.h
     src/pages/HistoryPage.h
     src/pages/HealthPage.h
+    src/pages/SmcPage.h
     src/pages/SettingsPage.h
     src/widgets/SignalCard.h
     src/widgets/LevelsCard.h
@@ -131,6 +133,7 @@ if(BUILD_ASTRA_SNAPSHOT)
         src/pages/ChartPage.cpp
         src/pages/HistoryPage.cpp
         src/pages/HealthPage.cpp
+        src/pages/SmcPage.cpp
         src/pages/SettingsPage.cpp
         src/widgets/SignalCard.cpp
         src/widgets/LevelsCard.cpp
