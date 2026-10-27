@@ -1422,6 +1422,52 @@ class SmcFormatTests(unittest.TestCase):
         text = bot.format_smc(_smc(plans=plans))
         self.assertIn("—", text)
 
+    def test_the_rationale_is_shown_so_the_level_has_a_reason(self):
+        # The app has shown the model's rationale since the beginning; the bot
+        # had not, so a phone user saw the levels without why they exist.
+        text = bot.format_smc(_smc())
+        self.assertIn("السبب", text)
+        self.assertIn("CHoCH صاعد", text)
+
+    def test_the_verified_anchor_names_the_zone_and_frame(self):
+        plans = [{"direction": "LONG", "entry": 4122.5, "stop": 4110.0,
+                  "targets": [4135.0, 4148.0], "target": 4148.0,
+                  "reward_risk": 2.04, "confidence": 0.58,
+                  "anchored": True, "anchor_zone": "order block (bullish)",
+                  "anchor_timeframe": "M15"}]
+        text = bot.format_smc(_smc(plans=plans))
+        self.assertIn("مرساة الدخول", text)
+        self.assertIn("order block (bullish)", text)
+        self.assertIn("M15", text)
+
+    def test_an_unanchored_plan_shows_no_anchor_line(self):
+        plans = [{"direction": "LONG", "entry": 4122.5, "stop": 4110.0,
+                  "targets": [4135.0], "target": 4135.0, "reward_risk": 2.0,
+                  "confidence": 0.5}]
+        self.assertNotIn("مرساة الدخول", bot.format_smc(_smc(plans=plans)))
+
+    def test_the_distance_from_price_is_shown_with_its_side(self):
+        plans = [{"direction": "LONG", "entry": 4122.5, "stop": 4110.0,
+                  "targets": [4135.0], "target": 4135.0, "reward_risk": 2.0,
+                  "confidence": 0.5, "distance_from_price": -5.5}]
+        text = bot.format_smc(_smc(plans=plans))
+        self.assertIn("يبعد", text)
+        self.assertIn("5.5", text)
+        self.assertIn("أدنى", text)
+
+    def test_a_rejected_plan_is_shown_with_its_reason(self):
+        # A bare "no setups" cannot be told apart from "a setup was proposed and
+        # failed the checks" unless the rejection is surfaced.
+        smc = _smc()
+        smc["analysis"]["rejected"] = [
+            {"plan": {"direction": "LONG"}, "reason": "reward-to-risk below min"}]
+        text = bot.format_smc(smc)
+        self.assertIn("مرفوضة", text)
+        self.assertIn("reward-to-risk below min", text)
+
+    def test_no_rejected_section_when_nothing_was_rejected(self):
+        self.assertNotIn("مرفوضة", bot.format_smc(_smc()))
+
 
 class SmcCommandTests(unittest.TestCase):
     def _router(self, smc, available=True):
@@ -1505,6 +1551,19 @@ class SmcAlertFormatTests(unittest.TestCase):
         text = bot.format_smc_alert(smc, smc["analysis"]["plans"][0])
         self.assertIn("حذر إخباري", text)
         self.assertIn("CPI", text)
+
+    def test_the_alert_carries_the_reason_the_setup_exists(self):
+        # A pushed level without a reason is a number the reader cannot judge.
+        smc = _smc()
+        text = bot.format_smc_alert(smc, smc["analysis"]["plans"][0])
+        self.assertIn("السبب", text)
+        self.assertIn("CHoCH صاعد", text)
+
+    def test_the_alert_omits_the_reason_line_when_there_is_none(self):
+        plan = {"direction": "LONG", "entry": 4122.5, "stop": 4110.0,
+                "targets": [4135.0], "reward_risk": 2.0, "confidence": 0.5}
+        text = bot.format_smc_alert(_smc(), plan)
+        self.assertNotIn("السبب", text)
 
     def test_a_short_plan_is_labelled_as_a_sale(self):
         plans = [{"direction": "SHORT", "entry": 4200.0, "stop": 4215.0,

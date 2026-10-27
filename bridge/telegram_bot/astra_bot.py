@@ -558,12 +558,36 @@ def format_smc(smc: Dict[str, Any]) -> str:
         rr = p.get("reward_risk")
         if rr is not None:
             lines.append(f"  المخاطرة/المكافأة {rr}")
+        # Why the plan exists, in the model's own words. The app has shown this
+        # since the beginning; the bot had not, so the phone user saw the levels
+        # without the reasoning that produced them.
+        rationale = str(p.get("rationale") or "").strip()
+        if rationale:
+            lines.append(f"  السبب: {rationale}")
         sweep = str(p.get("sweep") or "").strip()
         if sweep:
             lines.append(f"  السيولة الممسوحة: {sweep}")
         poi = str(p.get("poi") or "").strip()
         if poi:
             lines.append(f"  منطقة الاهتمام: {poi}")
+        # The computed zone the entry was verified against. When anchoring is on
+        # and a plan survived, this names *which* order block or gap held the
+        # entry and on which frame — the auditable reason the plan was kept
+        # rather than a level the model invented.
+        if p.get("anchored") and p.get("anchor_zone"):
+            tf = p.get("anchor_timeframe")
+            where = f" على {tf}" if tf else ""
+            lines.append(f"  مرساة الدخول: {p['anchor_zone']}{where}")
+        # How far the entry sits from the current price: a plan 40 dollars away
+        # is a different animal from one two dollars away, and the number was
+        # already computed but never shown.
+        dist = p.get("distance_from_price")
+        if dist is not None:
+            try:
+                side = "أعلى" if float(dist) >= 0 else "أدنى"
+                lines.append(f"  يبعد {_num(abs(float(dist)))} $ {side} من السعر")
+            except (TypeError, ValueError):
+                pass
         conf = p.get("confidence")
         if conf is not None:
             try:
@@ -571,6 +595,19 @@ def format_smc(smc: Dict[str, Any]) -> str:
                 lines.append(f"  الثقة (تقدير الموديل): {pct}%")
             except (TypeError, ValueError):
                 lines.append(f"  الثقة (تقدير الموديل): {conf}")
+
+    # Plans the coherence checks dropped, with the reason. Hidden until now, so
+    # a bare "no setups" could not be told apart from "a setup was proposed and
+    # failed the checks" — the difference between a quiet market and a rejected
+    # plan.
+    rejected = analysis.get("rejected") or []
+    if rejected:
+        lines.append("")
+        lines.append("خطط مرفوضة (لم تجتز الفحص):")
+        for r in rejected[:3]:
+            why = str((r or {}).get("reason") or "").strip()
+            if why:
+                lines.append(f"  · {why}")
 
     if analysis.get("news_caution"):
         event = str(analysis.get("key_event") or "").strip()
@@ -1389,12 +1426,13 @@ class SmcWatch:
 
 
 def format_smc_alert(smc: Dict[str, Any], plan: Dict[str, Any]) -> str:
-    """Arabic push for a fresh SMC setup: the plan, then the honesty line.
+    """Arabic push for a fresh SMC setup: the plan, why, then the honesty line.
 
-    Deliberately compact — a push is read on a lock screen, so it carries the
-    levels a trader acts on and the model's own confidence, and nothing else.
-    The full reasoning (market read, sweep, point of interest) stays behind
-    ``/smc``. Never claims a measured edge and never claims execution.
+    Compact — a push is read on a lock screen — but it carries *why* the setup
+    exists: one line of the model's rationale, because a level without a reason
+    is a number the reader cannot judge. The full reasoning (market read, sweep,
+    point of interest) stays behind ``/smc``. Never claims a measured edge and
+    never claims execution.
     """
     direction = _signal_ar(plan.get("direction"))
     entry = _num(plan.get("entry"))
@@ -1408,6 +1446,9 @@ def format_smc_alert(smc: Dict[str, Any], plan: Dict[str, Any]) -> str:
     rr = plan.get("reward_risk")
     if rr is not None:
         lines.append(f"مخاطرة/مكافأة {rr}")
+    rationale = str(plan.get("rationale") or "").strip()
+    if rationale:
+        lines.append(f"السبب: {rationale}")
     conf = plan.get("confidence")
     if isinstance(conf, (int, float)) and not isinstance(conf, bool):
         lines.append(f"ثقة الموديل (تقدير): {round(float(conf) * 100)}%")
