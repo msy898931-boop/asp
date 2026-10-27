@@ -31,12 +31,15 @@ services:
                              # is not region-locked, so this is the fallback when
                              # Groq/Gemini refuse to issue a key from your region.
       - key: ASTRA_ADVISOR_PROVIDER
-        value: "mistral"     # groq (default), gemini or mistral. Must name the
+        value: "groq"        # groq (default), gemini or mistral. Must name the
                              # provider whose *_API_KEY above is actually set.
                              # Left empty it resolves to the empty string, not to
                              # the "groq" default, and every model surface — the
                              # advisor, the AI engine and the SMC engine — answers
                              # "not configured" no matter which keys are present.
+                             # This file owns the value: a Blueprint sync
+                             # overwrites a dashboard edit, so change it here and
+                             # set GROQ_API_KEY in the dashboard.
       - key: ASTRA_ENABLE_SMC
         value: "1"           # "1" turns the isolated SMC/ICT analysis engine on.
                              # It computes its fact sheet from closed bars and
