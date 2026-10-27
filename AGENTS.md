@@ -570,6 +570,30 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   the other, and the prompt gains the guidance that follows from it — prefer a
   target the structure can reach rather than stretching a plan to reach 1:2. The
   write-up is `research/reports/smc_exit_study.md`.
+- **The measured geometry ships as its own plan** (`advisor/smc_plan.py`). A
+  finding on the sheet is still only a fact; the plan the engine *offers* came
+  from the model, which is instructed to target 1:2. This module turns the
+  measurement into the plan it measured: the nearest order block or fair-value
+  gap on the structure-bias side, entry at the zone midpoint, stop one ATR
+  behind, and a single **0.5R** target — the study's builder, reproduced. A
+  parity test in `research/test_smc_exit_study.py` pins it to
+  `smc_zone_study.build_plan`, so the entry and stop on the sheet cannot drift
+  from the geometry that cleared the gate. It is a **separate** plan, not a
+  change to the model's: the model's plan is a reading with judgement on top and
+  is not what was measured, so the two ride side by side and the reader can
+  always tell which is which (the measured one carries `source:
+  "measured-geometry"`). Because it carries no model it is computed in
+  `Engine._build` **before** the provider call and reaches the reply on every
+  path — refused, rate-limited, unconfigured — so *the reading can fail while
+  the measurement stands*; a **stale tape** is the one state that still
+  suppresses it, for the same reason the model's plan is suppressed. It is
+  **off by default** (`ASTRA_SMC_DETERMINISTIC_PLAN=1`): a plan that is evidence
+  about a measurement is opt-in, the way every other measurement here is. The
+  phone panel (`mobile/smc.js`) leads with it, labelled as the measured
+  geometry, above the model's cards, and shows it on the paused/unavailable path
+  too. `NEAR_TARGET_R` (0.5), `STOP_ATR` (1.0) and `DECISION_TF` (M15) are the
+  study's parameters; changing any of them without re-running the study would
+  put a number on the sheet that no measurement supports.
 
 ## The frozen v1 contract has four copies — keep them in step
 
