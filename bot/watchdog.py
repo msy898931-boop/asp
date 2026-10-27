@@ -277,38 +277,49 @@ def evaluate(now: datetime | None = None) -> dict:
     """Run every check and collect the problems, in plain Arabic-ready parts."""
     now = now or datetime.now(timezone.utc)
     problems: list[dict] = []
+    # Every check's detail is kept, healthy or not, so one dry-run answers the
+    # question the problems list cannot: which provider the advisor actually
+    # resolved, not merely that nothing is broken.
+    checks: dict[str, str] = {}
     ok, detail = check_bot(now)
+    checks["bot"] = detail
     if not ok:
         problems.append({"key": "bot", "ar": "توقّف البوت عن الفحص", "detail": detail})
     ok, detail = check_keepalive(now)
+    checks["keepalive"] = detail
     if not ok:
         problems.append({"key": "keepalive",
                          "ar": "انقطعت سلسلة الإبقاء على السيرفر صاحي",
                          "detail": detail})
     ok, detail = check_server()
+    checks["server"] = detail
     if not ok:
         problems.append({"key": "server", "ar": "السيرفر ما عم يستجيب", "detail": detail})
     ok, detail = check_engine()
+    checks["engine"] = detail
     if not ok:
         problems.append({"key": "engine",
                          "ar": "محرك الخبر بيرجّع فاضي (بيانات غير متاحة)",
                          "detail": detail})
     ok, detail = check_advisor()
+    checks["advisor"] = detail
     if not ok:
         problems.append({"key": "advisor",
                          "ar": "المستشار الذكي ما عم يعطي تحليل (المفتاح أو المزوّد)",
                          "detail": detail})
     ok, detail = check_poller()
+    checks["poller"] = detail
     if not ok:
         problems.append({"key": "poller",
                          "ar": "بوت التلغرام ما عم يستجيب (توقّف عن الدوران)",
                          "detail": detail})
     ok, detail = check_commit(now)
+    checks["commit"] = detail
     if not ok:
         problems.append({"key": "commit",
                          "ar": "المستودع صار هادي (GitHub بوقف التنبيهات بعد ~60 يوم)",
                          "detail": detail})
-    return {"healthy": not problems, "problems": problems}
+    return {"healthy": not problems, "problems": problems, "checks": checks}
 
 
 def load_state() -> dict:
@@ -362,6 +373,7 @@ def main(argv: list[str] | None = None) -> int:
     message = decide(verdict, state, now)
     print(json.dumps({"healthy": verdict["healthy"],
                       "problems": [p["key"] for p in verdict["problems"]],
+                      "checks": verdict.get("checks", {}),
                       "alert": bool(message)}, ensure_ascii=False))
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
