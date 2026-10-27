@@ -922,6 +922,34 @@ wrong model id look identical in the old wording and need opposite fixes. The
 401/403 branch keeps its own "rejected/expired" sentence, so the one failure an
 operator cannot see from outside stays named.
 
+A fifth mode is the one a gateway produces, and it is the reason the read limit
+is not 200 bytes. OpenRouter and Cloudflare AI Gateway wrap the upstream fault
+two or three levels deep and repeat their own generic line at every level:
+
+```json
+{"error": {"message": "Provider returned error", "code": 404,
+           "metadata": {"raw": "{\"title\": \"Not Found\",
+                                \"detail\": \"Function 'ac74040f...':
+                                           Not found for account 7f3a1c\"}"}}}
+```
+
+The outer line names nothing an operator can act on, and the first 200 bytes are
+pure wrapper — so the cause was cut off before it could be read, and the panel
+said `HTTP 404: Provider returned error` with no way to tell a wrong function
+id from a deleted gateway. `_unwrap_provider_error` now walks every string in
+the body (descending into strings that are themselves JSON), drops the generic
+wrappers (`_GENERIC_PROVIDER_LINES`), and reports the longest specific line.
+`_ERROR_BODY_LIMIT` (4096) is the read size and `_ERROR_REASON_LIMIT` (400) what
+is kept; both are asserted in the tests so the cause can never be truncated away
+again. The 401/403 path unwraps too, so a gateway-rejected key names its cause.
+
+When this fires in production with `Function '...': Not found for account`, the
+provider URL points at a Cloudflare AI Gateway whose function id is wrong or
+deleted: fix `ASTRA_ADVISOR_MISTRAL_URL` (or the matching `*_URL`) to name the
+real gateway function, or point it straight at
+`https://api.mistral.ai/v1/chat/completions`. The bare `https://api.mistral.ai`
+default is unaffected.
+
 ### Web terminal (the wide-screen view)
 
 `mobile/terminal.html` is the desktop counterpart of the phone app: the same
