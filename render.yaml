@@ -47,6 +47,18 @@ services:
                              # It computes its fact sheet from closed bars and
                              # answers /smc; with ASTRA_SMC_ALERTS on, the bot
                              # also pushes a fresh setup it is confident in.
+      - key: ASTRA_DISABLE_ADVISOR
+        value: "1"           # "1" leaves the AI advisor sidecar (its own tab)
+                             # unstarted. The SMC/ICT engine imports ai_advisor
+                             # as a library for the provider key and the model
+                             # call, so it does not need this process and keeps
+                             # working with the advisor off. Set to "0" (or
+                             # remove the line) to bring the advisor tab back.
+      - key: ASTRA_DISABLE_ENGINE
+        value: "1"           # "1" leaves the AI analysis engine sidecar (its
+                             # own tab) unstarted, the same way. It is
+                             # independent of the SMC/ICT engine, which has its
+                             # own process; set to "0" to bring its tab back.
       - key: ASTRA_SMC_ALERTS
         value: "1"           # "1" lets the bot push a fresh SMC/ICT setup
                              # instead of waiting for /smc. Off ("0") keeps the
@@ -67,6 +79,18 @@ services:
                              # 0.5 = 50%). A plan the model left unscored is
                              # never pushed: "sure" cannot be claimed without a
                              # number. /smc still shows every plan.
+      - key: ASTRA_SMC_TOKEN_BUDGET
+        value: "6000"        # ceiling for the SMC prompt, in estimated tokens.
+                             # The Groq free tier allows 8000 tokens/minute and
+                             # counts the whole request, so the prompt is kept
+                             # under it: a request that overflows is refused
+                             # with HTTP 413 before the model reads a fact. The
+                             # engine trims the oldest fact-list entries to fit.
+                             # Raise only on a plan with a higher limit.
+      - key: ASTRA_SMC_NEWS
+        value: "4"           # how many headlines the SMC prompt carries. The
+                             # feed lists many; the first few are the ones that
+                             # move gold, the rest only spend tokens.
       - key: VAPID_PUBLIC_KEY
         sync: false          # free, generated locally; both empty = Web Push off (in-app alerts only)
       - key: VAPID_PRIVATE_KEY

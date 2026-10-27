@@ -40,15 +40,27 @@ python3 /app/tracker/signal_tracker.py --host 127.0.0.1 --port "${TRACKER_PORT}"
 # The AI advisor is an isolated second opinion behind the app's own tab. It
 # always starts, and answers "not configured" until GROQ_API_KEY (or the Gemini
 # equivalent) is set on the host — the app degrades instead of erroring.
-echo "[entry] AI advisor starting (advisor=${ADVISOR_PORT})"
-python3 /app/advisor/ai_advisor.py --port "${ADVISOR_PORT}" &
+# Set ASTRA_DISABLE_ADVISOR=1 to run without it: the SMC/ICT engine imports
+# ai_advisor as a library and does not need the advisor's own port, so the one
+# engine can stay up while this sidecar and its tab are switched off.
+if [ "${ASTRA_DISABLE_ADVISOR:-0}" = "1" ]; then
+    echo "[entry] AI advisor off (ASTRA_DISABLE_ADVISOR=1)"
+else
+    echo "[entry] AI advisor starting (advisor=${ADVISOR_PORT})"
+    python3 /app/advisor/ai_advisor.py --port "${ADVISOR_PORT}" &
+fi
 
 # The AI analysis engine is a second, isolated opinion behind its own tab. Like
 # the advisor it always starts and answers "not configured" until the provider
 # key is set, so the tab degrades instead of erroring. It reads the same
 # loopback surfaces and never touches the engine or the ledger.
-echo "[entry] AI analysis engine starting (engine=${ENGINE_PORT})"
-python3 /app/advisor/ai_engine.py --port "${ENGINE_PORT}" &
+# Set ASTRA_DISABLE_ENGINE=1 to run without it.
+if [ "${ASTRA_DISABLE_ENGINE:-0}" = "1" ]; then
+    echo "[entry] AI analysis engine off (ASTRA_DISABLE_ENGINE=1)"
+else
+    echo "[entry] AI analysis engine starting (engine=${ENGINE_PORT})"
+    python3 /app/advisor/ai_engine.py --port "${ENGINE_PORT}" &
+fi
 
 # The SMC/ICT engine is a third isolated analyst behind its own tab. It is
 # opt-in (ASTRA_ENABLE_SMC=1) and, like the others, answers "not configured"
