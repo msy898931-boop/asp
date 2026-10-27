@@ -154,6 +154,42 @@ MEASURED_RECORD: dict = {
                 "confluence filter does not change that"),
     "note": ("A reading, not an edge. Shown so the model's confidence is never "
              "mistaken for a measurement."),
+    # The same zones, resolved to a *nearer* target. The headline above is about
+    # the shipped 2R/3R geometry; this block answers the narrower question the
+    # study never asked — at which target does the reading clear break-even? —
+    # and finds that it does, at 0.5R, in every year including out of sample.
+    # The number that matters is the gap to the geometry-matched control, which
+    # is entered at the market with the same risk: the zone's *location* is worth
+    # about twelve points of win rate, and that is the first measured edge this
+    # school has shown. It is still a reading of a plan that the engine does not
+    # yet build — the plan builder still targets 2R/3R — so it is evidence, not
+    # a signal.
+    "exit_study": {
+        "source": "research/reports/smc_exit_study.md",
+        "script": "research/smc_exit_study.py",
+        "scope": ("deterministic zone plans, XAUUSD M15, 2021-2025 (OOS 2025), "
+                  "same plans resolved to a nearer final target"),
+        "target_r": 0.5,
+        "n_in_sample": 8934,
+        "win_pct_in_sample": 78.6,
+        "wilson_low_in_sample_pct": 77.8,
+        "break_even_in_sample_pct": 75.1,
+        "n_oos": 2188,
+        "win_pct_oos": 77.8,
+        "wilson_low_oos_pct": 76.0,
+        "break_even_oos_pct": 70.3,
+        "control_win_pct_in_sample": 64.5,
+        "control_win_pct_oos": 64.6,
+        "clears_gate": True,
+        "why": ("a 0.5R target clears break-even in-sample and out-of-sample "
+                "on the Wilson lower bound, and in each of the five years "
+                "separately, while a geometry-matched control entered at the "
+                "market fails in every year"),
+        "note": ("The zones locate reactions, not journeys. The edge lives at a "
+                 "near target; asking the plan for 2R/3R is what made it lose. "
+                 "Evidence, not a signal: the engine's own plan builder still "
+                 "targets 2R/3R."),
+    },
 }
 
 
@@ -217,6 +253,14 @@ _SYSTEM_PROMPT = (
     "restate as your own confidence. If the record does not clear the gate, you "
     "may still give the plan, but say plainly that the record is unflattering "
     "and do not present your estimate as if it were the measurement.\n"
+    "- The record carries an exit_study: the same zones resolved to a nearer "
+    "final target (0.5R) clear break-even, in sample, out of sample and in each "
+    "year, where a market entry with the same risk does not. That is evidence "
+    "that the zone's location has an edge at a *near* target, not at the far "
+    "one. So prefer targets the structure can plausibly reach — the next "
+    "internal liquidity, not a distant pool — and when the only honest target is "
+    "near, say so rather than stretching the plan to reach 1:2. A reachable 0.5R "
+    "reading that clears is worth more than an unreachable 2R that does not.\n"
     "- Explicitly warn when a high-impact event (CPI, FOMC, NFP) is imminent "
     "or was flagged, because SMC structure can be invalidated by news.\n"
     "- The snapshot carries tape: the freshness of the bars the fact sheet was "

@@ -586,6 +586,43 @@ class MeasuredRecordTests(unittest.TestCase):
         self.assertEqual(rec["win_pct"], 23.2)
         self.assertEqual(rec["break_even_pct"], 27.9)
 
+    def test_the_exit_study_block_records_a_clearing_near_target(self):
+        # The headline record is about the shipped 2R/3R geometry and does not
+        # clear. The exit study answers a narrower question and does clear, and
+        # both must ride together so neither is read without the other.
+        rec = smc_engine.measured_record()
+        ex = rec["exit_study"]
+        self.assertEqual(ex["target_r"], 0.5)
+        self.assertTrue(ex["clears_gate"])
+        self.assertGreater(ex["wilson_low_in_sample_pct"],
+                           ex["break_even_in_sample_pct"])
+        self.assertGreater(ex["wilson_low_oos_pct"], ex["break_even_oos_pct"])
+
+    def test_the_exit_study_keeps_its_control_so_the_edge_is_not_rewritten(self):
+        # The finding is the *gap* to a market entry, not the raw win rate. The
+        # control must be recorded next to it, and it must be the loser.
+        rec = smc_engine.measured_record()
+        ex = rec["exit_study"]
+        self.assertLess(ex["control_win_pct_in_sample"], ex["win_pct_in_sample"])
+        self.assertLess(ex["control_win_pct_oos"], ex["win_pct_oos"])
+
+    def test_the_exit_study_says_it_is_evidence_not_a_signal(self):
+        rec = smc_engine.measured_record()
+        note = rec["exit_study"]["note"]
+        self.assertIn("Evidence", note)
+        self.assertIn("2R/3R", note)
+
+    def test_the_exit_study_reaches_the_model_prompt(self):
+        view = smc_engine._prompt_view({"symbol": "XAUUSD", "price": 2000.0,
+                                        "facts": {}, "news": [], "events": [],
+                                        "measured_record": smc_engine.measured_record()})
+        ex = view["engine_measured_record"]["exit_study"]
+        self.assertTrue(ex["clears_gate"])
+
+    def test_the_prompt_tells_the_model_the_edge_is_at_a_near_target(self):
+        self.assertIn("exit_study", smc_engine._SYSTEM_PROMPT)
+        self.assertIn("near", smc_engine._SYSTEM_PROMPT)
+
 
 class TapeFreshnessTests(unittest.TestCase):
     """The engine must know how current the tape is, and refuse a dead one.
