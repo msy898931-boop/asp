@@ -24,6 +24,7 @@ dependencies.
   - `/plan` — your plan and limits (tier-aware)
   - `/myid` — your chat id
   - `/subscribe` / `/unsubscribe` — push alerts on/off
+  - `/stop` / `/resume` — mute the whole bot / unmute it, from Telegram
   - `/help` — command list
 - **Reply keyboard**: deliberately short — four essentials only
   (`/price`, `/engine`, `/card`, `/help`). Every other command stays reachable by
@@ -74,6 +75,30 @@ most once.
 | Pre-news prep plan | `ForecastWatch` | once per event, ~1h out |
 | New advisor trade card | `TradeCardWatch` | on a moved structure |
 | **New SMC/ICT setup** | `SmcWatch` | on a moved structure, at most once per `ASTRA_SMC_ALERT_INTERVAL` |
+
+### Stopping the bot (`/stop`, `/resume`)
+
+`/stop` is the operator's brake. It does three things at once, and it is
+deliberately stronger than `/unsubscribe`:
+
+| | `/unsubscribe` | `/stop` |
+|---|---|---|
+| Pushes to **your** chat | off | off |
+| Pushes to **every** chat | still on | off |
+| Model calls (SMC/engine reads) | still spent | **not spent** |
+| Commands still answered | yes | yes |
+
+So `/stop` silences the whole bot *and* stops the monitor from spending a model
+call it would only throw away, while the process keeps polling — otherwise a
+stopped bot could only be restarted by hand on the host, which is the thing this
+is meant to avoid. `/resume` turns it back on.
+
+The flag is persisted (`telegram_pause.json`, beside the subscriber store), so a
+restart does not silently un-mute the bot; the startup banner prints
+`paused=true` and the greeting says so when it comes up muted. A level that is
+crossed while muted is **not** consumed, so `/resume` does not replay a break
+that happened during the pause. This is a mute, not a kill: to stop the process
+itself, kill it or suspend the service — see the repo's deployment notes.
 
 ### The SMC/ICT push (`SmcWatch`)
 

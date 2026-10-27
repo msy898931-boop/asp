@@ -1804,5 +1804,152 @@ class SmcMonitorTests(unittest.TestCase):
         self.assertEqual(sent, [])
 
 
+class PauseTests(unittest.TestCase):
+    """TEL-0105 - /stop and /resume: the operator's mute from Telegram."""
+
+    def setUp(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        self.dir = Path(d.name)
+        self.pause = bot.PauseState(self.dir / "pause.json")
+        # _pause is module state; restore it after each test so a stray mute
+        # does not leak into the next one.
+        saved = bot._pause
+        self.addCleanup(lambda: setattr(bot, "_pause", saved))
+        bot._pause = self.pause
+
+    def _router(self, pause="default", chat="9"):
+        api = FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY)
+        subs = bot.Subscriptions(self.dir / "s.json")
+        levels = bot.LevelStore(self.dir / "levels.json")
+        if pause == "default":
+            pause = self.pause
+        return bot.CommandRouter(api, subs, chat, levels=levels, pause=pause)
+
+    # ── the store ─────────────────────────────────────────────────────────
+    def test_pause_is_off_until_stopped(self):
+        self.assertFalse(self.pause.is_paused())
+
+    def test_pause_persists_across_a_restart(self):
+        self.pause.pause("9")
+        reloaded = bot.PauseState(self.dir / "pause.json")
+        self.assertTrue(reloaded.is_paused())
+
+    def test_resume_clears_the_flag_on_disk(self):
+        self.pause.pause("9")
+        self.pause.resume()
+        self.assertFalse(bot.PauseState(self.dir / "pause.json").is_paused())
+
+    def test_pause_records_who_and_when(self):
+        before = time.time()
+        self.pause.pause("9")
+        self.assertEqual(self.pause.paused_by(), "9")
+        self.assertGreaterEqual(self.pause.paused_since(), before)
+
+    def test_a_corrupt_pause_file_reads_as_running(self):
+        # A truncated write must not brick the bot into silence forever.
+        (self.dir / "bad.json").write_text("{not json", "utf-8")
+        self.assertFalse(bot.PauseState(self.dir / "bad.json").is_paused())
+
+    # ── the commands ──────────────────────────────────────────────────────
+    def test_stop_mutes_and_says_so(self):
+        out = self._router().handle("9", "/stop")
+        self.assertIn("⏸", out)
+        self.assertTrue(self.pause.is_paused())
+
+    def test_resume_unmutes(self):
+        self._router().handle("9", "/stop")
+        out = self._router().handle("9", "/resume")
+        self.assertIn("▶", out)
+        self.assertFalse(self.pause.is_paused())
+
+    def test_stop_twice_is_honest_not_silent(self):
+        self._router().handle("9", "/stop")
+        out = self._router().handle("9", "/stop")
+        self.assertIn("موقوف أصلًا", out)
+        self.assertTrue(self.pause.is_paused())
+
+    def test_resume_when_running_is_honest(self):
+        out = self._router().handle("9", "/resume")
+        self.assertIn("يعمل أصلًا", out)
+
+    def test_stop_works_without_a_pause_store(self):
+        # An embedder that never wires PauseState still gets a clear answer.
+        out = self._router(pause=None).handle("9", "/stop")
+        self.assertIn("غير مفعّل", out)
+
+    def test_stop_is_offered_in_help_and_the_menu(self):
+        self.assertIn("/stop", bot.CommandRouter.HELP)
+        self.assertIn("/resume", bot.CommandRouter.HELP)
+        names = [c for c, _ in bot.BOT_COMMANDS]
+        self.assertIn("/stop", names)
+        self.assertIn("/resume", names)
+
+    # ── the enforcement ───────────────────────────────────────────────────
+    def test_a_paused_bot_broadcasts_nothing(self):
+        subs = bot.Subscriptions(self.dir / "s.json")
+        subs.add("1")
+        client = FakeClient()
+        self.pause.pause("9")
+        bot._broadcast(client, subs, "signal")
+        self.assertEqual(client.sent, [])
+
+    def test_a_running_bot_broadcasts_normally(self):
+        subs = bot.Subscriptions(self.dir / "s.json")
+        subs.add("1")
+        client = FakeClient()
+        bot._broadcast(client, subs, "signal")
+        self.assertEqual([c for c, _ in client.sent], ["1"])
+
+    def test_resume_restores_the_broadcast(self):
+        subs = bot.Subscriptions(self.dir / "s.json")
+        subs.add("1")
+        self.pause.pause("9")
+        self.pause.resume()
+        client = FakeClient()
+        bot._broadcast(client, subs, "signal")
+        self.assertEqual([c for c, _ in client.sent], ["1"])
+
+    def test_a_paused_bot_mirrors_nothing_to_web_push(self):
+        calls = []
+
+        class _FakePush:
+            @staticmethod
+            def broadcast(payload):
+                calls.append(payload)
+                return {"configured": True, "sent": 1, "removed": 0}
+
+        saved = bot.webpush
+        bot.webpush = _FakePush
+        try:
+            subs = bot.Subscriptions(self.dir / "s.json")
+            subs.add("1")
+            self.pause.pause("9")
+            bot._broadcast(FakeClient(), subs, "signal")
+        finally:
+            bot.webpush = saved
+        self.assertEqual(calls, [])
+
+    def test_a_paused_bot_skips_the_level_check(self):
+        # The level path sends directly, not through _broadcast, so it needs its
+        # own guard — otherwise a break would still reach the chat.
+        levels = bot.LevelStore(self.dir / "levels.json")
+        levels.add("9", 4180.0, bot.DIR_ABOVE)
+        client = FakeClient()
+        self.pause.pause("9")
+        bot._check_levels(FakeApi(HEALTH_ONLINE, SYSTEM, BRIDGE, ANALYSIS_EMPTY),
+                          levels, None, client)
+        self.assertEqual(client.sent, [])
+
+    def test_pause_is_read_from_the_module_flag(self):
+        self.assertFalse(bot._paused())
+        self.pause.pause("9")
+        self.assertTrue(bot._paused())
+
+    def test_no_store_means_never_paused(self):
+        bot._pause = None
+        self.assertFalse(bot._paused())
+
+
 if __name__ == "__main__":
     unittest.main()

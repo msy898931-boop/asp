@@ -107,6 +107,18 @@ _SEND_TIMEOUT_SECONDS = 10
 
 _stop = threading.Event()
 
+# The global mute, wired by main() once the state store exists. Module-level for
+# the same reason _stop is: every push path — the monitor, the level checker,
+# the SMC/card watches — reads one flag instead of threading it through each
+# call. None until main() sets it, and _paused() reads that as "not paused", so
+# a caller that never wires it (a test, an embedder) keeps alerting.
+_pause: Optional["PauseState"] = None
+
+
+def _paused() -> bool:
+    """True when /stop has muted the bot; False when nothing is wired."""
+    return _pause is not None and _pause.is_paused()
+
 # A fresh card is real news, but on a live tape the levels shift with every
 # closed M5 bar, so an unthrottled watch re-announces the same setup several
 # times a minute. The card's entry is the freshest M5 close and the stop is the
@@ -198,6 +210,8 @@ BOT_COMMANDS: List[tuple] = [
     ("/myid", "معرّف محادثتي"),
     ("/subscribe", "تشغيل التنبيهات"),
     ("/unsubscribe", "إيقاف التنبيهات"),
+    ("/stop", "إيقاف البوت (كتم كل التنبيهات)"),
+    ("/resume", "تشغيل البوت من جديد"),
     ("/help", "المساعدة"),
 ]
 
@@ -346,11 +360,87 @@ class Subscriptions:
             return sorted(self._chats)
 
 
+class PauseState:
+    """A persisted global mute, flipped from Telegram with /stop and /resume.
+
+    /stop is the operator's brake: it silences every push *and* stops the
+    monitor from spending a model call, while the process keeps polling so
+    /resume stays reachable. Without that last part a stopped bot could only be
+    restarted by hand on the host — the very thing this is meant to avoid. The
+    flag lives on disk, so a restart does not silently un-mute the bot.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._lock = threading.Lock()
+        self._paused = False
+        self._at: Optional[float] = None
+        self._by = ""
+        self._load()
+
+    def _load(self) -> None:
+        try:
+            raw = json.loads(self.path.read_text("utf-8"))
+        except (OSError, ValueError):
+            return
+        if not isinstance(raw, dict):
+            return
+        self._paused = bool(raw.get("paused", False))
+        at = raw.get("at")
+        self._at = float(at) if isinstance(at, (int, float)) else None
+        self._by = str(raw.get("by", ""))
+
+    def _save_locked(self) -> None:
+        payload = {"paused": self._paused, "at": self._at, "by": self._by}
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(payload, indent=2, sort_keys=True),
+                                 "utf-8")
+        except OSError as exc:
+            print(f"[warn] could not persist pause state: {exc}", file=sys.stderr)
+
+    def is_paused(self) -> bool:
+        with self._lock:
+            return self._paused
+
+    def paused_since(self) -> Optional[float]:
+        with self._lock:
+            return self._at
+
+    def paused_by(self) -> str:
+        with self._lock:
+            return self._by
+
+    def pause(self, by: str = "") -> None:
+        with self._lock:
+            self._paused = True
+            self._at = time.time()
+            self._by = str(by)
+            self._save_locked()
+
+    def resume(self) -> None:
+        with self._lock:
+            self._paused = False
+            self._at = None
+            self._by = ""
+            self._save_locked()
+
+
 # ─────────────────────────────── formatting ─────────────────────────────────
 
 
 def _yn(value: Any) -> str:
     return "نعم" if value else "لا"
+
+
+def _fmt_since(when: float) -> str:
+    """A short Arabic "منذ ..." for a pause timestamp, e.g. "منذ 3 د"."""
+    seconds = max(0, int(time.time() - when))
+    if seconds < 60:
+        return f" منذ {seconds} ث"
+    if seconds < 3600:
+        return f" منذ {seconds // 60} د"
+    return f" منذ {seconds // 3600} س"
 
 
 def format_status(snap: Dict[str, Any]) -> str:
@@ -821,13 +911,15 @@ class CommandRouter:
                  default_chat: Optional[str],
                  levels: Optional[LevelStore] = None,
                  ent: Optional[Entitlements] = None,
-                 vol_model: Optional[VolatilityModel] = None) -> None:
+                 vol_model: Optional[VolatilityModel] = None,
+                 pause: Optional[PauseState] = None) -> None:
         self.api = api
         self.subs = subs
         self.default_chat = default_chat
         self.levels = levels
         self.ent = ent
         self.vol_model = vol_model
+        self.pause = pause
 
     HELP = (
         "[ASTRA] الأوامر\n"
@@ -839,6 +931,8 @@ class CommandRouter:
         "🗑 /clearlevels - حذف كل مستوياتك\n"
         "🔕 /subscribe - تشغيل التنبيهات\n"
         "🔔 /unsubscribe - إيقاف التنبيهات\n"
+        "⏸ /stop - إيقاف البوت (كتم كل التنبيهات)\n"
+        "▶ /resume - تشغيل البوت من جديد\n"
         "⭐ /plan - خطتك وحدودها\n"
         "📊 /status - حالة النظام والوضع\n"
         "🌊 /vol - توقّع تقلّب السوق (لا يتنبّأ بالاتجاه)\n"
@@ -1080,6 +1174,26 @@ class CommandRouter:
             if cmd == "/unsubscribe":
                 self.subs.remove(chat_id)
                 return "🔔 تم إيقاف الاشتراك. لا مزيد من التنبيهات."
+            if cmd == "/stop":
+                if self.pause is None:
+                    return ("الكتم غير مفعّل في هذا التشغيل. استخدم "
+                            "/unsubscribe لإيقاف تنبيهاتك.")
+                if self.pause.is_paused():
+                    since = self.pause.paused_since()
+                    when = _fmt_since(since) if since else ""
+                    return f"⏸ البوت موقوف أصلًا{when}. أرسل /resume لتشغيله."
+                self.pause.pause(chat_id)
+                return ("⏸ تم إيقاف البوت. لا تنبيهات ولا قراءات للمحرّك، "
+                        "ولا تُصرف رموز الموديل.\n"
+                        "الأوامر ما زالت تعمل. أرسل /resume للتشغيل.")
+            if cmd == "/resume":
+                if self.pause is None:
+                    return "الكتم غير مفعّل في هذا التشغيل."
+                if not self.pause.is_paused():
+                    return "▶ البوت يعمل أصلًا."
+                self.pause.resume()
+                return ("▶ تم تشغيل البوت. ستعود التنبيهات وقراءات المحرّك "
+                        "عند الفحص القادم.")
             if cmd:
                 return "أمر غير معروف. جرّب /help."
         except ApiError as exc:
@@ -1107,6 +1221,9 @@ def _push_mirror(text: str) -> None:
 
 
 def _broadcast(client: TelegramClient, subs: Subscriptions, text: str) -> None:
+    if _paused():
+        # /stop silences every push; the monitor keeps running so /resume works.
+        return
     for chat in subs.all():
         try:
             client.send_message(chat, text)
@@ -1633,6 +1750,13 @@ def monitor_backend(api: AstraApi, subs: Subscriptions, client: TelegramClient,
     while not _stop.is_set():
         if _stop.wait(interval):
             break
+        if _paused():
+            # /stop is a brake on the whole monitor, not just the sends: the SMC
+            # watch would otherwise still read the engine (spending a model call)
+            # only to have _broadcast drop the alert. Skipping the cycle also
+            # means a level is not consumed while muted, so /resume does not
+            # replay a break that happened during the pause.
+            continue
         try:
             for alert in engine.poll():
                 _broadcast(client, subs, alert)
@@ -1754,6 +1878,8 @@ def _check_levels(api: AstraApi, levels: LevelStore,
     ``news_context`` is appended to the alert so a break is explained by the
     release that likely caused it — the level feature's "interpretation 1".
     """
+    if _paused():
+        return
     price = api.last_price()
     if price is None:
         return
@@ -1826,6 +1952,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     state_dir = Path(args.state).parent
     levels = LevelStore(state_dir / "price_levels.json")
     ent = entitlements_from_env(state_dir)
+    # The /stop brake. Persisted, so a restart does not silently un-mute. Wired
+    # into the module-level _pause that every push path reads.
+    global _pause
+    _pause = PauseState(state_dir / "telegram_pause.json")
     # Liveness beacon: the phone server reads this file to answer /bot.json, so
     # "is the bot actually polling?" is observable. Without it a dead poller is
     # silent — the watchdog only watched the GitHub scanner, never this process.
@@ -1846,7 +1976,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.chat:
         subs.add(args.chat)
     router = CommandRouter(api, subs, args.chat or None, levels=levels, ent=ent,
-                           vol_model=vol_model)
+                           vol_model=vol_model, pause=_pause)
     card_watch = None if args.no_card_alerts else TradeCardWatch(
         args.card_alert_cooldown, args.card_alert_material)
     forecast_watch = None if args.no_forecast_alerts else ForecastWatch()
@@ -1858,7 +1988,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         _signal.signal(sig, lambda *_: _stop.set())
 
     print(f"[OK] ASTRA bot online | api={args.api} | subscribers={len(subs.all())}"
-          f" | selling={ent.selling}", flush=True)
+          f" | selling={ent.selling}"
+          f" | paused={_pause.is_paused()}", flush=True)
 
     # Register the command menu and the menu button. This overwrites anything
     # that was set by hand in BotFather, so the app always shows the real list.
@@ -1869,9 +2000,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"[warn] could not register commands: {exc}", file=sys.stderr)
 
     if args.chat:
+        # Say so when the bot came up muted, or the operator sees silence and
+        # assumes the alerts broke rather than that /stop is still in force.
+        hello = "🤖 ASTRA جاهز. أرسل /help أو استخدم الأزرار."
+        if _pause.is_paused():
+            hello = "⏸ ASTRA يعمل لكنه موقوف (/stop سابق). أرسل /resume لتشغيل التنبيهات."
         try:
-            client.send_message(args.chat, "🤖 ASTRA جاهز. أرسل /help أو استخدم الأزرار.",
-                                keyboard=True)
+            client.send_message(args.chat, hello, keyboard=True)
         except RuntimeError as exc:
             print(f"[warn] startup message failed: {exc}", file=sys.stderr)
 
