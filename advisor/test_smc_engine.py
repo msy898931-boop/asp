@@ -624,6 +624,82 @@ class MeasuredRecordTests(unittest.TestCase):
         self.assertIn("near", smc_engine._SYSTEM_PROMPT)
 
 
+class MeasuredPlanWiringTests(unittest.TestCase):
+    """The deterministic near-target plan must reach the reply on every path.
+
+    It is the one number on the sheet that is a *measurement*, so it is computed
+    without a model and must survive a provider that refuses, rate-limits or is
+    unconfigured. A stale tape is the one state that suppresses it.
+    """
+
+    def _snapshot(self, tape_state="live"):
+        return {
+            "symbol": "XAUUSD", "price": 2010.0,
+            "facts": {"timeframes": {
+                "M15": {"close": 2010.0, "atr": 5.0,
+                        "structure": {"bias": "bullish"},
+                        "order_blocks": [{"kind": "bullish", "low": 1995.0,
+                                          "high": 2000.0}],
+                        "fair_value_gaps": []}}},
+            "news": [], "events": [],
+            "measured_record": smc_engine.measured_record(),
+            "tape": {"state": tape_state, "frames_degraded": []},
+        }
+
+    def test_the_plan_is_computed_without_a_model(self):
+        with mock.patch.dict(os.environ,
+                             {"ASTRA_SMC_DETERMINISTIC_PLAN": "1"}, clear=True), \
+             mock.patch.object(smc_engine, "build_snapshot",
+                               return_value=self._snapshot()), \
+             mock.patch.object(ai_advisor, "provider_key", return_value=""):
+            result = smc_engine.Engine()._build()
+        self.assertIsNone(result["analysis"])
+        self.assertIsNotNone(result["measured_plan"])
+        self.assertEqual(result["measured_plan"]["direction"], "LONG")
+        self.assertEqual(result["measured_plan"]["measured_target_r"], 0.5)
+
+    def test_the_plan_reaches_the_reply_when_the_model_fails(self):
+        with mock.patch.dict(os.environ,
+                             {"ASTRA_SMC_DETERMINISTIC_PLAN": "1"}, clear=True), \
+             mock.patch.object(smc_engine, "build_snapshot",
+                               return_value=self._snapshot()), \
+             mock.patch.object(ai_advisor, "provider_key", return_value="k"), \
+             mock.patch.object(ai_advisor, "call_model", return_value=None), \
+             mock.patch.object(smc_engine, "append_log"):
+            result = smc_engine.Engine()._build()
+        self.assertIsNone(result["analysis"])
+        self.assertIsNotNone(result["measured_plan"])
+
+    def test_a_stale_tape_suppresses_the_plan(self):
+        with mock.patch.dict(os.environ,
+                             {"ASTRA_SMC_DETERMINISTIC_PLAN": "1"}, clear=True), \
+             mock.patch.object(smc_engine, "build_snapshot",
+                               return_value=self._snapshot("stale")), \
+             mock.patch.object(ai_advisor, "provider_key", return_value="k"), \
+             mock.patch.object(smc_engine, "append_log"):
+            result = smc_engine.Engine()._build()
+        self.assertTrue(result["stale_tape"])
+        self.assertIsNone(result["measured_plan"])
+
+    def test_the_plan_is_absent_when_the_feature_is_off(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+             mock.patch.object(smc_engine, "build_snapshot",
+                               return_value=self._snapshot()), \
+             mock.patch.object(ai_advisor, "provider_key", return_value=""):
+            result = smc_engine.Engine()._build()
+        self.assertIsNone(result["measured_plan"])
+
+    def test_the_plan_carries_its_distance_from_price(self):
+        with mock.patch.dict(os.environ,
+                             {"ASTRA_SMC_DETERMINISTIC_PLAN": "1"}, clear=True), \
+             mock.patch.object(smc_engine, "build_snapshot",
+                               return_value=self._snapshot()), \
+             mock.patch.object(ai_advisor, "provider_key", return_value=""):
+            result = smc_engine.Engine()._build()
+        # Entry 1997.5 from price 2010.0 is -12.5.
+        self.assertEqual(result["measured_plan"]["distance_from_price"], -12.5)
+
+
 class TapeFreshnessTests(unittest.TestCase):
     """The engine must know how current the tape is, and refuse a dead one.
 

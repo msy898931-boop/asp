@@ -44,6 +44,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Sequence
 
 import ai_advisor
+import smc_plan
 import smc_read
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -379,6 +380,30 @@ def tape_verdict(tape: dict, timeframes: Sequence[str]) -> dict:
         "max_lag_bars": MAX_LAG_BARS,
         "per_frame": {tf: tape.get(tf) for tf in timeframes},
     }
+
+
+def _measured_plan(snapshot: dict) -> dict | None:
+    """The deterministic near-target plan, or None when it is off or absent.
+
+    This is the one plan on the sheet that is a *measurement* rather than a
+    reading: ``smc_plan.build_plan`` reproduces the geometry
+    ``research/smc_exit_study.py`` resolved and found clearing break-even. It
+    carries no model, so it is computed here and reaches the reply whatever the
+    provider did — the reading can fail while the measurement still stands.
+
+    The distance the entry sits from price is attached the same way the model's
+    plans get it, so the phone panel renders both identically.
+    """
+    if not smc_plan.enabled():
+        return None
+    facts_by_tf = (snapshot.get("facts") or {}).get("timeframes") or {}
+    plan = smc_plan.build_plan(facts_by_tf)
+    if plan is None:
+        return None
+    price = snapshot.get("price")
+    if price is not None:
+        plan["distance_from_price"] = round(plan["entry"] - price, 2)
+    return plan
 
 
 def build_snapshot() -> dict:
@@ -830,7 +855,18 @@ class Engine:
             "model": ai_advisor.active_model() if api_key else None,
             "snapshot": snapshot,
             "analysis": None,
+            # The deterministic near-target plan — the one number on this sheet
+            # that is a *measurement* rather than a reading. Computed here, with
+            # no model, so it reaches the reply even when the provider refuses,
+            # rate-limits or is unconfigured: the reading can fail while the
+            # measurement stands. A stale tape still suppresses it, because a
+            # plan anchored to old bars describes a market that has moved.
+            "measured_plan": None,
         }
+        tape = snapshot.get("tape") or {}
+        if tape.get("state") != "stale":
+            result["measured_plan"] = _measured_plan(snapshot)
+
         if not api_key:
             result["note"] = ("SMC engine not configured: set %s to enable the "
                               "SMC analyst."
@@ -843,7 +879,6 @@ class Engine:
         # would describe a market that has already moved — the exact error the
         # anchoring rule exists to prevent, one level up. No model call is made:
         # a plan is not produced and then hidden, it is never asked for.
-        tape = snapshot.get("tape") or {}
         if tape.get("state") == "stale":
             result["stale_tape"] = True
             result["note"] = stale_tape_note(tape)
@@ -924,6 +959,12 @@ def _print_once(result: dict) -> None:
     print("SMC engine · %s · framework=%s · provider=%s model=%s configured=%s"
           % (result["symbol"], result["framework"], result["provider"], model,
              result["configured"]))
+    mp = result.get("measured_plan")
+    if mp:
+        print("\nخطة مقيسة (بلا موديل): %s" % mp["direction"])
+        print("   entry %s · stop %s · target %s · R:R %s"
+              % (mp["entry"], mp["stop"], mp["target"], mp["reward_risk"]))
+        print("   %s" % mp["rationale"])
     if not result["configured"]:
         print(result["note"])
         return
