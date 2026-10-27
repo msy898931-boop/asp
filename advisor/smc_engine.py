@@ -95,6 +95,26 @@ CACHE_TTL = float(os.environ.get("ASTRA_SMC_CACHE_TTL", "60"))
 # The methodology demands at least 1:2 reward-to-risk; a plan below this is
 # dropped, not shown with a caveat.
 MIN_RR = float(os.environ.get("ASTRA_SMC_MIN_RR", "2.0"))
+
+# The prompt must fit the provider's per-minute token ceiling. The Groq free
+# tier (the default provider) allows 8000 tokens per minute, counted on the
+# request *including* the system prompt, so a fact sheet that reads beautifully
+# is still useless if the call is refused with HTTP 413 before the model ever
+# sees it. The budget is deliberately below the ceiling: the provider counts
+# tokens with its own tokenizer, which runs a little larger than the character
+# estimate below, and a request that lands exactly on the limit is a coin flip.
+PROMPT_TOKEN_BUDGET = int(os.environ.get("ASTRA_SMC_TOKEN_BUDGET", "6000"))
+# Characters per token for a JSON fact sheet of numbers, keys and short Arabic
+# strings. Calibrated on the live failure: a 47628-character prompt was refused
+# at 14254 tokens, i.e. ~3.34 characters per token. The value below is set under
+# that ratio so the estimate runs *larger* than the provider's own count: over-
+# estimating costs a little fact sheet, under-estimating costs the whole request
+# to a 413.
+CHARS_PER_TOKEN = float(os.environ.get("ASTRA_SMC_CHARS_PER_TOKEN", "3.2"))
+# How many headlines to hand the model. The feed carries many; the first few
+# are the ones that matter and the rest only cost tokens.
+NEWS_IN_PROMPT = int(os.environ.get("ASTRA_SMC_NEWS", "4"))
+
 LOG_PATH = os.environ.get(
     "ASTRA_SMC_LOG", os.path.join(ROOT, "run", "smc_engine_plans.jsonl"))
 
@@ -357,20 +377,94 @@ def _prompt_view(snapshot: dict) -> dict:
     fact sheet. The persona is told the record is the project's finding and not
     the model's to restate as its own.
     """
+    news = snapshot.get("news") or []
     return {
         "symbol": snapshot["symbol"],
         "price": snapshot["price"],
         "smc_facts": snapshot["facts"],
         "tape": snapshot.get("tape"),
         "engine_measured_record": snapshot.get("measured_record"),
-        "news": snapshot["news"],
+        "news": news[:NEWS_IN_PROMPT],
         "events": snapshot["events"],
     }
 
 
+def _token_estimate(text: str) -> int:
+    """The provider's token count for a prompt, as a safe over-estimate.
+
+    No tokenizer ships with the project and the provider's own is not callable
+    offline, so the count is characters divided by a conservative ratio. The
+    ratio is calibrated on real fact sheets: over-estimating costs a little
+    fact sheet, under-estimating costs the whole request to a 413.
+    """
+    return int(len(text) / CHARS_PER_TOKEN) + 1
+
+
+def _trim_facts(facts: dict, keep_plans: int) -> dict:
+    """The fact sheet with the oldest list entries dropped.
+
+    Each per-timeframe list (fair-value gaps, order blocks, sweeps, liquidity
+    clusters) is already capped at a handful; when the whole sheet still runs
+    long, the least recent entries of each are the ones to go. The most recent
+    entry in every list survives at any keep count, so the structure the model
+    reasons over — the current gap, the current block, the current sweep — is
+    never the thing that was trimmed away. The lists are shortened in place on a
+    copy; the caller's snapshot is untouched.
+    """
+    trimmed: dict = {}
+    for tf, read in (facts.get("timeframes") or {}).items():
+        if not isinstance(read, dict):
+            trimmed[tf] = read
+            continue
+        out: dict = {}
+        for key, value in read.items():
+            if isinstance(value, list) and len(value) > keep_plans:
+                out[key] = value[-keep_plans:]
+            elif isinstance(value, dict):
+                # `liquidity` nests its own lists under equal_highs/equal_lows/
+                # sweeps; trim those too, or the deepest lists never shrink.
+                out[key] = {
+                    k: (v[-keep_plans:] if isinstance(v, list)
+                        and len(v) > keep_plans else v)
+                    for k, v in value.items()
+                }
+            else:
+                out[key] = value
+        trimmed[tf] = out
+    return dict(facts, timeframes=trimmed)
+
+
 def build_prompt(snapshot: dict) -> str:
-    return (_SYSTEM_PROMPT + "\n\nFact sheet:\n"
-            + json.dumps(_prompt_view(snapshot), indent=2, sort_keys=True))
+    """The system prompt plus the fact sheet, sized to the provider's budget.
+
+    Compact JSON (no indentation) halves the payload against the pretty-printed
+    form at no cost to the model — whitespace is tokens too, and a 413 refuses
+    the request before the model reads a single fact. If the compact sheet is
+    still over ``PROMPT_TOKEN_BUDGET``, the oldest entries of each fact list are
+    dropped a step at a time until it fits, so a wide fact sheet degrades to a
+    narrower one rather than to no read at all.
+    """
+    view = _prompt_view(snapshot)
+    head = _SYSTEM_PROMPT + "\n\nFact sheet:\n"
+
+    def render(v: dict) -> str:
+        return head + json.dumps(v, separators=(",", ":"), sort_keys=True)
+
+    prompt = render(view)
+    if _token_estimate(prompt) <= PROMPT_TOKEN_BUDGET:
+        return prompt
+
+    facts = view.get("smc_facts") or {}
+    for keep in (4, 3, 2, 1):
+        view["smc_facts"] = _trim_facts(facts, keep)
+        prompt = render(view)
+        if _token_estimate(prompt) <= PROMPT_TOKEN_BUDGET:
+            return prompt
+    # Still over at one entry per list: the sheet is as small as the methodology
+    # allows. Return it and let the provider answer — a truncated fact sheet
+    # would be worse than a refused one, because a plan built on a silently
+    # partial sheet would still be stamped as if the whole structure was read.
+    return prompt
 
 
 def _as_float(value) -> float | None:
@@ -739,9 +833,25 @@ class Engine:
                                   "still live.")
             else:
                 why = ai_advisor.failure_reason()
-                result["note"] = (
-                    "SMC engine unavailable: no usable reply (%s)." % why
-                    if why else "SMC engine unavailable: no usable reply.")
+                failure = ai_advisor.last_http_failure() or {}
+                if failure.get("code") == 413:
+                    # The request was refused for its size, not its content.
+                    # Naming the ceiling and the budget turns a dead end into a
+                    # dial: the operator can raise ASTRA_SMC_TOKEN_BUDGET, or
+                    # lower ASTRA_SMC_BARS / ASTRA_SMC_NEWS, and retry.
+                    result["prompt_too_large"] = True
+                    result["note"] = (
+                        "SMC engine unavailable: the request is larger than the "
+                        "provider's per-minute token ceiling (HTTP 413: %s). "
+                        "The fact sheet was already trimmed to fit the "
+                        "configured budget; lower ASTRA_SMC_BARS or "
+                        "ASTRA_SMC_NEWS, or raise ASTRA_SMC_TOKEN_BUDGET on a "
+                        "plan with a higher limit." % (why or "request too "
+                                                       "large"))
+                else:
+                    result["note"] = (
+                        "SMC engine unavailable: no usable reply (%s)." % why
+                        if why else "SMC engine unavailable: no usable reply.")
             return result
 
         result["analysis"] = assemble(snapshot, parsed)

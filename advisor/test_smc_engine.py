@@ -454,6 +454,73 @@ class PromptTests(unittest.TestCase):
         self.assertIn("smc_facts", view)
         self.assertEqual(view["smc_facts"], {"timeframes": {"M15": {}}})
 
+    def test_the_prompt_view_caps_the_headlines(self):
+        # The feed can carry dozens; only the first few are worth their tokens.
+        snapshot = {"symbol": "XAUUSD", "price": 2000.0,
+                    "facts": {"timeframes": {}},
+                    "news": ["h%d" % i for i in range(20)], "events": []}
+        view = smc_engine._prompt_view(snapshot)
+        self.assertEqual(len(view["news"]), smc_engine.NEWS_IN_PROMPT)
+        self.assertEqual(view["news"][0], "h0")
+
+
+class PromptBudgetTests(unittest.TestCase):
+    """The prompt must fit the provider's per-minute ceiling, or a 413 kills it."""
+
+    def _snapshot(self, n_lists: int) -> dict:
+        tf = {"fair_value_gaps": [{"kind": "bullish", "low": 4000.0 + i,
+                                   "high": 4002.0 + i, "equilibrium": 4001.0 + i,
+                                   "size": 2.0, "filled": False,
+                                   "bars_ago": i} for i in range(n_lists)],
+              "order_blocks": [{"kind": "bullish", "low": 4000.0 + i,
+                                "high": 4002.0 + i, "bars_ago": i}
+                               for i in range(n_lists)],
+              "liquidity": {"equal_highs": [{"level": 4100.0 + i, "touches": 2}
+                                            for i in range(n_lists)],
+                            "equal_lows": [], "sweeps": []},
+              "close": 4100.0, "atr": 3.0}
+        return {"symbol": "XAUUSD", "price": 4100.0,
+                "facts": {"timeframes": {"M15": tf, "H1": tf}},
+                "tape": {"state": "live"}, "measured_record": {"gate": "pass"},
+                "news": ["a headline about gold and the Fed"] * 10,
+                "events": []}
+
+    def test_the_prompt_is_compact_json_not_pretty_printed(self):
+        # Indentation is tokens too, and the old pretty-print doubled the size.
+        prompt = smc_engine.build_prompt(self._snapshot(3))
+        self.assertNotIn('\n  "', prompt)
+        self.assertIn('"smc_facts"', prompt)
+
+    def test_a_wide_fact_sheet_is_trimmed_to_fit_the_budget(self):
+        snapshot = self._snapshot(40)
+        prompt = smc_engine.build_prompt(snapshot)
+        self.assertLessEqual(smc_engine._token_estimate(prompt),
+                             smc_engine.PROMPT_TOKEN_BUDGET)
+
+    def test_the_newest_entry_survives_the_trim(self):
+        snapshot = self._snapshot(40)
+        prompt = smc_engine.build_prompt(snapshot)
+        view = json.loads(prompt.split("Fact sheet:\n", 1)[1])
+        gaps = view["smc_facts"]["timeframes"]["M15"]["fair_value_gaps"]
+        self.assertTrue(gaps)
+        # The last entry written (bars_ago == 39) is the most recent, so it is
+        # the one that must still be there after trimming.
+        self.assertEqual(gaps[-1]["bars_ago"], 39)
+
+    def test_the_caller_snapshot_is_not_mutated(self):
+        snapshot = self._snapshot(40)
+        before = len(snapshot["facts"]["timeframes"]["M15"]["fair_value_gaps"])
+        smc_engine.build_prompt(snapshot)
+        after = len(snapshot["facts"]["timeframes"]["M15"]["fair_value_gaps"])
+        self.assertEqual(before, after)
+
+    def test_a_small_sheet_is_returned_untouched(self):
+        snapshot = self._snapshot(2)
+        prompt = smc_engine.build_prompt(snapshot)
+        view = json.loads(prompt.split("Fact sheet:\n", 1)[1])
+        gaps = view["smc_facts"]["timeframes"]["M15"]["fair_value_gaps"]
+        self.assertEqual(len(gaps), 2)
+
 
 class TimeframeSelectionTests(unittest.TestCase):
     def test_default_is_the_five_structural_frames(self):
