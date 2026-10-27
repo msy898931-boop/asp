@@ -738,7 +738,10 @@ class Engine:
                                   "quota is spent. The fact sheet below is "
                                   "still live.")
             else:
-                result["note"] = "SMC engine unavailable: no usable reply."
+                why = ai_advisor.failure_reason()
+                result["note"] = (
+                    "SMC engine unavailable: no usable reply (%s)." % why
+                    if why else "SMC engine unavailable: no usable reply.")
             return result
 
         result["analysis"] = assemble(snapshot, parsed)

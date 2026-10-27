@@ -586,7 +586,10 @@ class Engine:
                 result["note"] = ("AI engine paused: the provider's daily quota "
                                   "is spent. The snapshot below is still live.")
             else:
-                result["note"] = "AI engine unavailable: no usable reply."
+                why = ai_advisor.failure_reason()
+                result["note"] = (
+                    "AI engine unavailable: no usable reply (%s)." % why
+                    if why else "AI engine unavailable: no usable reply.")
             return result
 
         result["analysis"] = assemble(snapshot, parsed)

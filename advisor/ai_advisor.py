@@ -533,10 +533,60 @@ def _note_auth_failure(code: int, detail: str) -> None:
     thing an operator needs to see, so it is kept here and surfaced verbatim.
     """
     global _AUTH_FAILURE
-    detail = (detail or "").strip()
-    # The provider's own words when it gives any, otherwise the status code.
-    message = detail[:200] if detail else ("HTTP %d" % code)
-    _AUTH_FAILURE = {"code": code, "message": message}
+    _AUTH_FAILURE = {"code": code, "message": _redact(detail) or
+                     ("HTTP %d" % code)}
+
+
+def _redact(detail: str) -> str:
+    """The provider's words, trimmed and with anything key-shaped removed.
+
+    An error body is echoed to the operator and into logs, and a provider may
+    quote the credential back inside its message. Anything that looks like a
+    bearer token or an ``sk-`` key is replaced before it can be displayed.
+    """
+    import re
+    text = (detail or "").strip()[:300]
+    text = re.sub(r"(?i)\b(bearer)\s+\S+", r"\1 <redacted>", text)
+    text = re.sub(r"\bsk-[A-Za-z0-9_\-]{6,}", "<redacted>", text)
+    return text
+
+
+def _note_http_failure(code: int, detail: str) -> None:
+    """Record any transport-level failure, not only a rejected key.
+
+    A 400 from a bad model name, a 402 from an empty balance, a 404 from a
+    wrong base URL: each is actionable and each used to be flattened into
+    "no usable reply", which told the operator nothing about what to change.
+    Kept apart from ``_AUTH_FAILURE`` so the 401/403 wording stays specific.
+    """
+    global _LAST_HTTP_FAILURE
+    _LAST_HTTP_FAILURE = {"code": int(code), "message": _redact(detail) or ""}
+
+
+def last_http_failure() -> dict | None:
+    """The last transport failure seen on a model call, or None."""
+    return _LAST_HTTP_FAILURE
+
+
+def _note_empty_reply(why: str) -> None:
+    """Record a 2xx reply that carried no usable text."""
+    global _LAST_HTTP_FAILURE
+    _LAST_HTTP_FAILURE = {"code": 0, "message": why}
+
+
+def failure_reason() -> str:
+    """A one-line, human-readable reason for the last failed model call.
+
+    Empty when nothing is known, so a caller can append it to its own sentence
+    without printing a dangling bracket.
+    """
+    failure = _LAST_HTTP_FAILURE
+    if not failure:
+        return ""
+    code, message = failure.get("code"), failure.get("message") or ""
+    if code:
+        return "HTTP %d%s" % (code, (": " + message) if message else "")
+    return message
 
 
 def auth_failure() -> dict | None:
@@ -578,6 +628,7 @@ def call_openai_compatible(url: str, model: str, prompt: str, api_key: str,
         with contextlib.suppress(OSError):
             detail = exc.read().decode("utf-8", "replace")[:200]
         sys.stderr.write("[advisor] %s HTTP %s: %s\n" % (label, exc.code, detail))
+        _note_http_failure(exc.code, detail)
         if exc.code in (401, 403):
             # A rejected key is not a transient failure; name it so the caller
             # can report "expired/revoked" instead of "no usable reply".
@@ -587,11 +638,24 @@ def call_openai_compatible(url: str, model: str, prompt: str, api_key: str,
         return None
     except (urllib.error.URLError, OSError, ValueError) as exc:
         sys.stderr.write("[advisor] %s request failed: %s\n" % (label, exc))
+        _note_empty_reply("request failed: %s" % exc)
         return None
     try:
-        return payload["choices"][0]["message"]["content"]
+        content = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
+        # A 2xx that carries an error object or an unexpected shape. OpenRouter
+        # and friends answer 200 with ``{"error": {...}}`` when an upstream
+        # provider fails, so this is a real failure, not an empty completion.
+        err = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(err, dict):
+            _note_empty_reply(str(err.get("message") or err))
+        else:
+            _note_empty_reply("the provider returned no message content")
         return None
+    if not (content or "").strip():
+        _note_empty_reply("the provider returned an empty message")
+        return None
+    return content
 
 
 def call_groq(prompt: str, api_key: str) -> str | None:
@@ -631,8 +695,9 @@ def call_model(prompt: str, api_key: str) -> str | None:
     the back-off and stops the walk. The model that actually answered is
     recorded in ``_LAST_MODEL`` so the payload can name it honestly.
     """
-    global _LAST_MODEL
+    global _LAST_MODEL, _LAST_HTTP_FAILURE
     _LAST_MODEL = None
+    _LAST_HTTP_FAILURE = None
     if PROVIDER == "gemini":
         reply = call_gemini(prompt, api_key)
         if reply is not None:
@@ -690,6 +755,13 @@ _LAST_MODEL: str | None = None
 # caller can tell "the key is refused" apart from "the provider said nothing".
 _AUTH_FAILURE: dict | None = None
 
+# The last transport failure (any HTTP status, or a 2xx with no usable body),
+# as ``{"code": int, "message": str}`` with code 0 for a body-level failure.
+# Distinct from ``_AUTH_FAILURE``: this covers the failures that are neither a
+# rejected key nor a spent quota — a wrong model name, an empty balance, a
+# wrong base URL — each of which used to be flattened into "no usable reply".
+_LAST_HTTP_FAILURE: dict | None = None
+
 
 def _mark_rate_limited() -> None:
     global _rate_limited_until
@@ -716,11 +788,24 @@ def call_gemini(prompt: str, api_key: str) -> str | None:
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, OSError, ValueError):
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        with contextlib.suppress(OSError):
+            detail = exc.read().decode("utf-8", "replace")[:200]
+        sys.stderr.write("[advisor] gemini HTTP %s: %s\n" % (exc.code, detail))
+        _note_http_failure(exc.code, detail)
+        if exc.code in (401, 403):
+            _note_auth_failure(exc.code, detail)
+        elif exc.code == 429:
+            _mark_rate_limited()
+        return None
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        _note_empty_reply("request failed: %s" % exc)
         return None
     try:
         return payload["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, TypeError):
+        _note_empty_reply("the provider returned no message content")
         return None
 
 
@@ -846,7 +931,10 @@ class Advisor:
                                     "quota is spent. The snapshot and trade card "
                                     "below are still live.")
             else:
-                advisory["note"] = "AI advisor unavailable: no usable reply."
+                why = failure_reason()
+                advisory["note"] = (
+                    "AI advisor unavailable: no usable reply (%s)." % why
+                    if why else "AI advisor unavailable: no usable reply.")
             return advisory
 
         advisory["opinion"] = opinion

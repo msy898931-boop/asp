@@ -907,6 +907,21 @@ true` means wait for the daily reset, not restart the service. The card and the
 snapshot stay live throughout, because the card comes from the model-free
 `/v1/card` route.
 
+A fourth mode is the generic one, and it is now actionable. When the note reads
+"no usable reply" with nothing after it, the failure was one of five different
+things that all collapsed into the same sentence: a rejected key (401/403), a
+spent quota (429), any other HTTP status (400 bad model, 402 empty balance, 404
+wrong base URL), a 200 whose body carried `{"error": {...}}` instead of a
+choice, and a dead socket. `ai_advisor.failure_reason()` now keeps the last
+transport failure — with the provider's own words, redacted of anything
+key-shaped — and the three surfaces (advisor, AI engine, SMC engine) append it,
+so the note reads `no usable reply (HTTP 402: Insufficient credits...)`. An
+empty reason prints no bracket. This matters most when pointing a provider
+variable at a new endpoint: a 402 from OpenRouter's credit wall and a 400 from a
+wrong model id look identical in the old wording and need opposite fixes. The
+401/403 branch keeps its own "rejected/expired" sentence, so the one failure an
+operator cannot see from outside stays named.
+
 ### Web terminal (the wide-screen view)
 
 `mobile/terminal.html` is the desktop counterpart of the phone app: the same

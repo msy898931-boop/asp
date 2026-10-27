@@ -329,6 +329,20 @@ class BuildTests(unittest.TestCase):
         self.assertIsNone(result["analysis"])
         self.assertIn("unavailable", result["note"])
 
+    def test_the_reason_reaches_the_note(self):
+        # "no usable reply" alone left the operator with nothing to act on. The
+        # captured reason (here a 400 from a bad model name) must be carried
+        # into the note so the fault is identifiable from the panel.
+        p1, p2, p3, p4, p5 = self._patch(model_reply=None)
+        with p1, p2, p3, p4, p5, \
+             mock.patch.object(ai_advisor, "failure_reason",
+                               return_value="HTTP 400: model not found"):
+            result = smc_engine.Engine()._build()
+        self.assertIsNone(result["analysis"])
+        self.assertIn("no usable reply", result["note"])
+        self.assertIn("HTTP 400", result["note"])
+        self.assertIn("model not found", result["note"])
+
     def test_a_rate_limited_provider_pauses_the_engine(self):
         with mock.patch.object(ai_advisor, "provider_key", return_value="k"), \
              mock.patch.object(ai_advisor, "rate_limited", return_value=True), \
