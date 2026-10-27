@@ -545,6 +545,31 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   `advisor/playbook.py`: the numbers are pasted in verbatim from the study, the
   block cites its `source`, and it carries `clears_gate: false` with a `why_not`
   so it can never wear the clothes of a result that passed.
+- **Where the zones *do* have an edge is measured too** (`research/smc_exit_study.py`).
+  The zone study's verdict is about the geometry the engine ships — targets at
+  2R and 3R — and "a win" there means the *final* target, so a 21-24% rate against
+  a 25-28% break-even is really a statement that **the plan asks for too much**.
+  A zone is a place price *reacts*, not a place it *travels from*. The exit study
+  rebuilds the **identical** plans (same direction, entry, stop, resolver, spread)
+  and changes only the final target, which isolates the exit and nothing else.
+  The finding: at a **0.5R** target the zones clear break-even on the Wilson lower
+  bound in-sample (0.778 vs 0.751) and out-of-sample (0.760 vs 0.703), and in
+  **each of the five years separately**; every target from 1R out fails in-sample.
+  The number that makes it a finding is the gap to a **geometry-matched control**
+  entered at the market with the same risk, which lands on the random-walk
+  baseline (64.5% ≈ the 1/(1+k) = 66.7% a coin gives) and **fails in every year**
+  while the zone arm clears it by ~13 points: the edge is the zone's *location*,
+  not gold's tendency to mean-revert. Two caveats ride with it. The main run
+  rebuilds every 8 M15 bars and holds up to 32, so consecutive trades share tape
+  and the Wilson interval is **too narrow**; a non-overlapping re-run (step = 32)
+  still clears both halves, so the finding does not rest on the overlap, but the
+  overlapping interval is optimistic. And it is **evidence, not a signal**: the
+  engine's own plan builder still targets 2R/3R, so the near target is a measured
+  direction for the exit, not a shipped one. It is carried as `MEASURED_RECORD
+  ["exit_study"]` next to the unflattering headline, so neither is read without
+  the other, and the prompt gains the guidance that follows from it — prefer a
+  target the structure can reach rather than stretching a plan to reach 1:2. The
+  write-up is `research/reports/smc_exit_study.md`.
 
 ## The frozen v1 contract has four copies — keep them in step
 
