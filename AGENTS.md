@@ -316,13 +316,25 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   `ASTRA_DISABLE_ADVISOR=1`. A failure there must never affect the rest of the
   stack.
 
-  `render.yaml` owns `ASTRA_ADVISOR_PROVIDER` as a literal `value:`, and a
-  Blueprint sync rewrites the env vars the file declares — so a dashboard edit
-  is reverted on the next deploy. Change the provider here, set its `*_API_KEY`
-  in the dashboard (`sync: false`, never in git), and redeploy.
-  `scripts/test_render_blueprint.py` pins the declared provider to one the code
-  can dispatch and to a key variable declared beside it, so the two cannot
-  drift again.
+  `render.yaml` declares `ASTRA_ADVISOR_PROVIDER` as a literal `value:` and the
+  blueprint has no `autoSync`, so the two are edited in different places and it
+  matters which:
+
+  * a **deploy** (the deploy hook, or a push-triggered rebuild) rebuilds the
+    container with the env vars the *service* already holds — a file edit alone
+    does not reach the running service;
+  * a **blueprint sync** (dashboard: Blueprint -> Sync) rewrites the env vars
+    from the file.
+
+  So change the provider in the dashboard to make it effective now, and keep the
+  file in step for the next sync. Set its `*_API_KEY` in the dashboard too
+  (`sync: false`, never in git). `scripts/test_render_blueprint.py` pins the
+  declared provider to one the code can dispatch and to a key variable declared
+  beside it, so the file cannot name a provider the code has no path for.
+
+  Whether the provider actually reached the service is observable:
+  `/advisor/v1/health` reports the resolved `provider`, `configured`, and any
+  `auth_failure`, and `bot/watchdog.py` alerts when it is dark.
 - The advisor also publishes a **trade card** (`trade_card` in its reply): a
   deterministic multi-timeframe read of M5/M15/M30/H1/H4 built by
   `advisor/mtf_read.py`. It is the *only* source of entry/stop/target — the
