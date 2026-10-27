@@ -314,7 +314,11 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   the app reaches it via the same-origin `/advisor` proxy. Without a key it
   answers with the snapshot and `configured:false`. Disable with
   `ASTRA_DISABLE_ADVISOR=1`. A failure there must never affect the rest of the
-  stack.
+  stack. The SMC/ICT engine **imports this module as a library** (for the
+  provider key and `call_model`), so it keeps working with the advisor process
+  off — the advisor's *port* is only for its own tab. `render.yaml` sets
+  `ASTRA_DISABLE_ADVISOR=1` and `ASTRA_DISABLE_ENGINE=1` to run the SMC/ICT
+  engine alone.
 
   `render.yaml` declares `ASTRA_ADVISOR_PROVIDER` as a literal `value:` and the
   blueprint has no `autoSync`, so the two are edited in different places and it
@@ -452,6 +456,23 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   whose entry floats in empty space is dropped, which closes the fabrication gap
   the persona alone could not. Turn the check off with
   `ASTRA_SMC_REQUIRE_ANCHOR=0`; callers that pass no sheet skip it rather than
+  refuse, so the rule never blocks a read it cannot check.
+  The prompt is **sized to the provider's token ceiling**, because a request
+  that overflows is refused with HTTP 413 *before the model reads a fact* — the
+  engine then looks broken while the code is correct. Groq's free tier allows
+  **8000 tokens/minute counted on the whole request** (system prompt included),
+  and the first version serialised the fact sheet with `indent=2`, producing a
+  47628-character / ~14254-token prompt that 413'd on every read. `build_prompt`
+  now serialises **compact JSON** (indentation is tokens too, ~half the payload)
+  and, if the sheet still exceeds `ASTRA_SMC_TOKEN_BUDGET` (default **6000**),
+  drops the **oldest entries** of each per-timeframe fact list a step at a time
+  until it fits — the most recent gap, block and sweep always survive, and the
+  caller's snapshot is never mutated. The count is an over-estimate by design
+  (`ASTRA_SMC_CHARS_PER_TOKEN`, default **3.2**, under the ~3.34 the live 413
+  measured): over-estimating costs a little sheet, under-estimating costs the
+  whole request. `ASTRA_SMC_NEWS` (default **4**) caps the headlines. A 413 is
+  reported by name with the dials to turn, not as a generic failure. A real read
+  now measures ~17183 characters / ~5144 tokens.
   The engine also **reads the tape freshness**. The bridge already stamps
   every candle reply with `freshness`, `newest_closed_time` and any error; the
   engine used to discard those and treat an old bar and a fresh one alike. It
