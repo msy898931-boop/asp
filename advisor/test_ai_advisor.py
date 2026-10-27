@@ -1019,6 +1019,117 @@ class CacheTests(unittest.TestCase):
         a.current(force=True)
         self.assertEqual(calls["n"], 2)
 
+    def test_a_transport_failure_is_named_not_collapsed(self):
+        # A 400 (bad model), a 402 (empty balance) and a 404 (wrong base URL)
+        # are each actionable, and each used to reach the operator as the bare
+        # "no usable reply". The reason must now survive to failure_reason().
+        original = advisor.urllib.request.urlopen
+        original_failure = advisor._LAST_HTTP_FAILURE
+        for code, body in ((400, b'{"error":"model not found"}'),
+                           (402, b'{"error":"no credits"}'),
+                           (404, b'not found')):
+            def fake_urlopen(req, timeout=None, _c=code, _b=body):
+                raise urllib.error.HTTPError(
+                    req.full_url, _c, "err", {},
+                    __import__("io").BytesIO(_b))
+
+            advisor._LAST_HTTP_FAILURE = None
+            advisor.urllib.request.urlopen = fake_urlopen
+            try:
+                self.assertIsNone(advisor.call_mistral("hello", "sk-mistral"))
+                self.assertEqual(advisor.last_http_failure()["code"], code)
+                self.assertIn("HTTP %d" % code, advisor.failure_reason())
+            finally:
+                advisor.urllib.request.urlopen = original
+        advisor._LAST_HTTP_FAILURE = original_failure
+
+    def test_a_two_hundred_carrying_an_error_object_is_a_failure(self):
+        # OpenRouter answers 200 with ``{"error": {...}}`` when an upstream
+        # provider fails. That is a failure, and its message must reach the
+        # operator rather than an empty completion being assumed.
+        original = advisor.urllib.request.urlopen
+        original_failure = advisor._LAST_HTTP_FAILURE
+        advisor._LAST_HTTP_FAILURE = None
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps(
+                    {"error": {"message": "upstream provider failed"}}
+                ).encode()
+
+        advisor.urllib.request.urlopen = lambda req, timeout=None: FakeResp()
+        try:
+            self.assertIsNone(advisor.call_mistral("hello", "sk-mistral"))
+            self.assertIn("upstream provider failed", advisor.failure_reason())
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor._LAST_HTTP_FAILURE = original_failure
+
+    def test_an_empty_completion_is_named(self):
+        original = advisor.urllib.request.urlopen
+        original_failure = advisor._LAST_HTTP_FAILURE
+        advisor._LAST_HTTP_FAILURE = None
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps(
+                    {"choices": [{"message": {"content": "   "}}]}).encode()
+
+        advisor.urllib.request.urlopen = lambda req, timeout=None: FakeResp()
+        try:
+            self.assertIsNone(advisor.call_mistral("hello", "sk-mistral"))
+            self.assertIn("empty", advisor.failure_reason())
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor._LAST_HTTP_FAILURE = original_failure
+
+    def test_a_good_call_clears_the_previous_failure(self):
+        # A stale reason must not keep colouring the next, successful call.
+        original_provider = advisor.PROVIDER
+        original = advisor.urllib.request.urlopen
+        original_failure = advisor._LAST_HTTP_FAILURE
+        advisor._LAST_HTTP_FAILURE = {"code": 400, "message": "stale"}
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps(
+                    {"choices": [{"message": {"content": '{"bias":"LONG"}'}}]}
+                ).encode()
+
+        advisor.PROVIDER = "mistral"
+        advisor.urllib.request.urlopen = lambda req, timeout=None: FakeResp()
+        try:
+            self.assertIsNotNone(advisor.call_model("hello", "sk-mistral"))
+            self.assertEqual(advisor.failure_reason(), "")
+        finally:
+            advisor.urllib.request.urlopen = original
+            advisor.PROVIDER = original_provider
+            advisor._LAST_HTTP_FAILURE = original_failure
+
+    def test_a_key_shaped_string_is_redacted_from_the_reason(self):
+        # The reason is echoed to the operator and into logs; a provider may
+        # quote the credential back, so anything key-shaped is removed first.
+        self.assertNotIn("sk-or-v1-abcdef1234567890",
+                         advisor._redact("Invalid: Bearer sk-or-v1-abcdef1234567890"))
+        self.assertIn("<redacted>", advisor._redact("key sk-1234567890abcdefgh"))
+        self.assertEqual(advisor._redact(""), "")
+
+    def test_no_reason_means_no_dangling_bracket(self):
+        # failure_reason() is empty when nothing is known, so callers can append
+        # it conditionally and never print "no usable reply ()".
+        original_failure = advisor._LAST_HTTP_FAILURE
+        advisor._LAST_HTTP_FAILURE = None
+        try:
+            self.assertEqual(advisor.failure_reason(), "")
+        finally:
+            advisor._LAST_HTTP_FAILURE = original_failure
+
 
 if __name__ == "__main__":
     unittest.main()
