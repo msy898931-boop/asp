@@ -224,6 +224,87 @@ class CheckEngineTests(unittest.TestCase):
 
 
 
+class CheckAdvisorTests(unittest.TestCase):
+    """The advisor's quiet failure — 200 with no usable model path — is trouble.
+
+    It is deliberately isolated, so nothing else in the stack notices when it
+    goes dark: the tab just shows nothing. The check must catch that, and must
+    not cry wolf on the three states that are a missing credential rather than
+    a broken advisor.
+    """
+
+    def setUp(self):
+        self._orig = wd.urllib.request.urlopen
+        self.addCleanup(lambda: setattr(wd.urllib.request, "urlopen", self._orig))
+
+    def test_configured_and_no_rejection_is_healthy(self):
+        wd.urllib.request.urlopen = lambda *a, **k: _Resp(
+            {"provider": "groq", "configured": True, "auth_failure": None})
+        ok, detail = wd.check_advisor()
+        self.assertTrue(ok)
+        self.assertEqual(detail, "groq")
+
+    def test_configured_false_is_trouble(self):
+        wd.urllib.request.urlopen = lambda *a, **k: _Resp(
+            {"provider": "groq", "configured": False})
+        ok, detail = wd.check_advisor()
+        self.assertFalse(ok)
+        self.assertIn("groq", detail)
+
+    def test_an_expired_key_reads_as_trouble_even_though_configured(self):
+        # The bug this pins: a key that expired or was revoked is *present*, so
+        # `configured` is true and a plain check would call it healthy while
+        # every reply is empty. The rejection has to be read separately.
+        wd.urllib.request.urlopen = lambda *a, **k: _Resp(
+            {"provider": "mistral", "configured": True,
+             "auth_failure": {"code": 401,
+                              "message": "Your API key expired on 2026-10-26."}})
+        ok, detail = wd.check_advisor()
+        self.assertFalse(ok)
+        self.assertIn("expired", detail)
+        self.assertIn("mistral", detail)
+
+    def test_missing_route_is_not_trouble(self):
+        def raise404(*a, **k):
+            raise urllib.error.HTTPError("u", 404, "nf", {}, None)
+        wd.urllib.request.urlopen = raise404
+        ok, detail = wd.check_advisor()
+        self.assertTrue(ok)
+        self.assertEqual(detail, "unavailable")
+
+    def test_gate_401_without_a_token_is_not_trouble(self):
+        def raise401(*a, **k):
+            raise urllib.error.HTTPError("u", 401, "unauth", {}, None)
+        wd.urllib.request.urlopen = raise401
+        ok, detail = wd.check_advisor()
+        self.assertTrue(ok)
+        self.assertIn("gate", detail)
+
+    def test_unreachable_advisor_is_not_trouble(self):
+        def raise_urlerror(*a, **k):
+            raise urllib.error.URLError("boom")
+        wd.urllib.request.urlopen = raise_urlerror
+        ok, detail = wd.check_advisor()
+        self.assertTrue(ok)
+        self.assertEqual(detail, "unavailable")
+
+    def test_access_cookie_is_sent_when_a_token_is_set(self):
+        import astra_env
+        seen = {}
+        def capture(req, *a, **k):
+            seen["cookie"] = req.get_header("Cookie")
+            return _Resp({"provider": "groq", "configured": True})
+        wd.urllib.request.urlopen = capture
+        saved = os.environ.get("ASTRA_ACCESS_TOKEN")
+        try:
+            astra_env.TOKEN = "tok-123"
+            ok, _ = wd.check_advisor()
+            self.assertTrue(ok)
+            self.assertEqual(seen["cookie"], "astra_key=tok-123")
+        finally:
+            astra_env.TOKEN = (saved or "").strip()
+
+
 class CheckPollerTests(unittest.TestCase):
     """A silent poller must be caught, but an absent one must not cry wolf."""
 

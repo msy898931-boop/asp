@@ -1053,9 +1053,16 @@ class Handler(BaseHTTPRequestHandler):
         elif path in ("/v1/review", "/review"):
             self._json(200, {"review": self.advisor.review()})
         elif path in ("/health", "/v1/health"):
+            failure = auth_failure()
             self._json(200, {"service": "ai-advisor", "status": "OK",
                              "provider": PROVIDER,
                              "configured": bool(provider_key()),
+                             # ``configured`` only says a key string is set. A
+                             # key that expired or was revoked still reads as
+                             # configured, so the rejection itself is surfaced
+                             # here — that is the state that looks healthy while
+                             # every reply is empty.
+                             "auth_failure": failure,
                              "rate_limited": rate_limited()})
         else:
             self._json(404, {"error": "unknown route", "path": path})

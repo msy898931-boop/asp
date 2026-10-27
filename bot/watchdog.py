@@ -124,6 +124,50 @@ def check_engine() -> tuple[bool, str]:
     return False, "akoan returned available=false (%s)" % body.get("reason", "no reason")
 
 
+def check_advisor() -> tuple[bool, str]:
+    """Is the advisor's model path actually configured, not silently dark?
+
+    The failure this guards against is the quiet one: the advisor answers 200
+    with ``configured: false`` — or every reply carries "rejected by the
+    provider" — while the tab simply shows nothing. Nothing in the stack
+    notices, because the advisor is isolated on purpose. This reads its health
+    body and reports the provider it resolved and whether a key was found, so
+    a mis-set provider or an expired key is visible instead of silent.
+
+    A 404 (deploy without the route) or a connection error reads as
+    unavailable; a 401/403 means the access gate is on and this monitor had no
+    token. All three are not trouble — they are a missing credential or an
+    isolated service, never a broken stack.
+    """
+    req = urllib.request.Request(
+        ASTRA_URL + "/advisor/v1/health",
+        headers={"Accept": "application/json", "User-Agent": _USER_AGENT,
+                 **astra_env.auth_headers()})
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return True, "unavailable"
+        if exc.code in (401, 403):
+            return True, "unavailable (gate)"
+        return True, "unavailable (HTTP %d)" % exc.code
+    except (urllib.error.URLError, OSError, ValueError):
+        return True, "unavailable"
+    if not body.get("configured"):
+        # The provider name resolved but no key sits under it, so every model
+        # surface stays empty. This is the state that cost days.
+        return False, "المستشار بلا مفتاح (المزوّد: %s)" % body.get("provider", "?")
+    failure = body.get("auth_failure")
+    if failure:
+        # The key is set but the provider refused it (expired, revoked, wrong
+        # provider). ``configured`` is true here, which is exactly why the
+        # rejection must be read separately or this looks healthy.
+        return False, "المستشار مرفوض من المزوّد (%s): %s" % (
+            body.get("provider", "?"), failure.get("message", "HTTP error"))
+    return True, str(body.get("provider", "ok"))
+
+
 def check_poller() -> tuple[bool, str]:
     """Is the interactive Telegram poller still alive?
 
@@ -248,6 +292,11 @@ def evaluate(now: datetime | None = None) -> dict:
     if not ok:
         problems.append({"key": "engine",
                          "ar": "محرك الخبر بيرجّع فاضي (بيانات غير متاحة)",
+                         "detail": detail})
+    ok, detail = check_advisor()
+    if not ok:
+        problems.append({"key": "advisor",
+                         "ar": "المستشار الذكي ما عم يعطي تحليل (المفتاح أو المزوّد)",
                          "detail": detail})
     ok, detail = check_poller()
     if not ok:
