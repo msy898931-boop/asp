@@ -1223,7 +1223,7 @@ class FakeEngineApi(FakeApi):
 def _smc(configured=True, rate_limited=False, bias="LONG",
          market_read="بنية صاعدة مع مسح سيولة أسفل القاع.", plans=None,
          key_event="", news_caution=False, analysis=True, provider="mistral",
-         model="m"):
+         model="m", measured_plan=None):
     """An SMC envelope shaped exactly as smc_engine.py emits it."""
     if plans is None:
         plans = [{
@@ -1251,6 +1251,10 @@ def _smc(configured=True, rate_limited=False, bias="LONG",
             "rejected": [], "news_caution": news_caution, "key_event": key_event,
         }
         env["note"] = "SMC/ICT analysis engine output."
+    # The deterministic near-target plan rides at the envelope's top level, not
+    # inside `analysis`, because it is built without a model and must reach the
+    # phone even when `analysis` is null.
+    env["measured_plan"] = measured_plan
     return env
 
 
@@ -1405,6 +1409,67 @@ class SmcFormatTests(unittest.TestCase):
     def test_a_paused_engine_reports_the_spent_quota(self):
         text = bot.format_smc(_smc(rate_limited=True, analysis=False))
         self.assertIn("استُهلكت", text)
+
+    # -- the measured-geometry plan, which carries no model ------------------
+
+    @staticmethod
+    def _measured():
+        return {
+            "direction": "LONG", "entry": 4118.0, "stop": 4110.0,
+            "target": 4122.0, "targets": [4122.0], "reward_risk": 0.5,
+            "confidence": None, "rationale": "منتصف بلوك أوامر، وقف ATR.",
+            "source": "measured-geometry", "measured_target_r": 0.5,
+            "distance_from_price": -4.0,
+        }
+
+    def test_the_measured_plan_shows_beside_the_model_plan(self):
+        text = bot.format_smc(_smc(measured_plan=self._measured()))
+        self.assertIn("خطة مقيسة", text)
+        self.assertIn("4118", text)
+        self.assertIn("0.5R", text)
+
+    def test_the_measured_plan_survives_a_paused_engine(self):
+        # The whole point: the model is paused, the measurement is not.
+        text = bot.format_smc(_smc(rate_limited=True, analysis=False,
+                                   measured_plan=self._measured()))
+        self.assertIn("استُهلكت", text)
+        self.assertIn("خطة مقيسة", text)
+        self.assertIn("4118", text)
+
+    def test_the_measured_plan_survives_an_unconfigured_engine(self):
+        text = bot.format_smc(_smc(configured=False, analysis=False,
+                                   measured_plan=self._measured()))
+        self.assertIn("غير مفعّل", text)
+        self.assertIn("خطة مقيسة", text)
+
+    def test_the_measured_plan_survives_a_missing_read(self):
+        text = bot.format_smc(_smc(analysis=False,
+                                   measured_plan=self._measured()))
+        self.assertIn("خطة مقيسة", text)
+
+    def test_an_absent_measured_plan_says_nothing(self):
+        # Off by default: no plan must leave the reply byte-for-byte as before.
+        self.assertNotIn("خطة مقيسة", bot.format_smc(_smc()))
+        self.assertNotIn("خطة مقيسة", bot.format_smc(_smc(rate_limited=True,
+                                                          analysis=False)))
+
+    def test_the_measured_plan_is_labelled_as_the_measurement(self):
+        # It must not read as the model's estimate; it is the geometry the study
+        # resolved, so it names the study.
+        text = bot.format_smc(_smc(measured_plan=self._measured()))
+        self.assertIn("بلا موديل", text)
+        self.assertIn("دراسة المخارج", text)
+
+    def test_a_malformed_measured_plan_is_ignored_not_fatal(self):
+        for bad in ({"entry": None}, {"entry": "x", "direction": "LONG"},
+                    "nonsense", 5):
+            text = bot.format_smc(_smc(measured_plan=bad))
+            self.assertIn("محرّك SMC/ICT", text)
+
+    def test_the_measured_plan_carries_the_shadow_disclaimer(self):
+        text = bot.format_smc(_smc(rate_limited=True, analysis=False,
+                                   measured_plan=self._measured()))
+        self.assertIn("وضع الظل", text)
 
     def test_a_missing_engine_is_reported_plainly(self):
         self.assertIn("غير متاح", bot.format_smc({}))
