@@ -134,6 +134,17 @@ shadow-mode line like every other alert. Tests: `SmcWatchTests`,
 `SmcAlertFormatTests`, `SmcMonitorTests` in
 `bridge/telegram_bot/test_astra_bot.py`.
 
+`/stop` and `/resume` are the operator's brake, flipped from Telegram. `/stop`
+is a *global, persisted* mute (`PauseState`, `telegram_pause.json`): it silences
+every push and makes the monitor skip its cycle, so no SMC/engine read is spent
+while muted, while the poller keeps running so `/resume` stays reachable — a
+stop that killed the process could only be undone by hand on the host. It is
+stronger than `/unsubscribe` (which only drops *your* chat from the alert list).
+The flag survives a restart, the startup banner prints `paused=`, and a level
+crossed while muted is not consumed. Enforcement is the module-level `_paused()`
+read by `_broadcast`, `_check_levels` (which sends directly, not via broadcast)
+and the monitor loop; unwired it reads as "not paused". Tests: `PauseTests`.
+
 The advisor's **trade card** is also pushed: `TradeCardWatch` polls
 `AstraApi.trade_card()` each cycle and alerts only when the card's identity
 (direction + stop/target) differs from the last one announced, so a setup
