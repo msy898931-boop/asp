@@ -972,6 +972,45 @@ class CardTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_health_surfaces_a_rejected_key(self):
+        # `configured` is true whenever a key string is set, so an expired or
+        # revoked key would read as healthy. The rejection must be visible on
+        # the health body or the failure is silent — which is how an expired
+        # key cost days.
+        server = ThreadingHTTPServer(("127.0.0.1", 0), advisor.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        original_failure = advisor._AUTH_FAILURE
+        original_provider = advisor.PROVIDER
+        original_key = os.environ.get("MISTRAL_API_KEY")
+        try:
+            advisor.PROVIDER = "mistral"
+            os.environ["MISTRAL_API_KEY"] = "sk-present-but-rejected"
+            advisor._AUTH_FAILURE = None
+            host, port = server.server_address
+            with urllib.request.urlopen(
+                    "http://%s:%d/v1/health" % (host, port), timeout=5) as resp:
+                body = json.loads(resp.read())
+            self.assertTrue(body["configured"])
+            self.assertIsNone(body["auth_failure"])
+            advisor._note_auth_failure(
+                401, json.dumps({"detail": "Your API key expired on 2026-10-26."}))
+            with urllib.request.urlopen(
+                    "http://%s:%d/v1/health" % (host, port), timeout=5) as resp:
+                body = json.loads(resp.read())
+            self.assertTrue(body["configured"])
+            self.assertEqual(body["auth_failure"]["code"], 401)
+            self.assertIn("expired", body["auth_failure"]["message"])
+        finally:
+            advisor._AUTH_FAILURE = original_failure
+            advisor.PROVIDER = original_provider
+            if original_key is None:
+                os.environ.pop("MISTRAL_API_KEY", None)
+            else:
+                os.environ["MISTRAL_API_KEY"] = original_key
+            server.shutdown()
+            server.server_close()
+
     def test_card_route_answers_without_a_model(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), advisor.Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
