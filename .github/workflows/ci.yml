@@ -116,6 +116,9 @@ jobs:
       - name: Test the akoan news-statistics engine
         run: python3 -m unittest discover -s akoan -p "test_*.py"
 
+      - name: Test that the deploy blueprint matches the running service
+        run: python3 -m unittest discover -s scripts -p "test_*.py"
+
       - name: The akoan study must reproduce over the committed corpus
         run: |
           python3 akoan/study.py --json > /tmp/akoan_study.json

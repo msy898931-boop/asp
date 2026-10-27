@@ -315,6 +315,14 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   answers with the snapshot and `configured:false`. Disable with
   `ASTRA_DISABLE_ADVISOR=1`. A failure there must never affect the rest of the
   stack.
+
+  `render.yaml` owns `ASTRA_ADVISOR_PROVIDER` as a literal `value:`, and a
+  Blueprint sync rewrites the env vars the file declares — so a dashboard edit
+  is reverted on the next deploy. Change the provider here, set its `*_API_KEY`
+  in the dashboard (`sync: false`, never in git), and redeploy.
+  `scripts/test_render_blueprint.py` pins the declared provider to one the code
+  can dispatch and to a key variable declared beside it, so the two cannot
+  drift again.
 - The advisor also publishes a **trade card** (`trade_card` in its reply): a
   deterministic multi-timeframe read of M5/M15/M30/H1/H4 built by
   `advisor/mtf_read.py`. It is the *only* source of entry/stop/target — the
