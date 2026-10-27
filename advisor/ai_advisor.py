@@ -32,6 +32,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -524,6 +525,20 @@ def _is_model_plan_limit(headers) -> bool:
     return str(limit).strip() == "0"
 
 
+_GENERIC_PROVIDER_LINES = frozenset({
+    "provider returned error", "error", "internal server error",
+    "bad gateway", "upstream error", "an error occurred",
+    "service unavailable", "unknown error",
+})
+
+# How much of an error body to read and to keep. A gateway nests the real fault
+# two or three levels deep (see ``_unwrap_provider_error``), so the first 200
+# bytes of a wrapped error can be pure wrapper — the cause sits further in. 4 KB
+# covers every wrapped body seen while still bounding what reaches a log line.
+_ERROR_BODY_LIMIT = 4096
+_ERROR_REASON_LIMIT = 400
+
+
 def _note_auth_failure(code: int, detail: str) -> None:
     """Record a rejected credential so the payload can say *why* it is dark.
 
@@ -533,8 +548,9 @@ def _note_auth_failure(code: int, detail: str) -> None:
     thing an operator needs to see, so it is kept here and surfaced verbatim.
     """
     global _AUTH_FAILURE
-    _AUTH_FAILURE = {"code": code, "message": _redact(detail) or
-                     ("HTTP %d" % code)}
+    _AUTH_FAILURE = {"code": code,
+                     "message": _redact(_unwrap_provider_error(detail))
+                     or ("HTTP %d" % code)}
 
 
 def _redact(detail: str) -> str:
@@ -544,11 +560,71 @@ def _redact(detail: str) -> str:
     quote the credential back inside its message. Anything that looks like a
     bearer token or an ``sk-`` key is replaced before it can be displayed.
     """
-    import re
-    text = (detail or "").strip()[:300]
+    text = (detail or "").strip()[:_ERROR_REASON_LIMIT]
     text = re.sub(r"(?i)\b(bearer)\s+\S+", r"\1 <redacted>", text)
     text = re.sub(r"\bsk-[A-Za-z0-9_\-]{6,}", "<redacted>", text)
     return text
+
+
+def _strings_in(obj) -> "list[str]":
+    """Every plain-text string reachable in a JSON value, outer before inner.
+
+    A string that is itself JSON is not yielded — only its contents are — so a
+    gateway's raw passthrough is descended into rather than reported verbatim.
+    """
+    found: list[str] = []
+    if isinstance(obj, str):
+        try:
+            inner = json.loads(obj)
+        except ValueError:
+            return [obj]
+        if isinstance(inner, (dict, list)):
+            return _strings_in(inner)
+        return [obj]
+    if isinstance(obj, dict):
+        for value in obj.values():
+            found.extend(_strings_in(value))
+    elif isinstance(obj, list):
+        for value in obj:
+            found.extend(_strings_in(value))
+    return found
+
+
+def _unwrap_provider_error(raw: str) -> str:
+    """The most specific sentence inside a nested provider error.
+
+    A gateway in front of the model (OpenRouter, Cloudflare AI Gateway) wraps
+    the upstream fault two or three levels deep and repeats its own generic
+    line at every level::
+
+        {"error": {"message": "Provider returned error",
+                   "metadata": {"raw": "{\\"title\\": \\"Not Found\\",
+                                       \\"detail\\": \\"Function '...'
+                                       Not found for account ...\\"}"}}}
+
+    The outer "Provider returned error" names nothing an operator can act on,
+    while the innermost line names the function, the account, or the model that
+    was refused. So every string in the body is collected, the generic wrappers
+    are dropped, and the longest remaining line is reported — the specific one.
+
+    Best-effort by design: a body that is not JSON is returned unchanged, so
+    nothing that already reads correctly is ever mangled.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return text
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return text
+    if not isinstance(parsed, (dict, list)):
+        return text
+    strings = [s.strip() for s in _strings_in(parsed) if s and s.strip()]
+    specific = [s for s in strings
+                if s.lower() not in _GENERIC_PROVIDER_LINES]
+    if specific:
+        return max(specific, key=len)
+    return strings[-1] if strings else text
 
 
 def _note_http_failure(code: int, detail: str) -> None:
@@ -560,7 +636,8 @@ def _note_http_failure(code: int, detail: str) -> None:
     Kept apart from ``_AUTH_FAILURE`` so the 401/403 wording stays specific.
     """
     global _LAST_HTTP_FAILURE
-    _LAST_HTTP_FAILURE = {"code": int(code), "message": _redact(detail) or ""}
+    _LAST_HTTP_FAILURE = {"code": int(code),
+                          "message": _redact(_unwrap_provider_error(detail))}
 
 
 def last_http_failure() -> dict | None:
@@ -626,7 +703,7 @@ def call_openai_compatible(url: str, model: str, prompt: str, api_key: str,
     except urllib.error.HTTPError as exc:
         detail = ""
         with contextlib.suppress(OSError):
-            detail = exc.read().decode("utf-8", "replace")[:200]
+            detail = exc.read().decode("utf-8", "replace")[:_ERROR_BODY_LIMIT]
         sys.stderr.write("[advisor] %s HTTP %s: %s\n" % (label, exc.code, detail))
         _note_http_failure(exc.code, detail)
         if exc.code in (401, 403):
@@ -791,7 +868,7 @@ def call_gemini(prompt: str, api_key: str) -> str | None:
     except urllib.error.HTTPError as exc:
         detail = ""
         with contextlib.suppress(OSError):
-            detail = exc.read().decode("utf-8", "replace")[:200]
+            detail = exc.read().decode("utf-8", "replace")[:_ERROR_BODY_LIMIT]
         sys.stderr.write("[advisor] gemini HTTP %s: %s\n" % (exc.code, detail))
         _note_http_failure(exc.code, detail)
         if exc.code in (401, 403):

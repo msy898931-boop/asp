@@ -1130,6 +1130,62 @@ class CacheTests(unittest.TestCase):
         finally:
             advisor._LAST_HTTP_FAILURE = original_failure
 
+    def test_a_nested_gateway_error_is_reduced_to_its_cause(self):
+        # OpenRouter and Cloudflare AI Gateway nest the upstream fault two or
+        # three levels deep and repeat "Provider returned error" at every
+        # level. That outer line names nothing actionable; the innermost one
+        # names the function, account or model that was refused. This exact
+        # body was reported from production and used to reach the operator as
+        # "no usable reply" with the cause truncated away.
+        inner = json.dumps({
+            "status": 404, "title": "Not Found",
+            "detail": "Function 'ac74040f-9fc9-4c5e-ac74-279ba5161d69': "
+                      "Not found for account 7f3a1c",
+        })
+        body = json.dumps({"error": {
+            "message": "Provider returned error", "code": 404,
+            "metadata": {"raw": inner}}})
+
+        reason = advisor._unwrap_provider_error(body)
+        self.assertIn("Not found for account 7f3a1c", reason)
+        self.assertNotIn("Provider returned error", reason)
+        self.assertNotIn("{", reason)
+
+    def test_unwrapping_never_mangles_a_plain_body(self):
+        # A provider that answers in plain text must read back unchanged, and a
+        # string that merely mentions JSON must not be parsed as it.
+        self.assertEqual(advisor._unwrap_provider_error("rate limit hit"),
+                         "rate limit hit")
+        self.assertEqual(advisor._unwrap_provider_error(""), "")
+        self.assertEqual(advisor._unwrap_provider_error("see {json} docs"),
+                         "see {json} docs")
+
+    def test_unwrapping_falls_back_when_every_line_is_generic(self):
+        # Nothing specific to show: better the wrapper than an empty string.
+        body = json.dumps({"error": {"message": "Provider returned error"}})
+        self.assertEqual(advisor._unwrap_provider_error(body),
+                         "Provider returned error")
+
+    def test_a_deeply_nested_cause_survives_the_read_limit(self):
+        # The body is read with a limit generous enough that the nested cause
+        # is not cut off before it can be parsed.
+        self.assertGreaterEqual(advisor._ERROR_BODY_LIMIT, 2048)
+        self.assertGreater(advisor._ERROR_REASON_LIMIT, 200)
+
+    def test_the_auth_path_also_unwraps(self):
+        # A 401 arriving through a gateway carries the same nesting; the
+        # "rejected" sentence must name the real cause too.
+        inner = json.dumps({"detail": "API key revoked by the account owner"})
+        body = json.dumps({"error": {
+            "message": "Provider returned error", "code": 401,
+            "metadata": {"raw": inner}}})
+        original = advisor._AUTH_FAILURE
+        try:
+            advisor._note_auth_failure(401, body)
+            self.assertIn("revoked", advisor.auth_failure()["message"])
+        finally:
+            advisor._AUTH_FAILURE = original
+
 
 if __name__ == "__main__":
     unittest.main()
