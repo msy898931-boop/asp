@@ -491,6 +491,54 @@ class PromptBudgetTests(unittest.TestCase):
         self.assertNotIn('\n  "', prompt)
         self.assertIn('"smc_facts"', prompt)
 
+    def test_the_prompt_drops_empty_containers_and_nulls(self):
+        # Every call pays for the whole sheet; a frame with no sweep, no gap
+        # and no cluster should not spend tokens saying so on all ~96 calls.
+        snapshot = {"symbol": "XAUUSD", "price": 4100.0,
+                    "facts": {"timeframes": {"M15": {
+                        "fair_value_gaps": [], "order_blocks": [],
+                        "liquidity": {"equal_highs": [], "equal_lows": [],
+                                      "sweeps": []},
+                        "close": 4100.0, "last_sweep": None}}},
+                    "tape": {"state": "live"}, "measured_record": None,
+                    "news": [], "events": []}
+        prompt = smc_engine.build_prompt(snapshot)
+        sheet = json.loads(prompt.split("Fact sheet:\n", 1)[1])
+        m15 = sheet["smc_facts"]["timeframes"]["M15"]
+        self.assertNotIn("fair_value_gaps", m15)
+        self.assertNotIn("order_blocks", m15)
+        self.assertNotIn("liquidity", m15)
+        self.assertNotIn("last_sweep", m15)
+        self.assertEqual(m15["close"], 4100.0)
+        self.assertNotIn("news", sheet)
+        self.assertNotIn("events", sheet)
+
+    def test_the_prompt_keeps_every_real_number_unrounded(self):
+        # A rounded price would no longer sit inside the zone it was measured
+        # from, and the entry-in-zone check reads these exact values.
+        snapshot = {"symbol": "XAUUSD", "price": 4100.4567,
+                    "facts": {"timeframes": {"M15": {
+                        "fair_value_gaps": [{"low": 4000.123, "high": 4002.987}],
+                        "close": 4100.4567, "atr": 3.3333}}},
+                    "tape": None, "measured_record": None,
+                    "news": [], "events": []}
+        prompt = smc_engine.build_prompt(snapshot)
+        sheet = json.loads(prompt.split("Fact sheet:\n", 1)[1])
+        gap = sheet["smc_facts"]["timeframes"]["M15"]["fair_value_gaps"][0]
+        self.assertEqual(gap["low"], 4000.123)
+        self.assertEqual(gap["high"], 4002.987)
+        self.assertEqual(sheet["price"], 4100.4567)
+
+    def test_the_slim_render_is_smaller_than_the_plain_one(self):
+        # The saving is the point: the same fact sheet, fewer tokens.
+        snapshot = self._snapshot(8)
+        view = smc_engine._prompt_view(snapshot)
+        head = smc_engine._SYSTEM_PROMPT + "\n\nFact sheet:\n"
+        plain = head + json.dumps(view, separators=(",", ":"), sort_keys=True)
+        slim = smc_engine.build_prompt(snapshot)
+        self.assertLess(smc_engine._token_estimate(slim),
+                        smc_engine._token_estimate(plain))
+
     def test_a_wide_fact_sheet_is_trimmed_to_fit_the_budget(self):
         snapshot = self._snapshot(40)
         prompt = smc_engine.build_prompt(snapshot)

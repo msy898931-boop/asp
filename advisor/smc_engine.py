@@ -214,19 +214,18 @@ _SYSTEM_PROMPT = (
     "averages). You read market structure, liquidity, and institutional "
     "footprints.\n"
     "You are given a deterministic SMC fact sheet computed from closed bars: "
-    "for each timeframe, the swing structure with its last BOS/CHoCH, the "
-    "premium/discount split of the active leg, equal-highs/equal-lows liquidity "
-    "clusters, recent liquidity sweeps, fair-value gaps (filled or unfilled), "
-    "order blocks, and the session ranges. These are facts; you interpret "
-    "them.\n"
-    "Language: every human-readable field in Arabic. JSON keys and the "
-    "direction values stay in English.\n"
-    "Method — follow this exact sequence and say which step produced the plan:\n"
+    "per timeframe the swing structure with its last BOS/CHoCH, the "
+    "premium/discount split of the active leg, equal-highs/equal-lows "
+    "liquidity clusters, recent sweeps, fair-value gaps (filled or unfilled), "
+    "order blocks and session ranges. These are facts; you interpret them.\n"
+    "Language: every human-readable field in Arabic. JSON keys and direction "
+    "values stay in English.\n"
+    "Method — follow this sequence and say which step produced the plan:\n"
     "1. Bias: read the higher timeframes (H4, H1) and state the true "
     "direction. A CHoCH is the first body close beyond a key structural level "
     "against the prior trend; a BOS is continuation with it.\n"
-    "2. Liquidity: a trade requires that liquidity has been swept. Name the "
-    "pool (equal highs/lows, a session high/low) that was swept and when.\n"
+    "2. Liquidity: a trade requires a swept pool. Name the pool (equal "
+    "highs/lows, a session high/low) and when it was swept.\n"
     "3. Confirmation: the lower timeframes (M15, M5) must show a CHoCH in the "
     "intended direction after the sweep.\n"
     "4. Point of interest: the entry sits at an order block or the 50% "
@@ -236,42 +235,38 @@ _SYSTEM_PROMPT = (
     "the sweep. Targets aim at the next internal or external liquidity pool. "
     "Reward-to-risk must be at least 1:2.\n"
     "Rules:\n"
-    "- Anchor every price to the fact sheet. Use only the levels you were "
-    "given; never invent a price, a swing, a gap or an event. The entry MUST "
-    "sit inside an order block or a fair-value gap listed in the fact sheet: a "
-    "plan whose entry falls in empty space is discarded automatically.\n"
-    "- A plan is coherent only if the stop sits on the losing side of the entry "
-    "and the targets run in the winning direction, nearest first. For a LONG: "
-    "stop < entry < target1 < target2 ... For a SHORT: stop > entry > "
+    "- Anchor every price to the fact sheet. Use only the levels given; never "
+    "invent a price, a swing, a gap or an event. The entry MUST sit inside an "
+    "order block or a fair-value gap listed there: a plan whose entry falls in "
+    "empty space is discarded automatically.\n"
+    "- A plan is coherent only if the stop sits on the losing side of the "
+    "entry and the targets run in the winning direction, nearest first. For a "
+    "LONG: stop < entry < target1 < target2 ... For a SHORT: stop > entry > "
     "target1 > target2 ...\n"
     "- Give each plan one to three targets, in R-multiple order. The last is "
     "the full target.\n"
     "- confidence is YOUR OWN probability (0..1) that the plan reaches its "
     "final target before its stop. It is an estimate, not a measured number; "
     "say why in confidence_note. Do not copy a fact-sheet value.\n"
-    "- The snapshot carries engine_measured_record: the project's own verdict on "
-    "this fact sheet, measured on real gold data. It is a finding, not yours to "
-    "restate as your own confidence. If the record does not clear the gate, you "
-    "may still give the plan, but say plainly that the record is unflattering "
-    "and do not present your estimate as if it were the measurement.\n"
-    "- The record carries an exit_study: the same zones resolved to a nearer "
-    "final target (0.5R) clear break-even, in sample, out of sample and in each "
-    "year, where a market entry with the same risk does not. That is evidence "
-    "that the zone's location has an edge at a *near* target, not at the far "
-    "one. So prefer targets the structure can plausibly reach — the next "
-    "internal liquidity, not a distant pool — and when the only honest target is "
-    "near, say so rather than stretching the plan to reach 1:2. A reachable 0.5R "
-    "reading that clears is worth more than an unreachable 2R that does not.\n"
-    "- Explicitly warn when a high-impact event (CPI, FOMC, NFP) is imminent "
-    "or was flagged, because SMC structure can be invalidated by news.\n"
-    "- The snapshot carries tape: the freshness of the bars the fact sheet was "
-    "built from, with a per-frame lag_bars. The bars are stamped by their open "
-    "time and the forming bar is excluded by design, so a lag_bars of 1 or 2 is "
-    "normal. If any frame reads lagging or degraded, the structure may describe "
-    "a market that has already moved: say so in market_read and treat the setup "
-    "as provisional rather than actionable.\n"
-    "- A missing timeframe is not grounds to refuse; reason from the frames you "
-    "have and note the gap in market_read at most in passing.\n"
+    "- engine_measured_record is the project's own verdict on this fact sheet, "
+    "measured on real gold data. It is a finding, not yours to restate as your "
+    "own confidence. If it does not clear the gate, you may still give the "
+    "plan, but say plainly that the record is unflattering.\n"
+    "- exit_study shows the same zones resolving to a nearer target (0.5R) "
+    "clear break-even in and out of sample, where a market entry does not: the "
+    "zone's edge is at a *near* target. Prefer targets the structure can "
+    "plausibly reach — the next internal liquidity — and when the only honest "
+    "target is near, say so rather than stretching to 1:2. A reachable 0.5R "
+    "that clears beats an unreachable 2R that does not.\n"
+    "- Warn explicitly when a high-impact event (CPI, FOMC, NFP) is imminent "
+    "or was flagged; SMC structure can be invalidated by news.\n"
+    "- tape carries the freshness of the bars, with a per-frame lag_bars. The "
+    "forming bar is excluded by design, so a lag_bars of 1 or 2 is normal. If "
+    "a frame reads lagging or degraded, the structure may describe a market "
+    "that has already moved: say so in market_read and treat the setup as "
+    "provisional.\n"
+    "- A missing timeframe is not grounds to refuse; reason from the frames "
+    "you have and note the gap at most in passing.\n"
     "- Return an empty plans list when the structure genuinely offers no "
     "coherent setup; say why in market_read. Do not force a setup.\n"
     "- This is analysis for a research tool, not advice. Do not promise "
@@ -279,12 +274,12 @@ _SYSTEM_PROMPT = (
     "Reply with JSON only, keys: market_read (three or four Arabic sentences "
     "covering bias, the sweep, the LTF confirmation and the POI), bias (LONG, "
     "SHORT or NEUTRAL), news_caution (true or false), key_event (the Arabic "
-    "name of the event you are cautious about, or empty string), plans (a list, "
-    "possibly empty). Each plan object has: direction (LONG or SHORT), "
-    "entry (number), stop (number), targets (list of numbers, nearest first), "
+    "name of the event you are cautious about, or empty string), plans (a "
+    "list, possibly empty). Each plan: direction (LONG or SHORT), entry "
+    "(number), stop (number), targets (list of numbers, nearest first), "
     "confidence (0..1), rationale (one or two Arabic sentences naming the "
-    "sweep and the POI), sweep (the Arabic phrase for the liquidity that was "
-    "swept), poi (the Arabic phrase for the order block or gap used)."
+    "sweep and the POI), sweep (the Arabic phrase for the swept liquidity), "
+    "poi (the Arabic phrase for the block or gap used)."
 )
 
 
@@ -503,21 +498,46 @@ def _trim_facts(facts: dict, keep_plans: int) -> dict:
     return dict(facts, timeframes=trimmed)
 
 
+def _slim(value):
+    """The fact sheet with empty containers and nulls dropped.
+
+    Every call pays for the whole sheet, and the per-frame read is padded with
+    ``null``s and empty lists (no sweep on this frame, no gap, no cluster).
+    Those carry no information the model can use — an absent key says the same
+    thing as an empty one — but the provider counts each as tokens on every one
+    of the ~96 calls a day. Numbers are passed through untouched: a rounded
+    price would no longer sit inside the zone it was measured from, and the
+    entry-in-zone check that discards a floating plan reads these exact values.
+    """
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            slimmed = _slim(item)
+            if slimmed is None or slimmed == "" or slimmed == [] or slimmed == {}:
+                continue
+            out[key] = slimmed
+        return out
+    if isinstance(value, list):
+        return [_slim(item) for item in value]
+    return value
+
+
 def build_prompt(snapshot: dict) -> str:
     """The system prompt plus the fact sheet, sized to the provider's budget.
 
     Compact JSON (no indentation) halves the payload against the pretty-printed
     form at no cost to the model — whitespace is tokens too, and a 413 refuses
-    the request before the model reads a single fact. If the compact sheet is
-    still over ``PROMPT_TOKEN_BUDGET``, the oldest entries of each fact list are
-    dropped a step at a time until it fits, so a wide fact sheet degrades to a
-    narrower one rather than to no read at all.
+    the request before the model reads a single fact. Empty containers and nulls
+    are dropped (see ``_slim``) for the same reason. If the sheet is still over
+    ``PROMPT_TOKEN_BUDGET``, the oldest entries of each fact list are dropped a
+    step at a time until it fits, so a wide fact sheet degrades to a narrower
+    one rather than to no read at all.
     """
     view = _prompt_view(snapshot)
     head = _SYSTEM_PROMPT + "\n\nFact sheet:\n"
 
     def render(v: dict) -> str:
-        return head + json.dumps(v, separators=(",", ":"), sort_keys=True)
+        return head + json.dumps(_slim(v), separators=(",", ":"), sort_keys=True)
 
     prompt = render(view)
     if _token_estimate(prompt) <= PROMPT_TOKEN_BUDGET:
@@ -842,7 +862,7 @@ class Engine:
 
     def _build(self) -> dict:
         snapshot = build_snapshot()
-        api_key = ai_advisor.provider_key()
+        api_key = ai_advisor.available_key()
         result = {
             "schema_version": SCHEMA_VERSION,
             "symbol": snapshot["symbol"],
@@ -935,6 +955,7 @@ class Engine:
 
         result["analysis"] = assemble(snapshot, parsed)
         result["model"] = ai_advisor.answered_model() or result["model"]
+        result["provider"] = ai_advisor.answered_provider() or result["provider"]
         result["note"] = ("SMC/ICT analysis engine output. Structure is "
                           "computed from closed bars; the plan and confidence "
                           "are the model's estimates, produced outside the "
@@ -947,7 +968,7 @@ class Engine:
             "bias": parsed["bias"],
             "plan_count": len(parsed["plans"]),
             "plans": parsed["plans"],
-            "provider": ai_advisor.PROVIDER,
+            "provider": ai_advisor.answered_provider() or ai_advisor.PROVIDER,
             "model": ai_advisor.answered_model() or ai_advisor.active_model(),
         })
         return result

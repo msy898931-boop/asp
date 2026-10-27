@@ -17,6 +17,10 @@ services:
       # is opt-in like every other measurement here; set to "1" to show it beside
       # the model's plan in /smc and the phone panel.
       ASTRA_SMC_DETERMINISTIC_PLAN: "1"
+      # Optional provider failover chain, e.g. "groq,gemini,mistral". A provider
+      # whose free-tier daily quota is spent steps aside for the next that has a
+      # key, instead of pausing every model surface. Each needs its own *_API_KEY.
+      ASTRA_ADVISOR_PROVIDERS: ""
     ports:
       # Public: the phone app (PWA) plus the reverse proxy to the loopback API.
       # The API and bridge themselves are never bound to a public interface.

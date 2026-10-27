@@ -644,7 +644,10 @@ class ProviderTests(unittest.TestCase):
         advisor.urllib.request.urlopen = fake_urlopen
         try:
             self.assertIsNone(advisor.call_mistral("hello", "sk-mistral"))
-            self.assertTrue(advisor.rate_limited())
+            # The back-off is recorded against the provider that answered, not
+            # a single global flag: that is what lets the next provider in the
+            # chain still be tried.
+            self.assertTrue(advisor.rate_limited("mistral"))
         finally:
             advisor.urllib.request.urlopen = original
             advisor._rate_limited_until = original_backoff
@@ -908,6 +911,152 @@ class ProviderTests(unittest.TestCase):
             self.assertIn("open-mistral-nemo", chain)
         finally:
             advisor.PROVIDER = original
+
+
+class ProviderFailoverTests(unittest.TestCase):
+    """A spent quota on one provider must step aside for the next.
+
+    This is the whole point of ``ASTRA_ADVISOR_PROVIDERS``: the free tiers cap
+    daily tokens, so a single provider eventually goes dark mid-day. The chain
+    keeps a read available from the next budget instead of pausing every model
+    surface.
+    """
+
+    def setUp(self):
+        self._env = os.environ.get("ASTRA_ADVISOR_PROVIDERS")
+        self._keys = {k: os.environ.get(k) for k in
+                      ("GROQ_API_KEY", "GEMINI_API_KEY", "MISTRAL_API_KEY")}
+        self._backoff = advisor._rate_limited_until
+        self._last_model = advisor._LAST_MODEL
+        self._last_provider = advisor._LAST_PROVIDER
+        self._urlopen = advisor.urllib.request.urlopen
+        advisor._rate_limited_until = {}
+
+    def tearDown(self):
+        advisor._rate_limited_until = self._backoff
+        advisor._LAST_MODEL = self._last_model
+        advisor._LAST_PROVIDER = self._last_provider
+        advisor.urllib.request.urlopen = self._urlopen
+        if self._env is None:
+            os.environ.pop("ASTRA_ADVISOR_PROVIDERS", None)
+        else:
+            os.environ["ASTRA_ADVISOR_PROVIDERS"] = self._env
+        for key, value in self._keys.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_no_chain_env_is_the_single_active_provider(self):
+        # The default must not change behaviour: with no failover configured,
+        # the chain is just the configured provider.
+        os.environ.pop("ASTRA_ADVISOR_PROVIDERS", None)
+        original = advisor.PROVIDER
+        advisor.PROVIDER = "groq"
+        try:
+            self.assertEqual(advisor._provider_chain(), ("groq",))
+        finally:
+            advisor.PROVIDER = original
+
+    def test_the_chain_env_sets_the_order_and_drops_unknown_names(self):
+        os.environ["ASTRA_ADVISOR_PROVIDERS"] = " groq , nope , gemini , groq "
+        try:
+            self.assertEqual(advisor._provider_chain(), ("groq", "gemini"))
+        finally:
+            os.environ.pop("ASTRA_ADVISOR_PROVIDERS", None)
+
+    def test_a_spent_quota_moves_to_the_next_provider(self):
+        # Groq answers a spent-quota 429; the call must then reach Gemini and
+        # report that Gemini answered, not Groq.
+        os.environ["ASTRA_ADVISOR_PROVIDERS"] = "groq,gemini"
+        os.environ["GROQ_API_KEY"] = "gsk_test"
+        os.environ["GEMINI_API_KEY"] = "gm_test"
+        tried = []
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps(
+                    {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+                ).encode()
+
+        def fake_urlopen(req, timeout=None):
+            host = req.full_url
+            tried.append(host)
+            if "groq" in host:
+                raise urllib.error.HTTPError(
+                    host, 429, "Too Many Requests", {},
+                    __import__("io").BytesIO(b'{"error":{"message":"TPD"}}'))
+            return FakeResp()
+
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            out = advisor.call_model("hello", "gsk_test")
+            provider = advisor.answered_provider()
+            model = advisor.answered_model()
+        finally:
+            advisor.urllib.request.urlopen = self._urlopen
+        self.assertEqual(out, "{}")
+        self.assertEqual(provider, "gemini")
+        self.assertEqual(model, advisor.GEMINI_MODEL)
+        self.assertTrue(any("groq" in u for u in tried))
+        self.assertTrue(any("generativelanguage" in u or "google" in u
+                            for u in tried))
+
+    def test_a_backed_off_provider_is_skipped_without_a_call(self):
+        # Once Groq has spent its quota, the next build must not call it at all.
+        os.environ["ASTRA_ADVISOR_PROVIDERS"] = "groq,gemini"
+        os.environ["GROQ_API_KEY"] = "gsk_test"
+        os.environ["GEMINI_API_KEY"] = "gm_test"
+        advisor._mark_rate_limited("groq")
+        hosts = []
+
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps(
+                    {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+                ).encode()
+
+        def fake_urlopen(req, timeout=None):
+            hosts.append(req.full_url)
+            return FakeResp()
+
+        advisor.urllib.request.urlopen = fake_urlopen
+        try:
+            advisor.call_model("hello", "gsk_test")
+        finally:
+            advisor.urllib.request.urlopen = self._urlopen
+        self.assertTrue(hosts, "gemini should have been called")
+        self.assertFalse(any("groq" in h for h in hosts),
+                         "the backed-off provider must be skipped")
+
+    def test_rate_limited_is_true_only_when_every_provider_is_spent(self):
+        os.environ["ASTRA_ADVISOR_PROVIDERS"] = "groq,gemini"
+        try:
+            self.assertFalse(advisor.rate_limited())
+            advisor._mark_rate_limited("groq")
+            self.assertFalse(advisor.rate_limited(),
+                             "gemini still has budget")
+            advisor._mark_rate_limited("gemini")
+            self.assertTrue(advisor.rate_limited(),
+                            "every provider is spent")
+        finally:
+            os.environ.pop("ASTRA_ADVISOR_PROVIDERS", None)
+
+    def test_available_key_finds_a_fallback_when_the_first_is_unset(self):
+        # A deployment that sets only the fallback key must be configured, not
+        # dark: provider_key() alone would report the missing primary.
+        os.environ["ASTRA_ADVISOR_PROVIDERS"] = "groq,gemini"
+        os.environ.pop("GROQ_API_KEY", None)
+        os.environ["GEMINI_API_KEY"] = "gm_test"
+        try:
+            self.assertEqual(advisor.available_provider(), "gemini")
+            self.assertEqual(advisor.available_key(), "gm_test")
+        finally:
+            os.environ.pop("ASTRA_ADVISOR_PROVIDERS", None)
 
 
 class CardTests(unittest.TestCase):

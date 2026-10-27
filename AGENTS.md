@@ -320,6 +320,24 @@ gh run download --repo msy898931-boop/asp -n ASTRA-windows   # or via API
   `ASTRA_DISABLE_ADVISOR=1` and `ASTRA_DISABLE_ENGINE=1` to run the SMC/ICT
   engine alone.
 
+  A single provider can exhaust its free-tier daily token budget mid-day (Groq
+  caps `gpt-oss-120b` at 200k tokens/day; ~96 SMC reads a day exceed that), and
+  the old behaviour paused every model surface until the back-off expired. Set
+  `ASTRA_ADVISOR_PROVIDERS` to a comma-separated chain (e.g.
+  `groq,gemini,mistral`) and a provider that answers 429 steps aside for the
+  next one that has a key, instead of pausing everything. Each provider in the
+  chain needs its own `*_API_KEY`. Unset, the chain is just
+  `ASTRA_ADVISOR_PROVIDER`, so single-provider behaviour is unchanged. The
+  back-off is per provider (`rate_limited(provider)`), and the payload names the
+  provider that actually answered (`answered_provider()`), which is not
+  necessarily the configured one.
+
+  The SMC prompt is sized in tokens per call, not characters: `build_prompt`
+  renders the fact sheet as compact JSON with empty containers and nulls dropped
+  (`_slim`), then trims the oldest list entries until it fits
+  `ASTRA_SMC_TOKEN_BUDGET`. Prices are never rounded — the entry-in-zone check
+  reads the exact values.
+
   `render.yaml` declares `ASTRA_ADVISOR_PROVIDER` as a literal `value:` and the
   blueprint has no `autoSync`, so the two are edited in different places and it
   matters which:

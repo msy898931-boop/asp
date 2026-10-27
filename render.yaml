@@ -42,6 +42,18 @@ services:
                              # already holds, so set the same value in the
                              # dashboard or the running service will differ from
                              # this file until the next sync.
+      - key: ASTRA_ADVISOR_PROVIDERS
+        sync: false          # optional failover chain, comma-separated, e.g.
+                             # "groq,gemini,mistral". Groq's free tier caps
+                             # gpt-oss-120b at 200k tokens/day, which ~96 SMC
+                             # reads exhaust in under a day; a spent provider
+                             # then steps aside for the next in the chain instead
+                             # of pausing every model surface. Each provider
+                             # needs its own *_API_KEY set. Left unset the chain
+                             # is just ASTRA_ADVISOR_PROVIDER, so the behaviour
+                             # is unchanged. Kept sync:false because the value is
+                             # deployment-specific and should not be forced by a
+                             # blueprint sync.
       - key: ASTRA_ENABLE_SMC
         value: "1"           # "1" turns the isolated SMC/ICT analysis engine on.
                              # It computes its fact sheet from closed bars and
