@@ -504,6 +504,43 @@ def format_engine(engine: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _measured_plan_lines(smc: Dict[str, Any]) -> list:
+    """The measured-geometry plan as phone lines, or an empty list.
+
+    This plan is built without a model (``advisor/smc_plan.py``), so it is the
+    one plan that survives a provider that is paused, refused or unconfigured.
+    It carries the geometry ``research/smc_exit_study.py`` resolved and found
+    clearing break-even, so it is labelled as the measurement, not the model's
+    estimate — the reader must be able to tell which plan was tested.
+    """
+    mp = smc.get("measured_plan")
+    if not isinstance(mp, dict) or mp.get("entry") is None:
+        return []
+    lines = ["", "📏 خطة مقيسة (بلا موديل): " + _signal_ar(mp.get("direction"))]
+    lines.append(f"  دخول {_num(mp.get('entry'))} · وقف {_num(mp.get('stop'))}")
+    targets = mp.get("targets") or ([mp.get("target")]
+                                    if mp.get("target") is not None else [])
+    if targets:
+        lines.append("  الهدف " + " ← ".join(_num(x) for x in targets))
+    rr = mp.get("reward_risk")
+    if rr is not None:
+        lines.append(f"  المخاطرة/المكافأة {rr}")
+    rationale = str(mp.get("rationale") or "").strip()
+    if rationale:
+        lines.append(f"  السبب: {rationale}")
+    dist = mp.get("distance_from_price")
+    if dist is not None:
+        try:
+            side = "أعلى" if float(dist) >= 0 else "أدنى"
+            lines.append(f"  يبعد {_num(abs(float(dist)))} $ {side} من السعر")
+        except (TypeError, ValueError):
+            pass
+    tr = mp.get("measured_target_r")
+    if tr is not None:
+        lines.append(f"  الهندسة التي اجتازت التعادل في دراسة المخارج: هدف {tr}R")
+    return lines
+
+
 def format_smc(smc: Dict[str, Any]) -> str:
     """The isolated SMC/ICT engine's read, rendered for a phone screen.
 
@@ -521,17 +558,23 @@ def format_smc(smc: Dict[str, Any]) -> str:
 
     if not smc.get("configured", True):
         lines.append("المحرّك غير مفعّل: لم يُضبط مفتاح المزوّد.")
+        # The measured plan needs no provider key, so it can stand even here.
+        lines.extend(_measured_plan_lines(smc))
         lines.append("وضع الظل. ليست نصيحة مالية.")
         return "\n".join(lines)
 
     if smc.get("rate_limited"):
         lines.append("⏸ متوقّف مؤقتًا: حصة المزوّد اليومية استُهلكت.")
+        # The reading is paused, but the measurement is not: it carries no model,
+        # so the one plan that was tested still reaches the phone.
+        lines.extend(_measured_plan_lines(smc))
         lines.append("وضع الظل. ليست نصيحة مالية.")
         return "\n".join(lines)
 
     analysis = smc.get("analysis")
     if not isinstance(analysis, dict):
         lines.append(smc.get("note") or "لا قراءة متاحة الآن.")
+        lines.extend(_measured_plan_lines(smc))
         lines.append("وضع الظل. ليست نصيحة مالية.")
         return "\n".join(lines)
 
@@ -600,6 +643,10 @@ def format_smc(smc: Dict[str, Any]) -> str:
     # a bare "no setups" could not be told apart from "a setup was proposed and
     # failed the checks" — the difference between a quiet market and a rejected
     # plan.
+    measured = _measured_plan_lines(smc)
+    if measured:
+        lines.extend(measured)
+
     rejected = analysis.get("rejected") or []
     if rejected:
         lines.append("")
