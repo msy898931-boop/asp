@@ -91,6 +91,20 @@ services:
         value: "4"           # how many headlines the SMC prompt carries. The
                              # feed lists many; the first few are the ones that
                              # move gold, the rest only spend tokens.
+      - key: ASTRA_SMC_DETERMINISTIC_PLAN
+        value: "1"           # "1" adds the measured-geometry plan (a 0.5R
+                             # target) beside the model's plan. It is built by
+                             # advisor/smc_plan.py from the fact sheet alone, so
+                             # it needs no provider call and still appears when
+                             # the model is paused, refused or unconfigured —
+                             # the reading can fail while the measurement
+                             # stands. It is labelled "measured plan" so it is
+                             # never confused with the model's estimate. Off by
+                             # default: a plan that is evidence about a
+                             # measurement is opt-in, like every other
+                             # measurement here. A stale tape still suppresses
+                             # it, for the same reason the model's plan is
+                             # suppressed.
       - key: VAPID_PUBLIC_KEY
         sync: false          # free, generated locally; both empty = Web Push off (in-app alerts only)
       - key: VAPID_PRIVATE_KEY

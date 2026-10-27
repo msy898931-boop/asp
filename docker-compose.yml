@@ -12,6 +12,11 @@ services:
       # offline demo, or "mt5" on a Windows host with a live terminal.
       ASTRA_DATA_SOURCE: "live"
       ASTRA_LIVE_CANDLE_PAIR: "PAXGUSD"
+      # The measured-geometry plan (a 0.5R target) built from the fact sheet with
+      # no model call, so it survives a paused/refused/unconfigured provider. It
+      # is opt-in like every other measurement here; set to "1" to show it beside
+      # the model's plan in /smc and the phone panel.
+      ASTRA_SMC_DETERMINISTIC_PLAN: "1"
     ports:
       # Public: the phone app (PWA) plus the reverse proxy to the loopback API.
       # The API and bridge themselves are never bound to a public interface.
