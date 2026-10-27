@@ -37,9 +37,11 @@ services:
                              # the "groq" default, and every model surface — the
                              # advisor, the AI engine and the SMC engine — answers
                              # "not configured" no matter which keys are present.
-                             # This file owns the value: a Blueprint sync
-                             # overwrites a dashboard edit, so change it here and
-                             # set GROQ_API_KEY in the dashboard.
+                             # This file is the source of truth for a blueprint
+                             # sync; a plain deploy keeps whatever the service
+                             # already holds, so set the same value in the
+                             # dashboard or the running service will differ from
+                             # this file until the next sync.
       - key: ASTRA_ENABLE_SMC
         value: "1"           # "1" turns the isolated SMC/ICT analysis engine on.
                              # It computes its fact sheet from closed bars and
