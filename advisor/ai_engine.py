@@ -540,7 +540,7 @@ class Engine:
 
     def _build(self) -> dict:
         snapshot = build_snapshot()
-        api_key = ai_advisor.provider_key()
+        api_key = ai_advisor.available_key()
         result = {
             "schema_version": SCHEMA_VERSION,
             "symbol": snapshot["symbol"],
@@ -594,6 +594,7 @@ class Engine:
 
         result["analysis"] = assemble(snapshot, parsed)
         result["model"] = ai_advisor.answered_model() or result["model"]
+        result["provider"] = ai_advisor.answered_provider() or result["provider"]
         result["note"] = ("AI analysis engine output. Each trade is labelled "
                           "with its playbook school and that school's measured "
                           "record; the model's win-rate is its own estimate, "
@@ -608,7 +609,7 @@ class Engine:
             "trades": parsed["trades"],
             "schools": [t.get("playbook", {}).get("school")
                         for t in result["analysis"]["trades"]],
-            "provider": ai_advisor.PROVIDER,
+            "provider": ai_advisor.answered_provider() or ai_advisor.PROVIDER,
             "model": ai_advisor.answered_model() or ai_advisor.active_model(),
         })
         return result

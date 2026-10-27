@@ -711,7 +711,9 @@ def call_openai_compatible(url: str, model: str, prompt: str, api_key: str,
             # can report "expired/revoked" instead of "no usable reply".
             _note_auth_failure(exc.code, detail)
         elif exc.code == 429 and not _is_model_plan_limit(exc.headers):
-            _mark_rate_limited()
+            # Back off the provider that answered, not the configured default:
+            # with a failover chain the two differ.
+            _mark_rate_limited(label if label in _KEY_ENV else None)
         return None
     except (urllib.error.URLError, OSError, ValueError) as exc:
         sys.stderr.write("[advisor] %s request failed: %s\n" % (label, exc))
@@ -739,19 +741,56 @@ def call_groq(prompt: str, api_key: str) -> str | None:
     return call_openai_compatible(GROQ_URL, GROQ_MODEL, prompt, api_key, "groq")
 
 
-def _model_chain() -> tuple[str, ...]:
-    """The models to try for the active provider, in order.
+# The model a provider tries first. Each reads the same ``ASTRA_ADVISOR_MODEL``
+# override, so pinning one model pins it for whichever provider is active.
+_MODELS = {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL,
+           "mistral": MISTRAL_MODEL}
+
+
+def _model_for(provider: str) -> str | None:
+    """The first model to try for ``provider``, or None if the name is unknown."""
+    return _MODELS.get(provider)
+
+
+def _provider_chain() -> tuple[str, ...]:
+    """The providers to try, in order, until one answers.
+
+    ``ASTRA_ADVISOR_PROVIDERS`` (comma-separated, e.g. ``groq,gemini,mistral``)
+    sets a failover chain: a provider whose daily quota is spent steps aside for
+    the next instead of pausing every model surface. Unset, the chain is the
+    single configured ``PROVIDER``, so behaviour is exactly as before. Unknown
+    names are dropped; a list with nothing recognisable falls back to
+    ``PROVIDER``.
+    """
+    raw = os.environ.get("ASTRA_ADVISOR_PROVIDERS", "").strip()
+    names = ([p.strip().lower() for p in raw.split(",") if p.strip()]
+             if raw else [PROVIDER])
+    seen: list[str] = []
+    for name in names:
+        if name in _KEY_ENV and name not in seen:
+            seen.append(name)
+    return tuple(seen) or (PROVIDER,)
+
+
+def _key_for(provider: str) -> str:
+    """The API key for one provider, or empty if unset."""
+    return os.environ.get(_KEY_ENV.get(provider, ""), "").strip()
+
+
+def _model_chain(provider: str | None = None) -> tuple[str, ...]:
+    """The models to try for one provider, in order.
 
     ``ASTRA_ADVISOR_MODELS`` (comma-separated) replaces the chain outright, so
     an operator can pin their own order. Otherwise the configured model comes
     first and the provider's free-tier fallbacks follow, de-duplicated.
     """
+    name = provider or PROVIDER
     override = os.environ.get("ASTRA_ADVISOR_MODELS", "").strip()
     if override:
         chain = [m.strip() for m in override.split(",") if m.strip()]
     else:
-        first = active_model()
-        chain = ([first] if first else []) + list(_FALLBACK_MODELS.get(PROVIDER, ()))
+        first = _model_for(name)
+        chain = ([first] if first else []) + list(_FALLBACK_MODELS.get(name, ()))
     seen: list[str] = []
     for model in chain:
         if model and model not in seen:
@@ -765,41 +804,56 @@ def call_mistral(prompt: str, api_key: str) -> str | None:
 
 
 def call_model(prompt: str, api_key: str) -> str | None:
-    """Dispatch to the configured provider. Unknown providers are inert.
+    """Dispatch to a provider, failing over down the chain until one answers.
 
-    Providers with a fallback chain (Mistral) are walked model by model: a
-    per-model plan limit moves to the next model, while a real quota 429 sets
-    the back-off and stops the walk. The model that actually answered is
-    recorded in ``_LAST_MODEL`` so the payload can name it honestly.
+    ``api_key`` is the active provider's key, kept in the signature so every
+    existing caller is unchanged; a fallback provider is looked up with its own
+    key. Providers with a model chain (Mistral) are walked model by model: a
+    per-model plan limit moves to the next model, while a real quota 429 backs
+    that provider off and moves to the *next provider*. The provider and model
+    that actually answered are recorded so the payload can name them honestly.
     """
-    global _LAST_MODEL, _LAST_HTTP_FAILURE
+    global _LAST_MODEL, _LAST_PROVIDER, _LAST_HTTP_FAILURE
     _LAST_MODEL = None
+    _LAST_PROVIDER = None
     _LAST_HTTP_FAILURE = None
-    if PROVIDER == "gemini":
-        reply = call_gemini(prompt, api_key)
+    for provider in _provider_chain():
+        key = api_key if provider == PROVIDER else _key_for_provider(provider)
+        if not key:
+            continue
+        if _provider_backed_off(provider):
+            # This one spent its quota; the next provider still has budget.
+            continue
+        reply, model = _call_provider(provider, prompt, key)
         if reply is not None:
-            _LAST_MODEL = GEMINI_MODEL
+            _LAST_MODEL = model
+            _LAST_PROVIDER = provider
             _clear_auth_failure()
-        return reply
-    if PROVIDER == "groq":
-        reply = call_groq(prompt, api_key)
-        if reply is not None:
-            _LAST_MODEL = GROQ_MODEL
-            _clear_auth_failure()
-        return reply
-    if PROVIDER == "mistral":
-        for model in _model_chain():
-            reply = call_openai_compatible(MISTRAL_URL, model, prompt, api_key,
+            return reply
+    return None
+
+
+def _call_provider(provider: str, prompt: str, key: str) -> tuple[str | None, str | None]:
+    """One provider's call: ``(reply, model_that_answered)``.
+
+    A None reply means this provider failed; the caller decides whether to move
+    on. Only a spent quota stops a provider's own model walk early, because a
+    plan limit on one model says nothing about the next.
+    """
+    if provider == "gemini":
+        return call_gemini(prompt, key), GEMINI_MODEL
+    if provider == "groq":
+        return call_groq(prompt, key), GROQ_MODEL
+    if provider == "mistral":
+        for model in _model_chain("mistral"):
+            reply = call_openai_compatible(MISTRAL_URL, model, prompt, key,
                                            "mistral")
             if reply is not None:
-                _LAST_MODEL = model
-                _clear_auth_failure()
-                return reply
-            if rate_limited():
-                # A spent quota, not a model the plan refuses: stop the walk.
-                return None
-        return None
-    return None
+                return reply, model
+            if _provider_backed_off("mistral"):
+                return None, None
+        return None, None
+    return None, None
 
 
 def provider_key() -> str:
@@ -807,10 +861,42 @@ def provider_key() -> str:
     return os.environ.get(_KEY_ENV.get(PROVIDER, ""), "").strip()
 
 
+def _key_for_provider(provider: str) -> str:
+    """One provider's key, routed through ``provider_key`` for the active one.
+
+    The active provider's key goes through the public ``provider_key`` so an
+    existing caller that patches it keeps working; a fallback reads its own env
+    var directly, since ``provider_key`` only knows the active provider.
+    """
+    return provider_key() if provider == PROVIDER else _key_for(provider)
+
+
+def available_provider() -> str | None:
+    """The first provider in the chain that has a key, or None.
+
+    With no failover configured this is simply the active provider when its key
+    is set, so a single-provider deployment reads exactly as before.
+    """
+    for provider in _provider_chain():
+        if _key_for_provider(provider):
+            return provider
+    return None
+
+
+def available_key() -> str:
+    """The key of the first provider in the chain that has one, or empty.
+
+    ``provider_key()`` names one provider; this names the first that can
+    actually be called, so a deployment that sets only a fallback key is
+    ``configured`` rather than dark.
+    """
+    provider = available_provider()
+    return _key_for_provider(provider) if provider else ""
+
+
 def active_model() -> str | None:
     """The model a fresh call would try first (the head of the chain)."""
-    return {"groq": GROQ_MODEL, "gemini": GEMINI_MODEL,
-            "mistral": MISTRAL_MODEL}.get(PROVIDER)
+    return _model_for(PROVIDER)
 
 
 def answered_model() -> str | None:
@@ -818,14 +904,20 @@ def answered_model() -> str | None:
     return _LAST_MODEL
 
 
-# Unix time until which the provider should not be called again (set when it
-# answers 429). Module-level so every request handler shares the back-off.
-_rate_limited_until = 0.0
+# Unix time until which each provider should not be called again (set when it
+# answers 429). Keyed by provider so a spent Groq quota steps aside for Gemini
+# without darkening it too; module-level so every handler shares the back-off.
+_rate_limited_until: dict[str, float] = {}
 
 # The model that produced the last usable reply (see ``call_model``). None until
 # one has answered. Reported instead of the configured default so a payload
 # never names a model that did not speak.
 _LAST_MODEL: str | None = None
+
+# The provider that produced the last usable reply, or None. With a failover
+# chain the answering provider is not necessarily ``PROVIDER``, so the payload
+# names this rather than the configured default.
+_LAST_PROVIDER: str | None = None
 
 # The last credential rejection (HTTP 401/403) seen, as
 # ``{"code": int, "message": str}``, or None. Kept separate from the reply so a
@@ -840,14 +932,47 @@ _AUTH_FAILURE: dict | None = None
 _LAST_HTTP_FAILURE: dict | None = None
 
 
-def _mark_rate_limited() -> None:
+def _mark_rate_limited(provider: str | None = None) -> None:
+    """Back off one provider (default: the active one) after a spent-quota 429."""
     global _rate_limited_until
-    _rate_limited_until = time.time() + RATE_LIMIT_BACKOFF
+    if not isinstance(_rate_limited_until, dict):
+        # A scalar deadline predates the per-provider map (and is what a test
+        # sets to reset state); fold it in under the active provider.
+        _rate_limited_until = {PROVIDER: _rate_limited_until}
+    _rate_limited_until[provider or PROVIDER] = time.time() + RATE_LIMIT_BACKOFF
 
 
-def rate_limited() -> bool:
-    """True while the provider is being backed off after a 429."""
-    return time.time() < _rate_limited_until
+def _backoff_deadline(provider: str) -> float:
+    """The back-off deadline for one provider, tolerating a legacy scalar."""
+    if isinstance(_rate_limited_until, dict):
+        return float(_rate_limited_until.get(provider, 0.0))
+    # A bare number counts for the active provider only, so a chain still
+    # fails over to the next one.
+    return float(_rate_limited_until) if provider == PROVIDER else 0.0
+
+
+def _provider_backed_off(provider: str) -> bool:
+    """True while ``provider`` is backed off after its own 429."""
+    return time.time() < _backoff_deadline(provider)
+
+
+def rate_limited(provider: str | None = None) -> bool:
+    """True while ``provider`` (default: the active one) is backed off.
+
+    With a failover chain this is the *active* provider's state: the caller
+    asks "should I skip the call?" and the answer is yes only when every
+    provider in the chain is spent. A single-provider deployment reads exactly
+    as before.
+    """
+    if provider is not None:
+        return _provider_backed_off(provider)
+    chain = _provider_chain()
+    return bool(chain) and all(_provider_backed_off(p) for p in chain)
+
+
+def answered_provider() -> str | None:
+    """The provider that produced the last reply, or None."""
+    return _LAST_PROVIDER
 
 
 def call_gemini(prompt: str, api_key: str) -> str | None:
@@ -874,7 +999,7 @@ def call_gemini(prompt: str, api_key: str) -> str | None:
         if exc.code in (401, 403):
             _note_auth_failure(exc.code, detail)
         elif exc.code == 429:
-            _mark_rate_limited()
+            _mark_rate_limited("gemini")
         return None
     except (urllib.error.URLError, OSError, ValueError) as exc:
         _note_empty_reply("request failed: %s" % exc)
@@ -959,7 +1084,9 @@ class Advisor:
 
     def _build(self) -> dict:
         snapshot = build_snapshot()
-        api_key = provider_key()
+        # The key of the first provider in the chain that has one, so a
+        # deployment that sets only a fallback key is configured, not dark.
+        api_key = available_key()
         advisory = {
             "schema_version": SCHEMA_VERSION,
             "symbol": snapshot["symbol"],
@@ -1017,6 +1144,10 @@ class Advisor:
         advisory["opinion"] = opinion
         _merge_card_levels(opinion, advisory["trade_card"])
         advisory["model"] = answered_model() or active_model()
+        # Name the provider that actually spoke: with a failover chain that is
+        # not necessarily the configured one, and the reader must be able to tell
+        # which budget paid for the read.
+        advisory["provider"] = answered_provider() or PROVIDER
         advisory["note"] = ("AI opinion, produced outside the validated system. "
                             "Not calibrated, not scored. Not financial advice.")
         append_log({
@@ -1029,7 +1160,7 @@ class Advisor:
             "confidence": opinion["confidence"],
             "news_used": opinion["news_used"],
             "event": opinion.get("event") or "",
-            "provider": PROVIDER,
+            "provider": answered_provider() or PROVIDER,
             "model": answered_model() or active_model(),
         })
         return advisory
