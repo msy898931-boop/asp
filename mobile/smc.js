@@ -125,6 +125,52 @@ function smcMeasuredBlock(rec) {
   return block;
 }
 
+// The measured-geometry plan: the one card here built without a model, from the
+// geometry research/smc_exit_study.py resolved and found clearing break-even.
+// It is drawn before the model's cards and is labelled as the measurement, so a
+// reader never mistakes the reasoned plan for the one that was tested.
+function smcMeasuredPlanCard(p) {
+  if (!p || p.entry == null) return null;
+  const card = document.createElement("div");
+  card.className = "ai-card eng-playbook";
+  const head = document.createElement("div");
+  head.className = "ai-card-dir";
+  head.textContent = `${T("smc_measured_plan")} — ` +
+                     T(SMC_DIR_KEY[p.direction] || "ai_stance_neutral");
+  card.appendChild(head);
+
+  const grid = document.createElement("div");
+  grid.className = "ai-card-grid";
+  const rows = [
+    ["ai_card_entry", p.entry], ["ai_card_stop", p.stop],
+    ["ai_card_target", p.target], ["ai_card_rr", p.reward_risk],
+  ];
+  for (const [k, v] of rows) {
+    if (v == null) continue;
+    const div = document.createElement("div");
+    const dt = document.createElement("dt");
+    dt.textContent = T(k);
+    const dd = document.createElement("dd");
+    dd.textContent = num(v);
+    div.appendChild(dt);
+    div.appendChild(dd);
+    grid.appendChild(div);
+  }
+  card.appendChild(grid);
+
+  if (p.rationale) {
+    const row = document.createElement("div");
+    row.className = "smc-fact";
+    row.textContent = p.rationale;
+    card.appendChild(row);
+  }
+  const note = document.createElement("div");
+  note.className = "eng-playbook-measured";
+  note.textContent = fmt(T("smc_measured_plan_note"), { r: p.measured_target_r });
+  card.appendChild(note);
+  return card;
+}
+
 // Reads the isolated SMC engine through the same-origin proxy. A failure here
 // is shown as "unreachable" and changes nothing else in the app: the engine
 // sits outside the validated system and must never affect the other panels.
@@ -156,6 +202,10 @@ async function loadSmc(force) {
         $("smc-read").textContent = e.note || "";
         return;
       }
+      // The reading failed — the model refused, was rate-limited, or the key is
+      // absent — but the measured plan needs no model, so it can still stand.
+      const mp = smcMeasuredPlanCard(e.measured_plan);
+      if (mp) plansEl.appendChild(mp);
       setStatus(e.rate_limited ? T("smc_paused") : T("smc_unreachable"));
       $("smc-read").textContent = e.note || "";
       return;
@@ -173,7 +223,11 @@ async function loadSmc(force) {
     // claims, not after them.
     const measured = smcMeasuredBlock(eng.measured_record);
     if (measured) plansEl.appendChild(measured);
-    if (!plans.length) {
+    // The measured-geometry plan leads the model's cards: it is the geometry
+    // that cleared the gate, and the reasoned plans follow it.
+    const measuredPlan = smcMeasuredPlanCard(e.measured_plan);
+    if (measuredPlan) plansEl.appendChild(measuredPlan);
+    if (!plans.length && !measuredPlan) {
       const empty = document.createElement("p");
       empty.className = "eng-empty";
       empty.textContent = T("smc_no_plans");

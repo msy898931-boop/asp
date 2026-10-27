@@ -497,6 +497,62 @@ class SeededDomTest(unittest.TestCase):
         finally:
             page.close()
 
+    def test_smc_panel_leads_with_the_measured_plan(self):
+        # The measured-geometry plan is built without a model, so it must render
+        # above the model's cards and be labelled as the measurement — a reader
+        # must never mistake the reasoned plan for the one that was tested.
+        measured = json.loads(json.dumps(SMC))
+        measured["smc"]["measured_plan"] = {
+            "direction": "LONG", "entry": 2405.0, "stop": 2398.0,
+            "target": 2408.5, "targets": [2408.5], "reward_risk": 0.5,
+            "confidence": None, "rationale": "منتصف بلوك أوامر، وقف ATR.",
+            "source": "measured-geometry", "measured_target_r": 0.5,
+            "distance_from_price": -10.5,
+        }
+        page, _ = self._open(payloads={**PAYLOADS, "smc": measured})
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click(".tab-more")
+            page.click('#tabs-more .tab[data-view="smc"]')
+            self._wait(page, "document.querySelectorAll('#smc-plans .ai-card')"
+                             ".length === 2")
+            first = page.text_content("#smc-plans .ai-card:first-child")
+            self.assertIn("2405.00", first)
+            self.assertIn("2398.00", first)
+            self.assertIn("0.5", first)
+            self.assertIn("Measured plan", first)
+        finally:
+            page.close()
+
+    def test_smc_panel_shows_the_measured_plan_when_the_model_fails(self):
+        # `analysis: null` is the paused/unavailable shape, but the measured plan
+        # needs no model. It must still stand, so a reader is never left with an
+        # empty panel when the one number that was measured is available.
+        stalled = json.loads(json.dumps(SMC))
+        stalled["smc"]["analysis"] = None
+        stalled["smc"]["rate_limited"] = True
+        stalled["smc"]["note"] = "SMC engine paused: quota spent."
+        stalled["smc"]["measured_plan"] = {
+            "direction": "SHORT", "entry": 2420.0, "stop": 2427.0,
+            "target": 2416.5, "targets": [2416.5], "reward_risk": 0.5,
+            "confidence": None, "rationale": "منتصف فجوة قيمة عادلة.",
+            "source": "measured-geometry", "measured_target_r": 0.5,
+        }
+        page, _ = self._open(payloads={**PAYLOADS, "smc": stalled})
+        try:
+            self._wait(page, "document.querySelector('#health-value')"
+                             ".textContent === 'ONLINE'")
+            page.click(".tab-more")
+            page.click('#tabs-more .tab[data-view="smc"]')
+            self._wait(page, "document.querySelectorAll('#smc-plans .ai-card')"
+                             ".length === 1")
+            card = page.text_content("#smc-plans .ai-card")
+            self.assertIn("2420.00", card)
+            self.assertIn("Measured plan", card)
+        finally:
+            page.close()
+
     def test_smc_panel_shows_a_degraded_tape(self):
         # A plan is only as good as the bars it was read from. When a frame
         # lags, the panel must say so rather than presenting the read as if the

@@ -19,8 +19,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
+if os.path.join(REPO_ROOT, "advisor") not in sys.path:
+    sys.path.insert(0, os.path.join(REPO_ROOT, "advisor"))
+
+import smc_plan  # noqa: E402
 
 from research.smc_exit_study import TARGET_R, replan  # noqa: E402
+from research.smc_zone_study import build_plan  # noqa: E402
 
 
 class ReplanTests(unittest.TestCase):
@@ -71,6 +76,52 @@ class BreakEvenTests(unittest.TestCase):
         import smc_resolve
         be = smc_resolve.break_even_win_rate(0.5 * 10.0 - 0.30, -10.0)
         self.assertGreater(be, 1.0 / 3.0)
+
+
+class ShippedPlanParityTests(unittest.TestCase):
+    """The shipped plan must be the geometry this study resolved.
+
+    ``advisor/smc_plan.py`` turns the measurement into the plan the engine
+    offers. If its entry, stop or target ever drift from the study's builder,
+    the number on the sheet stops being the number that cleared the gate. This
+    lives in ``research`` because ``advisor`` must stay importable without it.
+    """
+
+    def _sheet(self, bias, close, atr=5.0, blocks=None):
+        return {"timeframes": {"M15": {
+            "close": close, "atr": atr, "structure": {"bias": bias},
+            "order_blocks": blocks or [], "fair_value_gaps": []}}}
+
+    def test_the_entry_and_stop_match_the_study_builder(self):
+        sheet = self._sheet("bullish", 2010.0,
+                            blocks=[{"kind": "bullish", "low": 1995.0,
+                                     "high": 2000.0}])
+        study = build_plan(sheet, "M15")
+        shipped = smc_plan.build_plan(sheet["timeframes"])
+        self.assertEqual(shipped["entry"], study["entry"])
+        self.assertEqual(shipped["stop"], study["stop"])
+        self.assertEqual(shipped["direction"], study["direction"])
+
+    def test_the_target_is_half_r_where_the_study_ships_two_and_three(self):
+        sheet = self._sheet("bullish", 2010.0,
+                            blocks=[{"kind": "bullish", "low": 1995.0,
+                                     "high": 2000.0}])
+        study = build_plan(sheet, "M15")
+        shipped = smc_plan.build_plan(sheet["timeframes"])
+        risk = study["entry"] - study["stop"]
+        self.assertAlmostEqual(shipped["target"],
+                               round(study["entry"] + 0.5 * risk, 2), places=2)
+        self.assertEqual(len(study["targets"]), 2)   # the study ships 2R and 3R
+        self.assertEqual(len(shipped["targets"]), 1)  # the shipped plan ships 0.5R
+
+    def test_a_short_matches_too(self):
+        sheet = self._sheet("bearish", 1990.0,
+                            blocks=[{"kind": "bearish", "low": 2000.0,
+                                     "high": 2005.0}])
+        study = build_plan(sheet, "M15")
+        shipped = smc_plan.build_plan(sheet["timeframes"])
+        self.assertEqual(shipped["entry"], study["entry"])
+        self.assertEqual(shipped["stop"], study["stop"])
 
 
 if __name__ == "__main__":
