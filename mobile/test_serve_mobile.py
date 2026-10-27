@@ -9,6 +9,7 @@ test_gate.py; the shared harness is in mobile_test_kit.py.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
 import os
@@ -321,7 +322,15 @@ class DosHardeningTest(unittest.TestCase):
             server.server_close()
 
     def test_saturation_sheds_and_stays_serving(self):
-        """Past the cap, extra connections are shed and the server still answers."""
+        """Past the cap, extra connections are shed and the server still answers.
+
+        The liveness check runs only after the pressure is released. While the
+        cap is saturated an incoming request is legitimately shed as well, so
+        asserting a 200 under load raced the shed path and failed roughly one
+        run in ten. Before the release, every held connection must be reclaimed
+        — the cap sheds the excess and the read timeout reclaims the rest — so
+        none can park a thread forever.
+        """
         server = sm._BoundedServer(("127.0.0.1", 0), sm.Handler,
                                    timeout=1.0, max_concurrency=4)
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -335,13 +344,38 @@ class DosHardeningTest(unittest.TestCase):
                     held.append(s)
                 except OSError:
                     break
-            # A normal request still completes while the cap is under pressure.
+            self.assertTrue(held, "the server accepted no connection at all")
+
+            # Each held connection is closed by the server within the read
+            # timeout, whether it holds a slot or was shed. Waiting for that
+            # proves both guards reclaim, and leaves the slots free.
+            for s in held:
+                s.settimeout(0.5)
+            deadline = time.time() + 10
+            closed = 0
+            while time.time() < deadline and closed < len(held):
+                closed = 0
+                for s in held:
+                    try:
+                        if s.recv(1) == b"":
+                            closed += 1
+                    except socket.timeout:
+                        pass
+                    except OSError:
+                        closed += 1
+                if closed < len(held):
+                    time.sleep(0.1)
+            self.assertEqual(closed, len(held),
+                             "the server left a connection parked")
+
+            # A normal request completes once the cap is no longer saturated.
             with urllib.request.urlopen(
                     "http://127.0.0.1:%d/version.json" % port, timeout=8) as resp:
                 self.assertEqual(resp.status, 200)
         finally:
             for s in held:
-                s.close()
+                with contextlib.suppress(OSError):
+                    s.close()
             server.shutdown()
             server.server_close()
 
